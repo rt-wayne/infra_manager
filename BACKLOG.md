@@ -17,9 +17,9 @@
 | 89 | 角色權限維護介面：角色指派、執行人對照兩頁（取代改 DB），另加第三頁設定角色可做哪些事／看到哪些頁面（角色 × 權限碼）；每次異動寫系統管理軌跡、原因必填，移除會卡住在途單或最後一位系統管理員時拒絕 | [backlog/89-角色權限維護介面.md](backlog/89-角色權限維護介面.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：階段 2 已結束（審查必須修正零項、測試 311＋73 全過、建議改善登記第 99～105 項；D1 裁示 A 已改 PRD 第 46、120 行，第 25 行偏離第 3 條照計畫等階段 6 刪）。開階段 3 回合 1（後端角色權限碼：`ADMIN_VISIBLE_PERMS` 常數、GET /admin/role-perms、COUNT_HOLDERS 的「排除某角色＋某碼」路徑），依計畫檔「階段 3」；開工前先問使用者第 100 項（DENY 軌跡灌爆）要不要在第三頁上線前處理；開工時把 HEAD 填進「本階段起點」
-- 已改動（未 commit）：無（階段 2 收尾已 commit）
-- 本階段起點：階段 3 開工時填（階段 2 起點 fc24068 已結案）
+- 下一步：階段 3 回合 1 已完成（常數、DAO、軌跡組裝器、測試 315 全過，無新 API）。接著回合 2：新增 `service\RolePermAdminService.java`（驗證 11 步，見計畫檔「API 設計」權限存檔段；GET /admin/role-perms 組 modules／roles、hiddenGrantedCount；POST /admin/roles/{roleId}/perms；E27、E23／E24 換文案、400「沒有任何變更」「欄位內容不正確：權限碼」）、後端 `AdminController` 補 2 支（API 數 46 → 48）、殼 jar 補 2 支＋路由測試、遞增腳本補 IM_ACCT_ROLE_PERM 與 ACTION_CODE／TARGET_USER_ID 的 COMMENT；再測試 DB 實跑 curl 三情境（計畫檔階段 3 回合 2）、PRD API 段補 2 支；回合 2 很可能要拆成前後半
+- 已改動（未 commit）：無（回合 1 已 commit）
+- 本階段起點：98b2484（階段 3，2026-10-19）
 - 卡住／待確認：無
 
 ## 僅記錄未拍板
@@ -90,7 +90,6 @@
 | 96 | 在途申請單查詢 `RoleAdminDao.FIND_IN_FLIGHT_BY_STAGE_PERM` 只以 `REQ_STATE_CODE IN ('REVIEW','VERIFY') AND S.PERM_ID = :permId` 篩選，沒過濾關卡 `S.STATUS = 1`、也沒核對 REVIEW 配關卡 2～5／VERIFY 配關卡 7，比 `PermissionService.canHandleNow` 寬；只有資料異常的單會被多擋（本來就沒人能處理）。改法：至少加 `S.STATUS = 1`。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
 | 97 | `USER_ID_MAX = 30` 在 `RoleAdminService`、`AdminLogWriter`、`AuthService` 各定義一次；`RoleAdminService.requirePermOrDeny` 以比對動作碼決定 JSON 鍵叫 roleId 還是 catgId，階段 2 加執行人對照時要同步。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
 | 99 | SETUP 第 6 節開頭叫讀者 DB 直接改前用「查每個人實際生效的角色」確認類別不會沒人處理，但那句只查角色、不查執行人對照。補一句唯讀查詢：依 CATG_ID 計啟用中執行人數（口徑同 `RoleAdminDao.COUNT_EXECUTORS`），加一句列出停在關卡 6（EXEC、6）的單號。第 89 項階段 2 code-reviewer 提出（S2） | 2026-10-19 | — |
-| 100 | 無權限者能對 4 支名單寫入 API 無限次送 POST，每次在永久保留的 IM_ACCT_ADMIN_LOG 寫一筆 DENY，連同最多 500 字自訂原因，可灌爆軌跡、淹沒真正稽核紀錄；第三頁上線會再多 1 支。現行「403 DENY 有帶原因就存」是計畫已拍板設計，改動要推翻原裁示。方向：同一人一定時間內 DENY 只寫一筆，或 NO_PERM 不存原因只存長度。code-reviewer 建議第三頁（階段 3）上線前請使用者判斷是否處理。第 89 項階段 2 code-reviewer 提出（S3） | 2026-10-19 | — |
 | 101 | `RoleAdminServiceTest` 沒鎖住兩碼分界：「只有 SYS_ROLE 呼叫 grantExecutor／revokeExecutor 要 403＋DENY」「只有 SYS_EXECUTOR 呼叫 grantRole 要 403」；revokeExecutor 的 403 寫 DENY、移除路徑類別不合法 400 也沒單獨案例。第 89 項階段 2 code-reviewer 提出（S4） | 2026-10-19 | — |
 | 102 | `RoleAdminDao.FIND_IN_FLIGHT_EXEC_BY_CATG` 對 IM_ACCT_APPR_STAGE 用內部 JOIN（只為取關卡名）；關卡 6 那列若不見，在途回空，移除最後一位執行人會被放行。改 LEFT JOIN＋`NVL(S.STAGE_NAME, '執行回報')`。資料壞掉時往放行錯的性質，機率低。第 89 項階段 2 code-reviewer 提出（S5） | 2026-10-19 | — |
 | 103 | 帳號類別 STATUS＝0（軟刪除）時，該類別的執行人不出現在 /admin/executors、移除 API 回 400，但 `PermDao.FIND_EXEC_CATGS`／`isExecutor` 不看類別狀態，那些人仍保有執行人身分（能處理該類別關卡 6 單、看到到期帳號）。目前 8 類皆 STATUS＝1。可讓 revoke 允許 STATUS＝0 類別，或在 PRD／SETUP 註明「軟刪除類別前先移除其執行人」。第 89 項階段 2 code-reviewer 提出（S6） | 2026-10-19 | — |
@@ -104,3 +103,4 @@
 |----|------|--------|------------|
 | 15 | 帳號展延功能 | 交付時已定（SA／交接文件） | 延長以重新提新增申請，或以「修改」申請調整到期日即可 |
 | 66 | 收緊一般人員對既有帳號的異動申請範圍（曾評估：限原新增申請人、四種異動全限、申請單列表查詢區塊只列範圍內帳號） | 2026-10-15 | 維持 SA 決策 D29：知道完整帳號名稱即可提異動，風險由關卡 2～5 簽核與關卡 6 執行人承擔；PRD「5. 帳號申請」已明寫 |
+| 100 | 無權限者對名單寫入 API 重複送 POST，每次寫一筆永久保留的 DENY 軌跡（含最多 500 字原因），可灌爆 IM_ACCT_ADMIN_LOG（曾評估：同一人一定時間內只記一筆、NO_PERM 不存原因只存長度） | 2026-10-19 | 維持第 89 項計畫裁示 ⑥A「403 DENY 有帶原因就存」：只有登入的內部帳號能送、每筆都記著是誰，灌的人自己留了證據 |

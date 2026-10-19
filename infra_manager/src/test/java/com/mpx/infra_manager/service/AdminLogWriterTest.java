@@ -7,6 +7,10 @@ package com.mpx.infra_manager.service;
 //           SUCCESS／DENY 寫入的欄位（實際操作人、對象、原因截 500 字、對象超欄寬存 null）；DENY 寫失敗吞掉只記 log；
 //           JSON 由 Jackson 組（含中文、引號不會壞）；最壞情況（50 筆單號＋兩個 30 字中文名）不需裁剪；
 //           超過 3900 bytes 時逐筆丟單號、blockedTotal 保留、JSON 仍完整；putBlocked 的欄位
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 3 回合 1：putBlockedByPerm 依碼分組、每碼最多 20 筆、每碼 ids 各自可裁剪；
+//           ROLE_PERM_SET 最壞情況（20 碼 added＋removed、30 字角色名、6 個卡單碼各 20 筆）不需裁剪且低於上限
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -133,6 +137,57 @@ class AdminLogWriterTest {
 		@SuppressWarnings("unchecked")
 		Map<String, Object> parsed = JsonMapper.builder().build().readValue(json, Map.class);
 		assertThat(parsed).containsEntry("blockedTotal", 400).containsEntry("roleId", "GOV");
+	}
+
+	@Test
+	void putBlockedByPerm_依碼分組_每碼最多20筆_每碼ids各自可裁剪() {
+		List<InFlightRow> many = new ArrayList<>();
+		for (int i = 1; i <= 50; i++) {
+			many.add(new InFlightRow("AR" + String.format("%04d", i), "資訊主管"));
+		}
+		HolderGuard.Result r = new HolderGuard.Result(false, List.of(
+				new HolderGuard.Blocked("APPR_G5", many, 73),
+				new HolderGuard.Blocked("EMG_DECIDE", List.of(new InFlightRow("EA0001", "待補核准")), 1)));
+		Map<String, Object> c = AdminLogWriter.content();
+		List<List<String>> trimmable = AdminLogWriter.putBlockedByPerm(c, r);
+		assertThat(c).containsEntry("denyCode", "IN_FLIGHT").doesNotContainKey("blockedIds");
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> blocked = (List<Map<String, Object>>) c.get("blocked");
+		assertThat(blocked).hasSize(2);
+		assertThat(blocked.get(0)).containsEntry("permId", "APPR_G5").containsEntry("total", 73);
+		assertThat((List<?>) blocked.get(0).get("ids")).hasSize(AcctConst.ADMIN_BLOCKED_PER_PERM_LOG_MAX).first().isEqualTo("AR0001");
+		assertThat(blocked.get(1)).containsEntry("permId", "EMG_DECIDE").containsEntry("total", 1);
+		assertThat(trimmable).hasSize(2);
+		assertThat(trimmable.get(0)).isSameAs(blocked.get(0).get("ids"));
+
+		Map<String, Object> c2 = AdminLogWriter.content();
+		assertThat(AdminLogWriter.putBlockedByPerm(c2, new HolderGuard.Result(true, List.of()))).isEmpty();
+		assertThat(c2).containsEntry("denyCode", "LAST_SYS_ROLE").containsEntry("blocked", List.of());
+	}
+
+	/** 計畫檔估算約 2.9 KB：added＋removed 合計 20 碼、30 字角色名、6 個卡單碼各 20 筆單號 */
+	@Test
+	void ROLE_PERM_SET最壞情況_20碼差異加6碼各20筆單號_不需裁剪且低於上限() {
+		Map<String, Object> c = AdminLogWriter.content();
+		c.put("roleId", "ACCT_REGISTRY");
+		c.put("roleName", "角".repeat(30));
+		c.put("memberCount", 999);
+		c.put("added", AcctConst.ADMIN_VISIBLE_PERMS.subList(0, 14));
+		c.put("removed", AcctConst.ADMIN_VISIBLE_PERMS.subList(14, 20));
+		List<HolderGuard.Blocked> blocked = new ArrayList<>();
+		for (String permId : List.of("APPR_G2", "APPR_G3", "APPR_G4", "APPR_G5", "VERIFY_G7", "EMG_DECIDE")) {
+			List<InFlightRow> docs = new ArrayList<>();
+			for (int i = 0; i < AcctConst.ADMIN_BLOCKED_LOG_MAX; i++) {
+				docs.add(new InFlightRow("AR20261019-" + String.format("%03d", i), "關卡"));
+			}
+			blocked.add(new HolderGuard.Blocked(permId, docs, 999));
+		}
+		List<List<String>> trimmable = AdminLogWriter.putBlockedByPerm(c, new HolderGuard.Result(false, blocked));
+		String json = AdminLogWriter.contentJson(c, trimmable);
+		assertThat(json.getBytes(StandardCharsets.UTF_8).length).isLessThanOrEqualTo(AcctConst.ADMIN_CONTENT_MAX_BYTES);
+		for (List<String> ids : trimmable) {
+			assertThat(ids).hasSize(AcctConst.ADMIN_BLOCKED_PER_PERM_LOG_MAX);
+		}
 	}
 
 	@Test

@@ -61,6 +61,12 @@ package com.mpx.infra_manager.common;
 // 變更說明: BACKLOG 第 89 項階段 1（角色權限維護介面）：權限碼 SYS_ROLE／SYS_EXECUTOR；管理軌跡動作 ROLE_GRANT／ROLE_REVOKE／
 //           EXEC_GRANT／EXEC_REVOKE（DDL 第 619 行預留值）；DENY 代碼 NO_PERM／LAST_SYS_ROLE／IN_FLIGHT；
 //           名單維護常數（原因欄寬、全域鎖等待秒數、被擋單號在訊息與軌跡的上限、CONTENT_JSON 位元組上限）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 3 回合 1（角色權限設定頁後端基礎）：軌跡動作 ROLE_PERM_SET（一次存檔一筆）；
+//           權限碼 ACC_EXPORT（後端原本沒有此常數、只在前端判斷）；ADMIN_VISIBLE_PERMS＝角色權限設定頁可見的 20 碼
+//           （裁示 ⑩A／⑮A：有功能的碼才放出來、不看 DB 的 PHASE_CODE；新功能上線時加 PERM_* 常數的同一 commit 要加進清單，
+//           SqlConstantScanTest 強制每個 PERM_* 常數都在清單內）；DENY 軌跡每碼單號上限 ADMIN_BLOCKED_PER_PERM_LOG_MAX
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -204,6 +210,8 @@ public final class AcctConst {
 	public static final String ADM_ROLE_REVOKE = "ROLE_REVOKE";
 	public static final String ADM_EXEC_GRANT = "EXEC_GRANT";
 	public static final String ADM_EXEC_REVOKE = "EXEC_REVOKE";
+	/** 角色權限設定存檔（BACKLOG 第 89 項第三頁；一次存檔可同時有加有拿、只寫一筆；TARGET_USER_ID 留空、roleId 在 CONTENT_JSON） */
+	public static final String ADM_ROLE_PERM_SET = "ROLE_PERM_SET";
 	public static final String ADM_SUCCESS = "SUCCESS";
 	public static final String ADM_DENY = "DENY";
 	/** DENY 軌跡 CONTENT_JSON.denyCode：無權限、移除後角色指派權限（SYS_ROLE）無人持有、移除後在途案件無人能處理 */
@@ -218,6 +226,11 @@ public final class AcctConst {
 	public static final int ADMIN_BLOCKED_MSG_MAX = 20;
 	/** DENY 軌跡 CONTENT_JSON 最多列幾筆被擋單號 */
 	public static final int ADMIN_BLOCKED_LOG_MAX = 50;
+	/**
+	 * 權限設定存檔（ROLE_PERM_SET）的 DENY 軌跡依碼分組列單號時，每碼最多幾筆：最多 6 個卡單碼 × 20 筆約 2.9 KB，
+	 * 放到 50 筆會到約 5.4 KB 超過 4000 bytes 上限，所以比名單維護的 50 筆少
+	 */
+	public static final int ADMIN_BLOCKED_PER_PERM_LOG_MAX = 20;
 	/** CONTENT_JSON 寫入前的 UTF-8 位元組上限：欄位宣告 VARCHAR2(2000 CHAR) 仍受單欄 4000 bytes 限制（BACKLOG 第 11 項），超過就逐筆丟單號 */
 	public static final int ADMIN_CONTENT_MAX_BYTES = 3900;
 
@@ -233,6 +246,8 @@ public final class AcctConst {
 	public static final String PERM_ACC_SELF_SERVICE = "ACC_SELF_SERVICE";
 	public static final String PERM_ACC_LIST_FULL = "ACC_LIST_FULL";
 	public static final String PERM_ACC_EXPIRY_ALL = "ACC_EXPIRY_ALL";
+	/** 帳號權限清單匯出：後端沒有判斷點、只在前端判斷（BACKLOG 第 81 項）；放進可見清單讓角色權限設定頁能授予 */
+	public static final String PERM_ACC_EXPORT = "ACC_EXPORT";
 	public static final String PERM_INSP_VIEW = "INSP_VIEW";
 	public static final String PERM_INSP_CREATE = "INSP_CREATE";
 	public static final String PERM_INSP_RESOLVE = "INSP_RESOLVE";
@@ -244,6 +259,19 @@ public final class AcctConst {
 	public static final String PERM_EMG_APPLY = "EMG_APPLY";
 	public static final String PERM_EMG_VIEW_ALL = "EMG_VIEW_ALL";
 	public static final String PERM_EMG_DECIDE = "EMG_DECIDE";
+	/** 關卡 2～5 核准與關卡 7 複驗：程式從 IM_ACCT_APPR_STAGE.PERM_ID 取，不另設 PERM_* 常數；角色權限設定頁要能授予，所以列在這裡 */
+	public static final List<String> PERM_STAGE_CODES = List.of("APPR_G2", "APPR_G3", "APPR_G4", "APPR_G5", "VERIFY_G7");
+	/**
+	 * 角色權限設定頁可見的權限碼（裁示 ⑩A／⑮A）：目前有功能的 20 碼，隱藏的 8 碼（SYS_AUDIT_VIEW、REVIEW_*、STATS_VIEW、INSP_EXPORT、
+	 * MAINT_*）沒有判斷點，授了也沒效果，不放出來；隱藏碼既有的授予列原樣保留。可見與否不看 DB 的 PHASE_CODE（語意對不上）。
+	 * 新功能上線時：加 PERM_* 常數的同一 commit 要加進這裡（SqlConstantScanTest 強制）
+	 */
+	public static final List<String> ADMIN_VISIBLE_PERMS = Stream.concat(
+			Stream.of(PERM_ACC_APPLY, PERM_ACC_SELF_SERVICE, PERM_ACC_LIST_FULL, PERM_ACC_EXPIRY_ALL, PERM_ACC_EXPORT),
+			Stream.concat(PERM_STAGE_CODES.stream(),
+					Stream.of(PERM_INSP_VIEW, PERM_INSP_CREATE, PERM_INSP_RESOLVE, PERM_SYS_ROLE, PERM_SYS_EXECUTOR,
+							PERM_SYS_IMPERSONATE, PERM_SYS_JOB_RUN, PERM_EMG_APPLY, PERM_EMG_VIEW_ALL, PERM_EMG_DECIDE)))
+			.toList();
 
 	// 類別、期限、門禁（Table 6.5、spec §4.9）
 	public static final String CATG_DOOR = "DOOR";

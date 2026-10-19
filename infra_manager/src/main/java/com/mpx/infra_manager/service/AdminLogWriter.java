@@ -9,6 +9,11 @@ package com.mpx.infra_manager.service;
 //           CONTENT_JSON 以 Jackson 組（不拼字串）；欄位宣告 VARCHAR2(2000 CHAR) 仍受單欄 4000 bytes 限制（BACKLOG 第 11 項），
 //           組好超過 ADMIN_CONTENT_MAX_BYTES 就從可裁剪清單（被擋單號）逐筆丟、保留 blockedTotal，不截斷 JSON。
 //           ACT_BY／ACT_BY_NAME／CREATE_BY＝實際操作人（切換身分中已被 E25 擋下，即本人）；TARGET_USER_ID 超過欄寬存 null；REASON 截 500 字
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 3 回合 1：權限設定存檔（ROLE_PERM_SET）的擋下內容 putBlockedByPerm——一次存檔可拿掉多個碼、每碼各自有在途單，
+//           所以依碼分組 blocked[{permId、total、ids[]}]，每碼最多 ADMIN_BLOCKED_PER_PERM_LOG_MAX 筆（6 碼 × 20 筆約 2.9 KB，
+//           放 50 筆會超過 4000 bytes）；每碼的 ids 各自是可裁剪清單，超限時仍從最長的那組丟
 // ============================================================
 
 import java.nio.charset.StandardCharsets;
@@ -74,6 +79,30 @@ public class AdminLogWriter {
 		List<String> ids = new ArrayList<>(r.blockedDocIds());
 		content.put("blockedIds", ids);
 		return ids;
+	}
+
+	/**
+	 * 權限設定存檔（ROLE_PERM_SET）被擋：denyCode、blocked[{permId、total、ids[]}]（每碼最多 ADMIN_BLOCKED_PER_PERM_LOG_MAX 筆）；
+	 * 回傳每碼的 ids 清單，當作可裁剪清單
+	 */
+	public static List<List<String>> putBlockedByPerm(Map<String, Object> content, HolderGuard.Result r) {
+		content.put("denyCode", r.sysRoleGone() ? AcctConst.DENY_LAST_SYS_ROLE : AcctConst.DENY_IN_FLIGHT);
+		List<Map<String, Object>> blocked = new ArrayList<>();
+		List<List<String>> trimmable = new ArrayList<>();
+		for (HolderGuard.Blocked b : r.blocked()) {
+			List<String> ids = new ArrayList<>();
+			for (int i = 0; i < b.docs().size() && i < AcctConst.ADMIN_BLOCKED_PER_PERM_LOG_MAX; i++) {
+				ids.add(b.docs().get(i).getDocId());
+			}
+			Map<String, Object> one = new LinkedHashMap<>();
+			one.put("permId", b.permId());
+			one.put("total", b.total());
+			one.put("ids", ids);
+			blocked.add(one);
+			trimmable.add(ids);
+		}
+		content.put("blocked", blocked);
+		return trimmable;
 	}
 
 	/**

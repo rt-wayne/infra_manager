@@ -18,6 +18,12 @@ package com.mpx.infra_manager.dao;
 // 變更說明: 階段 2 回合 1：執行人對照（IM_EXEC_MAP）——成員清單、名單列狀態、狀態轉移與 INSERT 比照角色指派；
 //           執行人數 COUNT_EXECUTORS（啟用中使用者 × 啟用中對照列，可排除一人）；在途 FIND_IN_FLIGHT_EXEC_BY_CATG＝
 //           EXEC 狀態且停在關卡 6、CATG_ID 相同的申請單（關卡 6 沒有 PERM_ID，由類別決定處理人，裁示 4.A）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 3 回合 1：角色權限設定頁（IM_ACCT_ROLE_PERM）——含 GENERAL 的啟用中角色清單（畫面唯讀顯示）、可見權限碼清單
+//           （IM_ACCT_PERM 啟用中且在 :permIds 內，依 SORT_SEQ）、各角色啟用中成員數與啟用中使用者總數（GENERAL 的成員數）、
+//           某角色的全部權限列現況（含 STATUS＝0，存檔時逐格核對 E27 與決定 UPDATE／INSERT）、權限列狀態轉移與 INSERT
+//           （比照名單列：UPDATE 帶 oldStatus、保留 CREATE_*；影響 0 筆才 INSERT）。「排除某角色＋某碼」的持有人數沿用 COUNT_HOLDERS 的 :exclPermId
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -31,10 +37,13 @@ import org.springframework.stereotype.Repository;
 import com.mpx.common.db.DbClient;
 import com.mpx.infra_manager.common.AcctConst;
 import com.mpx.infra_manager.model.AcctUser;
+import com.mpx.infra_manager.model.CodeCountRow;
 import com.mpx.infra_manager.model.CodeRow;
+import com.mpx.infra_manager.model.CodeStatusRow;
 import com.mpx.infra_manager.model.CountRow;
 import com.mpx.infra_manager.model.InFlightRow;
 import com.mpx.infra_manager.model.MemberRow;
+import com.mpx.infra_manager.model.PermRow;
 import com.mpx.infra_manager.model.RolePermRow;
 import com.mpx.infra_manager.model.RoleRow;
 import com.mpx.infra_manager.model.StatusRow;
@@ -222,6 +231,62 @@ public class RoleAdminDao {
 			 ORDER BY R.SUBMIT_DATE, R.REQ_ID
 			""";
 
+	// ------------------------------------------------------------
+	// 角色權限設定（IM_ACCT_ROLE_PERM；第三頁）
+	// ------------------------------------------------------------
+
+	/** 啟用中的全部角色、含 GENERAL（第三頁要顯示 GENERAL 為唯讀列，裁示 ⑪-1A） */
+	public static final String FIND_ROLES_WITH_GENERAL = ROLE_SELECT + """
+			 WHERE STATUS = 1
+			 ORDER BY SORT_SEQ, ROLE_ID
+			""";
+
+	/** 可見權限碼（AcctConst.ADMIN_VISIBLE_PERMS）在 IM_ACCT_PERM 的啟用中列，依 SORT_SEQ；分組（MODULE_CODE）由 Service 依出現順序處理 */
+	public static final String FIND_PERMS_BY_IDS = """
+			SELECT PERM_ID, PERM_NAME, MODULE_CODE, SORT_SEQ
+			  FROM IM_ACCT_PERM
+			 WHERE STATUS = 1
+			   AND PERM_ID IN (:permIds)
+			 ORDER BY SORT_SEQ, PERM_ID
+			""";
+
+	/** 各角色的啟用中成員數（使用者也要啟用中，與 COUNT_HOLDERS 口徑一致）；沒有成員的角色不會出現，由 Service 補 0 */
+	public static final String COUNT_ROLE_MEMBERS = """
+			SELECT RU.ROLE_ID AS CODE, COUNT(*) AS CNT
+			  FROM IM_ACCT_ROLE_USER RU
+			  JOIN IM_ACCT_USER U ON U.USER_ID = RU.USER_ID AND U.STATUS = 1
+			 WHERE RU.STATUS = 1
+			 GROUP BY RU.ROLE_ID
+			""";
+
+	/** 啟用中使用者總數＝GENERAL 的成員數（所有啟用中使用者自動擁有） */
+	public static final String COUNT_ACTIVE_USERS = """
+			SELECT COUNT(*) AS CNT
+			  FROM IM_ACCT_USER
+			 WHERE STATUS = 1
+			""";
+
+	/** 某角色在 IM_ACCT_ROLE_PERM 的全部列（含 STATUS＝0、含隱藏碼）；存檔時逐格核對現況與決定 UPDATE／INSERT，須在取鎖後查 */
+	public static final String FIND_ROLE_PERM_STATUSES = """
+			SELECT PERM_ID AS CODE, STATUS
+			  FROM IM_ACCT_ROLE_PERM
+			 WHERE ROLE_ID = :roleId
+			""";
+
+	/** 授予（0→1）或拿掉（1→0）都走這句；帶 oldStatus 條件，現況不符影響 0 筆；只寫 UPDATE_*、保留 CREATE_*（比照裁示 ⑦A） */
+	public static final String UPDATE_ROLE_PERM_STATUS = """
+			UPDATE IM_ACCT_ROLE_PERM
+			   SET STATUS = :newStatus, UPDATE_DATE = :now, UPDATE_BY = :userId
+			 WHERE ROLE_ID = :roleId
+			   AND PERM_ID = :permId
+			   AND STATUS = :oldStatus
+			""";
+
+	public static final String INSERT_ROLE_PERM = """
+			INSERT INTO IM_ACCT_ROLE_PERM (ROLE_ID, PERM_ID, STATUS, CREATE_DATE, CREATE_BY)
+			VALUES (:roleId, :permId, 1, :now, :userId)
+			""";
+
 	private final DbClient dbClient;
 	private final String itflowDb;
 
@@ -376,5 +441,66 @@ public class RoleAdminDao {
 		params.put("execStage", AcctConst.STAGE_EXEC);
 		params.put("catgId", catgId);
 		return dbClient.query(itflowDb, FIND_IN_FLIGHT_EXEC_BY_CATG, params, InFlightRow.class);
+	}
+
+	// ------------------------------------------------------------
+	// 角色權限設定
+	// ------------------------------------------------------------
+
+	public List<RoleRow> findRolesWithGeneral() {
+		return dbClient.query(itflowDb, FIND_ROLES_WITH_GENERAL, null, RoleRow.class);
+	}
+
+	/** permIds 不可為空（IN 子句） */
+	public List<PermRow> findPermsByIds(List<String> permIds) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("permIds", permIds);
+		return dbClient.query(itflowDb, FIND_PERMS_BY_IDS, params, PermRow.class);
+	}
+
+	/** 角色 → 啟用中成員數；沒有成員的角色不在 map 裡 */
+	public Map<String, Long> countRoleMembers() {
+		Map<String, Long> out = new HashMap<>();
+		for (CodeCountRow r : dbClient.query(itflowDb, COUNT_ROLE_MEMBERS, null, CodeCountRow.class)) {
+			out.put(r.getCode(), r.getCnt() == null ? 0L : r.getCnt());
+		}
+		return out;
+	}
+
+	public long countActiveUsers() {
+		return DaoSupport.count(dbClient.query(itflowDb, COUNT_ACTIVE_USERS, null, CountRow.class));
+	}
+
+	/** 某角色的全部權限列現況：權限碼 → STATUS（查無列的碼不在 map 裡） */
+	public Map<String, Integer> findRolePermStatuses(String roleId) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("roleId", roleId);
+		Map<String, Integer> out = new HashMap<>();
+		for (CodeStatusRow r : dbClient.query(itflowDb, FIND_ROLE_PERM_STATUSES, params, CodeStatusRow.class)) {
+			out.put(r.getCode(), r.getStatus());
+		}
+		return out;
+	}
+
+	/** 回影響筆數（現況不是 oldStatus 時 0） */
+	public int updateRolePermStatus(String roleId, String permId, int oldStatus, int newStatus, LocalDateTime now,
+			String userId) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("roleId", roleId);
+		params.put("permId", permId);
+		params.put("oldStatus", oldStatus);
+		params.put("newStatus", newStatus);
+		params.put("now", DaoSupport.ts(now));
+		params.put("userId", userId);
+		return dbClient.update(itflowDb, UPDATE_ROLE_PERM_STATUS, params);
+	}
+
+	public int insertRolePerm(String roleId, String permId, LocalDateTime now, String userId) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("roleId", roleId);
+		params.put("permId", permId);
+		params.put("now", DaoSupport.ts(now));
+		params.put("userId", userId);
+		return dbClient.update(itflowDb, INSERT_ROLE_PERM, params);
 	}
 }

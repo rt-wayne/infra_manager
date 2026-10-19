@@ -60,6 +60,11 @@ package com.mpx.infra_manager.dao;
 //           在途申請單依關卡 PERM_ID、緊急存取沿用 UNDECIDED_COND／RETURNED_COND、名單列狀態轉移帶 oldStatus；AdminLogDao.INSERT 的 REASON 改綁參數；
 //           回合 2：CONTROLLERS 加 AdminController，API 數 39 → 43
 //           階段 2 回合 1：執行人對照 SQL 斷言（名單同形狀、執行人數排除哨兵、在途只看 EXEC 關卡 6 同類別），API 數 43 → 46
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 3 回合 1：ADMIN_VISIBLE_PERMS 常數測試——每個 PERM_* 常數與關卡碼都在清單內、恰 20 碼不重複、隱藏 8 碼不在內
+//           （裁示 ⑮A：新功能上線時加常數的同一 commit 要放進清單）；角色權限列 SQL 斷言（含 GENERAL 的角色清單、
+//           可見碼 IN 綁參數、成員數只算啟用中使用者、權限列現況不過濾 STATUS、狀態轉移帶 oldStatus、INSERT 不寫 UPDATE_*）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -295,6 +300,45 @@ class SqlConstantScanTest {
 		assertThat(RoleAdminDao.FIND_IN_FLIGHT_EXEC_BY_CATG).contains("R.REQ_STATE_CODE = :execState")
 				.contains("R.CURR_STAGE_ID = :execStage").contains("R.CATG_ID = :catgId")
 				.contains("JOIN IM_ACCT_APPR_STAGE S ON S.STAGE_ID = R.CURR_STAGE_ID").doesNotContain("PERM_ID");
+	}
+
+	/** 第 89 項階段 3：角色權限設定頁的 SQL——角色含 GENERAL、可見碼綁參數、成員數口徑、權限列現況含 STATUS＝0、狀態轉移保留 CREATE_* */
+	@Test
+	void 角色權限設定_角色含GENERAL_可見碼綁參數_成員數口徑_權限列現況與狀態轉移() {
+		assertThat(RoleAdminDao.FIND_ROLES_WITH_GENERAL).contains("STATUS = 1").doesNotContain("generalRoleId")
+				.contains("ORDER BY SORT_SEQ, ROLE_ID");
+		assertThat(RoleAdminDao.FIND_PERMS_BY_IDS).contains("FROM IM_ACCT_PERM").contains("STATUS = 1")
+				.contains("PERM_ID IN (:permIds)").contains("ORDER BY SORT_SEQ, PERM_ID").doesNotContain("PHASE_CODE");
+		assertThat(RoleAdminDao.COUNT_ROLE_MEMBERS).contains("RU.ROLE_ID AS CODE, COUNT(*) AS CNT")
+				.contains("JOIN IM_ACCT_USER U ON U.USER_ID = RU.USER_ID AND U.STATUS = 1").contains("RU.STATUS = 1")
+				.contains("GROUP BY RU.ROLE_ID");
+		assertThat(RoleAdminDao.COUNT_ACTIVE_USERS).contains("FROM IM_ACCT_USER").contains("STATUS = 1");
+		// 現況要含 STATUS＝0 與隱藏碼（決定 UPDATE 0→1 還是 INSERT；隱藏碼原樣保留），所以不過濾 STATUS、不 JOIN 權限表
+		assertThat(RoleAdminDao.FIND_ROLE_PERM_STATUSES).contains("PERM_ID AS CODE, STATUS").contains("FROM IM_ACCT_ROLE_PERM")
+				.contains("ROLE_ID = :roleId").doesNotContain("STATUS = 1").doesNotContain("JOIN");
+		assertThat(RoleAdminDao.UPDATE_ROLE_PERM_STATUS).contains("UPDATE IM_ACCT_ROLE_PERM").contains("STATUS = :newStatus")
+				.contains("AND STATUS = :oldStatus").contains("PERM_ID = :permId").contains("UPDATE_DATE = :now, UPDATE_BY = :userId")
+				.doesNotContain("CREATE_");
+		assertThat(RoleAdminDao.INSERT_ROLE_PERM).contains("INSERT INTO IM_ACCT_ROLE_PERM (ROLE_ID, PERM_ID, STATUS, CREATE_DATE, CREATE_BY)")
+				.doesNotContain("UPDATE_");
+	}
+
+	/** 裁示 ⑮A：每個 PERM_* 常數都要在角色權限設定頁的可見清單內，否則新功能上線後管理員無法在畫面授予（計畫風險 9） */
+	@Test
+	void 可見權限碼清單_涵蓋每個PERM常數與關卡碼_恰20碼_隱藏碼不在內() throws Exception {
+		List<String> permConsts = new ArrayList<>();
+		for (Field f : AcctConst.class.getDeclaredFields()) {
+			if (f.getName().startsWith("PERM_") && f.getType() == String.class) {
+				permConsts.add((String) f.get(null));
+			}
+		}
+		assertThat(permConsts).hasSizeGreaterThan(10);
+		assertThat(AcctConst.ADMIN_VISIBLE_PERMS).containsAll(permConsts).containsAll(AcctConst.PERM_STAGE_CODES)
+				.doesNotHaveDuplicates().hasSize(20)
+				.doesNotContain("SYS_AUDIT_VIEW", "REVIEW_LIST", "REVIEW_SIGN_INFRA", "REVIEW_SIGN_GOV", "STATS_VIEW", "INSP_EXPORT",
+						"MAINT_ASSET_CODE", "MAINT_INSP_ITEM");
+		assertThat(AcctConst.PERM_STAGE_CODES).containsExactly("APPR_G2", "APPR_G3", "APPR_G4", "APPR_G5", "VERIFY_G7");
+		assertThat(AcctConst.ADM_ROLE_PERM_SET).hasSizeLessThanOrEqualTo(30);
 	}
 
 	@Test
