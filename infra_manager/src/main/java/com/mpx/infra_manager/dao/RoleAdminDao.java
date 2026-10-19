@@ -6,7 +6,7 @@ package com.mpx.infra_manager.dao;
 // 變更說明: 新增：角色指派與執行人對照維護的資料存取（BACKLOG 第 89 項階段 1；SA 4.7、裁示 ①B／⑦A）
 //           全域互斥：LOCK_GLOBAL 對 IM_ACCT_ROLE 的 GENERAL 列 FOR UPDATE WAIT n（一定存在、IS_SYSTEM＝1、程式從不更新、列鎖不擋一般讀取），
 //           五支寫入 API 交易第一句取鎖後才做檢查——READ COMMITTED 下帶條件 UPDATE 擋不住 write skew（兩位管理員同時移除最後兩人會歸零）；
-//           等待逾時 ORA-30006 由 Spring 轉 CannotAcquireLockException，Service 轉 E26。
+//           等待逾時 ORA-30006 由 Spring 轉 PessimisticLockingFailureException 家族（不保證是子類別），Service 攔父類別轉 E26。
 //           持有人數 COUNT_HOLDERS：與 PermDao.FIND_USERS_WITH_PERM 同口徑（啟用中使用者、啟用中角色權限列、啟用中成員指派、含 GENERAL），
 //           可排除「某角色＋某人」那一組成員指派（移除成員用）或「某角色＋某碼」那一格角色權限（第三頁存檔用）；
 //           排除參數以 NVL(:x, '-') 哨兵處理 null——NOT (A AND NULL) 會是 NULL 而把整列排掉，不能直接綁 NULL。
@@ -169,7 +169,7 @@ public class RoleAdminDao {
 		this.itflowDb = itflowDb;
 	}
 
-	/** 取全域鎖；須在交易內呼叫，等待逾時丟 CannotAcquireLockException（ORA-30006） */
+	/** 取全域鎖；須在交易內呼叫，等待逾時（ORA-30006）丟 PessimisticLockingFailureException 家族 */
 	public void lockGlobal() {
 		Map<String, Object> params = new HashMap<>();
 		params.put("generalRoleId", AcctConst.ROLE_GENERAL);

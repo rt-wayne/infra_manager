@@ -17,10 +17,10 @@
 | 89 | 角色權限維護介面：角色指派、執行人對照兩頁（取代改 DB），另加第三頁設定角色可做哪些事／看到哪些頁面（角色 × 權限碼）；每次異動寫系統管理軌跡、原因必填，移除會卡住在途單或最後一位系統管理員時拒絕 | [backlog/89-角色權限維護介面.md](backlog/89-角色權限維護介面.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：階段 1 結束審查——平行派 code-reviewer（範圍 0da1622..HEAD）＋test-runner（後端 `mvnw test`）；必須修正修完才開階段 2（執行人對照後端、殼 jar 轉送、遞增腳本、實機 curl）
-- 已改動（未 commit）：無（回合 2 已 commit）
-- 本階段起點：0da1622（階段 1，2026-10-19）
-- 卡住／待確認：實機測試對象（Alex 測在途擋下、2410305 測指派移除，見第 90 項）實機測試對象（Alex 測在途擋下、2410305 測指派移除，見第 90 項）
+- 下一步：階段 1 已結束（審查 M1 修完、D1 選 B 登記 PRD 偏離第 18 條、S1～S5 登記第 92～97 項）。開階段 2 回合 1：執行人對照後端（`RoleAdminDao` 執行人 SQL 含 `FIND_IN_FLIGHT_EXEC_BY_CATG` 只看關卡 6、`RoleAdminService` 指派／移除執行人、`AdminController` 3 支、測試），依計畫檔「階段 2」；開工時把當下 HEAD 填進「本階段起點」
+- 已改動（未 commit）：無（階段 1 收尾已 commit）
+- 本階段起點：階段 2 開工時填（階段 1 起點 0da1622 已結案）
+- 卡住／待確認：實機測試對象（Alex 測在途擋下、2410305 測指派移除，見第 90 項）尚未裁示，階段 2 回合 2 實機 curl 前要問；鎖逾時真實例外型別待實機情境 ③ 確認（計畫檔風險 11）
 
 ## 僅記錄未拍板
 
@@ -83,6 +83,12 @@
 | 88 | 「* 為必填欄位」圖例位置不一致：緊急存取表單（`EmergencyFormView.vue:25`）放在區塊內 `<h3>` 下方，申請表單、巡檢表單放在整頁最上方；PRD 寫「三張表單上方」。第 80 項 code-reviewer 提出 | 2026-10-16 | — |
 | 90 | 測試帳號角色紀錄互相矛盾：BACKLOG 第 23 項寫測試帳號 2410305 已加 8 個角色與 8 類執行人（使用者裁示不移除），但 PRD 測試使用者表（約第 1007 行）寫 Wayne、Brian 的 8 個角色指派都是 STATUS＝0；要以測試 DB 實查為準更正其一。影響第 89 項（角色權限維護介面）實機測試要拿誰試。第 89 項 architect 規劃時發現 | 2026-10-16 | — |
 | 91 | 程式連線帳號 AP_USER 對系統管理軌跡表 IM_ACCT_ADMIN_LOG 有 UPDATE、DELETE 權限（使用者 2026-10-19 實查測試 DB），軌跡設計為只增不改，但程式帳號可竄改或刪除稽核紀錄；可收回這兩項權限（需 DBA，正式環境也要查）。第 89 項 F8 查證時發現 | 2026-10-19 | — |
+| 92 | 名單維護 DENY 軌跡的被擋單號是「每個權限碼各取 50 筆」再合併（`HolderGuard.java:98-99`、`blockedDocIds`），一個角色有多個卡單碼時會超過 50 筆，最後靠 3900 bytes 逐筆丟棄兜住；`AcctConst` 註解、PRD 軌跡表、計畫檔都寫「最多 50 筆」。改法：`blockedDocIds` 合併時截在 50 筆（第三頁另有「每碼 20 筆」規格，口徑分開較不混）；`AdminLogWriterTest` 補多碼案例。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
+| 93 | 全域鎖 `RoleAdminDao.lockGlobal()` 丟掉查詢結果不檢查筆數；GENERAL 列若被誤刪或改名，`FOR UPDATE` 鎖不到任何列也不報錯，互斥保護悄悄失效。改法：查無列時丟 IllegalStateException（寧可 500 也不放行）。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
+| 94 | 名單維護兩支 GET（/admin/roles、/admin/users）被拒時既不寫 DENY 軌跡（合理，沒有查詢類動作碼）也沒有應用 log，`GlobalExceptionHandler.handleApi` 只對 5xx 記 log，違反 security.md A09「權限拒絕必須記錄 log」。改法：比照 `RoleAdminService.requirePermOrDeny` 補 `log.info`。範圍外：全系統 `perm.require`／`requireAny` 被拒都有同一缺口，可在 `PermissionService.require` 統一補一行。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
+| 95 | `AdminMember.grantDate` 缺 `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，會輸出 ISO 格式（中間帶 T），與 `Acct`、`AcctHist`、`AcctAttach` 等既有回應 model 不一致；階段 4 前端接之前補上。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
+| 96 | 在途申請單查詢 `RoleAdminDao.FIND_IN_FLIGHT_BY_STAGE_PERM` 只以 `REQ_STATE_CODE IN ('REVIEW','VERIFY') AND S.PERM_ID = :permId` 篩選，沒過濾關卡 `S.STATUS = 1`、也沒核對 REVIEW 配關卡 2～5／VERIFY 配關卡 7，比 `PermissionService.canHandleNow` 寬；只有資料異常的單會被多擋（本來就沒人能處理）。改法：至少加 `S.STATUS = 1`。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
+| 97 | `USER_ID_MAX = 30` 在 `RoleAdminService`、`AdminLogWriter`、`AuthService` 各定義一次；`RoleAdminService.requirePermOrDeny` 以比對動作碼決定 JSON 鍵叫 roleId 還是 catgId，階段 2 加執行人對照時要同步。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
 | 79 | UAT 的附件根目錄（`infra.manager.attach.dir` 的值）目前設在哪、要不要隨改名搬到新目錄名；DB 的 `IM_ACCT_ATTACH.FILE_PATH` 存相對路徑，搬檔＋改設定值即可、不用動資料。改名部署時 SETUP 第 8 節寫「值可以維持原路徑」，不搬也能運作。第 68 項計畫待確認 2，結案時移入 | 2026-10-15 | — |
 
 ## 已拍板不做

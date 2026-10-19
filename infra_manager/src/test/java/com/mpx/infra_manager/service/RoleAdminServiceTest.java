@@ -36,6 +36,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 
@@ -255,6 +256,15 @@ class RoleAdminServiceTest {
 	@Test
 	void 指派_取鎖逾時_E26_不寫軌跡() {
 		doThrow(new CannotAcquireLockException("ORA-30006")).when(fx.roleAdminDao).lockGlobal();
+		assertStatus(() -> svc.grantRole(id(HANK), "GOV", grant(GARY, "原因")), HttpStatus.CONFLICT, AcctMsg.E26);
+		verify(fx.adminLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any());
+		assertThat(fx.txm.rollbacks).isEqualTo(1);
+	}
+
+	/** 審查 M1：Spring 走 SQLState 分類時可能只給父類別，不是 CannotAcquireLockException；父類別也要轉 E26、不能落到 500 */
+	@Test
+	void 指派_取鎖逾時_父類別例外也轉E26() {
+		doThrow(new PessimisticLockingFailureException("ORA-30006")).when(fx.roleAdminDao).lockGlobal();
 		assertStatus(() -> svc.grantRole(id(HANK), "GOV", grant(GARY, "原因")), HttpStatus.CONFLICT, AcctMsg.E26);
 		verify(fx.adminLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any());
 		assertThat(fx.txm.rollbacks).isEqualTo(1);

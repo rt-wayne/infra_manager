@@ -11,7 +11,9 @@ package com.mpx.infra_manager.service;
 //           移除：無權限 403＋DENY → 切換中 E25 → 原因 E10／E11 → 角色不合法 400（對象停用或查無仍允許移除）
 //                 → 交易：取鎖 → 不在名單 E22 → HolderGuard（SYS_ROLE 歸零 E24、在途 E23）→ UPDATE 1→0 → SUCCESS 軌跡；
 //                 E23／E24 先回滾再於交易外寫 DENY。改自己允許（裁示 ⑤B），SYS_ROLE 歸零檢查防止全系統無人能維護。
-//           ORA-30006（FOR UPDATE WAIT 逾時）由 Spring 轉 CannotAcquireLockException，在交易外轉 E26、不寫軌跡
+//           ORA-30006（FOR UPDATE WAIT 逾時）由 Spring 轉成 PessimisticLockingFailureException 家族（classpath 沒有自訂
+//           sql-error-codes.xml 時走 SQLState 分類，不保證是子類別 CannotAcquireLockException；死結 ORA-00060 同家族），
+//           攔父類別、在交易外轉 E26、不寫軌跡（階段 1 審查 M1；實際型別待階段 2 實機鎖測試確認）
 // ============================================================
 
 import java.time.Clock;
@@ -24,8 +26,8 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -268,14 +270,14 @@ public class RoleAdminService {
 		return r;
 	}
 
-	/** 交易內第一句取全域鎖再執行；等待逾時在交易外轉 E26 */
+	/** 交易內第一句取全域鎖再執行；等待逾時（或死結）在交易外轉 E26。攔父類別：Spring 走 SQLState 分類時不一定給子類別 */
 	void locked(Runnable body) {
 		try {
 			tx.executeWithoutResult(s -> {
 				roleAdminDao.lockGlobal();
 				body.run();
 			});
-		} catch (CannotAcquireLockException e) {
+		} catch (PessimisticLockingFailureException e) {
 			log.info("名單維護取鎖逾時 {}", e.getMessage());
 			throw ApiException.conflict(AcctMsg.E26);
 		}
