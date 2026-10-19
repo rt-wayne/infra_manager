@@ -14,6 +14,9 @@ package com.mpx.infra_manager_web.controller;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp_web 改名為 com.mpx.infra_manager_web（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 2：加 AdminController 7 條路徑（角色清單、候選人、指派／移除角色、執行人清單、指派／移除執行人）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,7 +64,8 @@ class ControllerRoutingTest {
 		BackendForwarder fw = new BackendForwarder(restTemplate, BACKEND);
 		mvc = MockMvcBuilders.standaloneSetup(new AuthController(fw), new HomeController(fw),
 				new AccountController(fw), new RequestController(fw), new AttachmentController(fw),
-				new InspectionController(fw), new JobController(fw), new EmergencyController(fw)).build();
+				new InspectionController(fw), new JobController(fw), new EmergencyController(fw), new AdminController(fw))
+				.build();
 	}
 
 	/** 方法、殼 jar 路徑（/api/v1 之後）、後端路徑；開發文件 7.2 全部路徑 */
@@ -114,7 +118,15 @@ class ControllerRoutingTest {
 				Arguments.of("POST", "/emergencies/EA1/report", "/emergencies/EA1/report"),
 				Arguments.of("POST", "/emergencies/EA1/approve", "/emergencies/EA1/approve"),
 				Arguments.of("POST", "/emergencies/EA1/return", "/emergencies/EA1/return"),
-				Arguments.of("POST", "/emergencies/EA1/close", "/emergencies/EA1/close"));
+				Arguments.of("POST", "/emergencies/EA1/close", "/emergencies/EA1/close"),
+				// AdminController（BACKLOG 第 89 項）
+				Arguments.of("GET", "/admin/roles", "/admin/roles"),
+				Arguments.of("GET", "/admin/users", "/admin/users"),
+				Arguments.of("POST", "/admin/roles/GOV/members", "/admin/roles/GOV/members"),
+				Arguments.of("POST", "/admin/roles/GOV/members/0000010/revoke", "/admin/roles/GOV/members/0000010/revoke"),
+				Arguments.of("GET", "/admin/executors", "/admin/executors"),
+				Arguments.of("POST", "/admin/executors/HOST/members", "/admin/executors/HOST/members"),
+				Arguments.of("POST", "/admin/executors/HOST/members/0000006/revoke", "/admin/executors/HOST/members/0000006/revoke"));
 	}
 
 	@ParameterizedTest(name = "{0} {1}")

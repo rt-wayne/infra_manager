@@ -676,7 +676,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 **前端主要程式**（`infra_manager_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/infra_manager_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage，key `infra_manager_web.token`、`infra_manager_web.identityChanged`；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\accountExport.ts`（帳號列表匯出與共用儲存格文字）、`utils\perms.ts`、`utils\codes.ts`。
 
-**殼 jar**：`BackendForwarder` 共用轉送（去掉長度類 header；log 不記 Authorization 與本文）；7 個 Controller 路徑與後端一一對應，只呼叫 BackendForwarder；`config\SecurityHeadersConfig` 以過濾器為所有回應加安全標頭。
+**殼 jar**：`BackendForwarder` 共用轉送（去掉長度類 header；log 不記 Authorization 與本文）；8 個 Controller 路徑與後端一一對應（含 `AdminController` 系統管理 7 支），只呼叫 BackendForwarder；`config\SecurityHeadersConfig` 以過濾器為所有回應加安全標頭。
 
 **各模組交易內容**
 
@@ -697,7 +697,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 ### 資料結構
 
-23 張表、47 個索引（PK 23＋一般 24）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（23 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對），命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
+23 張表、47 個索引（PK 23＋一般 24）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（23 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對）；角色指派與執行人對照改由畫面維護後，三張表（IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP）的 COMMENT 另有升級腳本 `db/infra_manager_89_role_admin.sql`（只改 COMMENT、不動結構、不需 GRANT——AP_USER 對相關表已有四種權限；可重跑；建表檔同句，新環境不必跑），命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
 
 **慣例**
 
@@ -974,7 +974,7 @@ END
 
 **顯示名的兩種算法**：快照欄（*_NAME）由 `Texts.displayName` 產生（含 trim、英文名空白退回中文名再退回工號）；申請單明細的 applyByName／execByName／verifyByName 與附件上傳人則由 SQL 即時 JOIN 計算（`AcctReqDao.nameExpr`：中文名為空只顯示英文名，否則「英文名 (中文名)」，不 trim、無工號退回）。見 BACKLOG 第 13 項。
 
-**初始資料**（代碼表 7 張隨 `db\infra_manager_init_data.sql` 建立，CREATE_BY＝SYSTEM、STATUS＝1；人員三表 IM_ACCT_USER、IM_ACCT_ROLE_USER、IM_EXEC_MAP 不在該檔，以 DB 手動維護；筆數為測試 DB 實查值）
+**初始資料**（代碼表 7 張隨 `db\infra_manager_init_data.sql` 建立，CREATE_BY＝SYSTEM、STATUS＝1；人員三表 IM_ACCT_USER、IM_ACCT_ROLE_USER、IM_EXEC_MAP 不在該檔——使用者以 DB 手動維護，角色指派與執行人對照由系統管理 API 維護（畫面施工中，見 BACKLOG 第 89 項）、DB 直接改只作備援；筆數為測試 DB 實查值）
 
 | 表 | 筆數 | 內容 |
 |---|---|---|
@@ -1162,7 +1162,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 |---|---|---|---|---|---|
 | POST | `/jobs/{code}/run` | SYS_JOB_RUN | code＝J01／J02／J03；query：baseDate（選填；J01／J02 為日期 `yyyy-MM-dd`，J03 為時間點 `yyyy-MM-dd HH:mm:ss`、T 可換空白、可省秒） | runId、resultCode、affectedCnt | 403、404（其他 code）、400 E17、400（日期或時間格式錯）、409 E16 |
 
-**系統管理——角色指派與執行人對照**（本功能分批施工中，進度見 BACKLOG 第 89 項；下列 7 支後端 API 已上線，殼 jar 尚未轉送、前端尚無畫面）
+**系統管理——角色指派與執行人對照**（本功能分批施工中，進度見 BACKLOG 第 89 項；下列 7 支後端 API 已上線並經殼 jar 轉送，前端尚無畫面）
 
 | 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
 |---|---|---|---|---|---|
