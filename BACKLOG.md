@@ -17,9 +17,9 @@
 | 89 | 角色權限維護介面：角色指派、執行人對照兩頁（取代改 DB），另加第三頁設定角色可做哪些事／看到哪些頁面（角色 × 權限碼）；每次異動寫系統管理軌跡、原因必填，移除會卡住在途單或最後一位系統管理員時拒絕 | [backlog/89-角色權限維護介面.md](backlog/89-角色權限維護介面.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：階段 3 回合 2 後半已完成（殼 jar 2 支、腳本、實機三情境皆符合預期，見計畫檔「回合 2 後半結果」）。接著階段 3 結束審查：平行派 code-reviewer（範圍 98b2484..HEAD）＋ test-runner（後端 329、殼 jar 75），必須修正修完後 commit，再開階段 4（前端 `/admin/roles` 角色指派頁，計畫檔「階段 4」回合 1）；提醒使用者重跑 `db\infra_manager_89_role_admin.sql`（本回合補的 COMMENT）
-- 已改動（未 commit）：無（回合 2 後半已 commit）
-- 本階段起點：98b2484（階段 3，2026-10-19）
+- 下一步：階段 3 已結束（審查必須修正零項、測試 329＋75 全過、建議改善登記第 106～109 項）。開階段 4 回合 1（前端角色指派頁唯讀版：`utils\perms.ts` 加 SYS_ROLE／SYS_EXECUTOR、路由 `/admin/roles`、`AppLayout.vue` 系統管理區塊、`api\admin.ts`、`types\admin.ts`、`views\RoleAdminView.vue`＋測試），依計畫檔「階段 4」與「前端」段；開工時把 HEAD 填進「本階段起點」；提醒使用者重跑 `db\infra_manager_89_role_admin.sql`（階段 3 補的 COMMENT）
+- 已改動（未 commit）：無（階段 3 收尾已 commit）
+- 本階段起點：階段 4 開工時填（階段 3 起點 98b2484 已結案）
 - 卡住／待確認：無
 
 ## 僅記錄未拍板
@@ -95,6 +95,10 @@
 | 103 | 帳號類別 STATUS＝0（軟刪除）時，該類別的執行人不出現在 /admin/executors、移除 API 回 400，但 `PermDao.FIND_EXEC_CATGS`／`isExecutor` 不看類別狀態，那些人仍保有執行人身分（能處理該類別關卡 6 單、看到到期帳號）。目前 8 類皆 STATUS＝1。可讓 revoke 允許 STATUS＝0 類別，或在 PRD／SETUP 註明「軟刪除類別前先移除其執行人」。第 89 項階段 2 code-reviewer 提出（S6） | 2026-10-19 | — |
 | 104 | `RoleAdminService.executors()` 呼叫 `codeService.getCodes()`，每次多查資產分類與關卡兩句，實際只用類別；CodeService 加只回類別的方法。第 89 項階段 2 code-reviewer 提出（S7） | 2026-10-19 | — |
 | 105 | `db/infra_manager_89_role_admin.sql` 檔尾第二句只核對 5 個欄位 COMMENT，漏了 IM_EXEC_MAP 的 CREATE_BY／UPDATE_DATE／UPDATE_BY 與 IM_ACCT_ROLE_USER 的 UPDATE_DATE／UPDATE_BY；擴成 10 欄、期望值改 10 列（中文 COMMENT 無聲變亂碼是檔頭警告的失敗模式）。第 89 項階段 2 code-reviewer 提出（S8） | 2026-10-19 | — |
+| 106 | PRD 第 46 行（「系統不提供的功能」維護畫面列）括號引用的 API 段標題「系統管理——角色指派與執行人對照」已改名為「…與角色權限設定」，且沒寫角色權限設定 API 已上線、寫軌跡；改成「角色指派、執行人對照、角色權限設定的後端 API 已上線…（見 API 規格『系統管理——角色指派、執行人對照與角色權限設定』）」。第 89 項階段 3 code-reviewer 提出（S1） | 2026-10-19 | — |
+| 107 | `RolePermAdminServiceTest` 成功案例沒斷言隱藏碼（假資料 GOV 的 REVIEW_LIST＝1）未被更新；計畫完成判定要求「隱藏碼存檔後原樣保留」，目前只測到送隱藏碼回 400。加 `verify(..., never()).updateRolePermStatus(eq("GOV"), eq("REVIEW_LIST"), ...)`。第 89 項階段 3 code-reviewer 提出（S2） | 2026-10-19 | — |
+| 108 | `RolePermAdminService.save` 的軌跡 memberCount 在取鎖前查、且用全部角色的 GROUP BY（`RolePermAdminService.java:161`）；同時有人改成員時軌跡人數可能是舊值。移進取鎖後，可另加單一角色 COUNT。第 89 項階段 3 code-reviewer 提出（S3） | 2026-10-19 | — |
+| 109 | `RolePermAdminService.save` 約 90 行（`:131-220`）超過 50 行門檻；把取鎖後第 ⑦～⑪ 步抽成私有方法，save 只留驗證順序與 DENY 分支。第 89 項階段 3 code-reviewer 提出（S4） | 2026-10-19 | — |
 | 79 | UAT 的附件根目錄（`infra.manager.attach.dir` 的值）目前設在哪、要不要隨改名搬到新目錄名；DB 的 `IM_ACCT_ATTACH.FILE_PATH` 存相對路徑，搬檔＋改設定值即可、不用動資料。改名部署時 SETUP 第 8 節寫「值可以維持原路徑」，不搬也能運作。第 68 項計畫待確認 2，結案時移入 | 2026-10-15 | — |
 
 ## 已拍板不做
