@@ -20,8 +20,13 @@ package com.mpx.infra_manager.service;
 //           含 IS_ENABLED＝0 的類別，因為仍可能有在途單）；指派／移除執行人與角色指派同一條驗證順序與交易流程，差異（名單表、守門）
 //           抽成 Roster 由兩個名單共用；類別不合法回 400「欄位內容不正確：帳號類別」（STATUS＝0 或不存在；IS_ENABLED＝0 仍可維護）；
 //           執行人對照與 SYS_ROLE 無關，不會有 E24
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 2 實機修正：ORA-30006 實際被 Spring 包成 UncategorizedSQLException（SQLState 99999），原本只攔
+//           PessimisticLockingFailureException 會回 500；locked() 另攔 DataAccessException、例外鏈上錯誤碼 30006 才轉 E26，其餘原樣拋出
 // ============================================================
 
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -32,6 +37,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -425,7 +431,11 @@ public class RoleAdminService {
 		return c;
 	}
 
-	/** 交易內第一句取全域鎖再執行；等待逾時（或死結）在交易外轉 E26。攔父類別：Spring 走 SQLState 分類時不一定給子類別 */
+	/**
+	 * 交易內第一句取全域鎖再執行；等待逾時（或死結）在交易外轉 E26。
+	 * 2026-10-19 實機：ORA-30006 在 Spring 7（無自訂 sql-error-codes.xml）被包成 UncategorizedSQLException（SQLState 99999），
+	 * 不屬於 PessimisticLockingFailureException 家族，所以另以錯誤碼判斷；死結 ORA-00060 等仍走 PessimisticLockingFailureException
+	 */
 	void locked(Runnable body) {
 		try {
 			tx.executeWithoutResult(s -> {
@@ -433,9 +443,28 @@ public class RoleAdminService {
 				body.run();
 			});
 		} catch (PessimisticLockingFailureException e) {
-			log.info("名單維護取鎖逾時 {}", e.getMessage());
+			log.info("名單維護取鎖失敗 例外={}", e.getClass().getName());
+			throw ApiException.conflict(AcctMsg.E26);
+		} catch (DataAccessException e) {
+			if (!isLockWaitTimeout(e)) {
+				throw e;
+			}
+			log.info("名單維護取鎖逾時 ORA-{}", ORA_LOCK_WAIT_TIMEOUT);
 			throw ApiException.conflict(AcctMsg.E26);
 		}
+	}
+
+	/** ORA-30006：FOR UPDATE WAIT n 逾時 */
+	static final int ORA_LOCK_WAIT_TIMEOUT = 30006;
+
+	/** 例外鏈上有沒有錯誤碼 30006 的 SQLException */
+	static boolean isLockWaitTimeout(Throwable e) {
+		for (Throwable t = e; t != null; t = t.getCause()) {
+			if (t instanceof SQLException se && se.getErrorCode() == ORA_LOCK_WAIT_TIMEOUT) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** HolderGuard 擋下（交易已回滾）：交易外寫 DENY，回 E24（優先）或 E23 */

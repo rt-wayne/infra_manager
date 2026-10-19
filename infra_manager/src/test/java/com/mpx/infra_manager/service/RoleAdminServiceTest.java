@@ -25,6 +25,7 @@ import static com.mpx.infra_manager.support.TestFixture.TESTER;
 import static com.mpx.infra_manager.support.TestFixture.id;
 import static com.mpx.infra_manager.support.TestFixture.impersonate;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -35,6 +36,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +46,7 @@ import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.UncategorizedSQLException;
 
 import com.mpx.infra_manager.common.AcctConst;
 import com.mpx.infra_manager.common.AcctMsg;
@@ -270,6 +273,25 @@ class RoleAdminServiceTest {
 		assertStatus(() -> svc.grantRole(id(HANK), "GOV", grant(GARY, "原因")), HttpStatus.CONFLICT, AcctMsg.E26);
 		verify(fx.adminLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any());
 		assertThat(fx.txm.rollbacks).isEqualTo(1);
+	}
+
+	/** 2026-10-19 實機：ORA-30006 實際是 UncategorizedSQLException（SQLState 99999、錯誤碼 30006），要轉 E26 不能落到 500 */
+	@Test
+	void 指派_取鎖逾時_實機型別UncategorizedSQLException錯誤碼30006_轉E26() {
+		doThrow(new UncategorizedSQLException("PreparedStatementCallback", "SELECT ... FOR UPDATE WAIT 5",
+				new SQLException("ORA-30006: 資源忙碌; WAIT 逾時無法取得", "99999", 30006))).when(fx.roleAdminDao).lockGlobal();
+		assertStatus(() -> svc.grantRole(id(HANK), "GOV", grant(GARY, "原因")), HttpStatus.CONFLICT, AcctMsg.E26);
+		verify(fx.adminLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any());
+		assertThat(fx.txm.rollbacks).isEqualTo(1);
+	}
+
+	/** 其他 SQL 錯誤不能被誤轉成 E26（照原樣拋出，由全域處理成 500） */
+	@Test
+	void 指派_其他SQL錯誤_不轉E26_原樣拋出() {
+		UncategorizedSQLException other = new UncategorizedSQLException("PreparedStatementCallback", "SELECT",
+				new SQLException("ORA-00942: 表格或視觀表不存在", "42000", 942));
+		doThrow(other).when(fx.roleAdminDao).lockGlobal();
+		assertThatThrownBy(() -> svc.grantRole(id(HANK), "GOV", grant(GARY, "原因"))).isSameAs(other);
 	}
 
 	/** 審查 M1：Spring 走 SQLState 分類時可能只給父類別，不是 CannotAcquireLockException；父類別也要轉 E26、不能落到 500 */
