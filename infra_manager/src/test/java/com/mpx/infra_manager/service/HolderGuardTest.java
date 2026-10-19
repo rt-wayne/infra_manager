@@ -7,6 +7,10 @@ package com.mpx.infra_manager.service;
 //           三條件擋下：變更前 ≥ 1、變更後＝0、有在途才擋；變更後仍有人不擋；變更前就是 0（移除已停用者、沒有成員的角色）不擋；
 //           SYS_ROLE 歸零不看在途；EMG_DECIDE 的在途含緊急存取；沒有卡單概念的碼不擋；
 //           單號在軌跡最多 50 筆、訊息最多 20 筆並加「等共 N 件」；兩種排除方式傳給 DAO 的參數
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 2 回合 1：執行人對照 checkExecutor——同一套三條件（排除後仍有人不擋且不查在途、變更前就是 0 不擋、無在途不擋、
+//           有在途擋且 Blocked 放類別代碼、最多 50 筆、sysRoleGone 恆 false）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -149,6 +153,53 @@ class HolderGuardTest {
 		Result r = guard.check(List.of(), Exclusion.member("R", "U1"));
 		assertThat(r.ok()).isTrue();
 		assertThat(HolderGuard.describe(r)).isEmpty();
+		verify(dao, never()).countHolders(any(), any(), any(), any());
+	}
+
+	// ------------------------------------------------------------
+	// 執行人對照
+	// ------------------------------------------------------------
+
+	/** before：不排除的執行人數；after：排除 U1 後的人數 */
+	private void executors(String catgId, long before, long after) {
+		when(dao.countExecutors(eq(catgId), isNull())).thenReturn(before);
+		when(dao.countExecutors(eq(catgId), eq("U1"))).thenReturn(after);
+	}
+
+	@Test
+	void 執行人_排除後仍有人_不擋_不查在途() {
+		executors("HOST", 2, 1);
+		assertThat(guard.checkExecutor("HOST", "U1").ok()).isTrue();
+		verify(dao, never()).findInFlightExecByCatg(any());
+		verify(dao, never()).countExecutors("HOST", null);
+	}
+
+	@Test
+	void 執行人_變更前就是0_不擋() {
+		executors("HOST", 0, 0);
+		when(dao.findInFlightExecByCatg("HOST")).thenReturn(docs("AR", 3, "執行人"));
+		assertThat(guard.checkExecutor("HOST", "U1").ok()).isTrue();
+		verify(dao, never()).findInFlightExecByCatg(any());
+	}
+
+	@Test
+	void 執行人_最後一位但無在途_不擋() {
+		executors("HOST", 1, 0);
+		when(dao.findInFlightExecByCatg("HOST")).thenReturn(List.of());
+		assertThat(guard.checkExecutor("HOST", "U1").ok()).isTrue();
+	}
+
+	@Test
+	void 執行人_最後一位且有在途_擋_Blocked放類別_最多50筆_與SYS_ROLE無關() {
+		executors("HOST", 1, 0);
+		when(dao.findInFlightExecByCatg("HOST")).thenReturn(docs("AR", 60, "執行人"));
+		Result r = guard.checkExecutor("HOST", "U1");
+		assertThat(r.ok()).isFalse();
+		assertThat(r.sysRoleGone()).isFalse();
+		assertThat(r.blockedPermIds()).containsExactly("HOST");
+		assertThat(r.blockedTotal()).isEqualTo(60);
+		assertThat(r.blockedDocIds()).hasSize(AcctConst.ADMIN_BLOCKED_LOG_MAX);
+		assertThat(HolderGuard.describe(r)).startsWith("AR0001（執行人）、").endsWith("（等共 60 件）");
 		verify(dao, never()).countHolders(any(), any(), any(), any());
 	}
 }

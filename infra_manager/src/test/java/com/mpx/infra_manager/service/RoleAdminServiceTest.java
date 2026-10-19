@@ -9,6 +9,11 @@ package com.mpx.infra_manager.service;
 //                 對象停用或不存在 404、已在名單 E21、重新指派走 UPDATE 0→1 不 INSERT、新指派走 INSERT、主鍵衝突轉 E21、SUCCESS 同交易；
 //           移除：不在名單 E22、SYS_ROLE 歸零 E24＋DENY 且回滾、在途 E23（訊息含單號）＋DENY 且回滾、通過才 UPDATE 1→0、
 //                 對象已停用或查無仍可移除、改自己允許；取鎖逾時 E26 不寫軌跡
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 2 回合 1：執行人對照——清單需 SYS_EXECUTOR（8 類全列含關閉類別、成員分組）、只有 SYS_EXECUTOR 也能指派；
+//           指派：無權限 DENY 記 catgId、類別不存在／過長 400「帳號類別」、對象停用 404、關閉類別仍可指派、SUCCESS 記 catgId／catgName；
+//           移除：在途（關卡 6 同類別）E23＋DENY 的 blockedPerms 放類別代碼且不查權限持有人、通過才 UPDATE 1→0、不在名單 E22、切換中 E25
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -43,6 +48,7 @@ import org.springframework.http.HttpStatus;
 import com.mpx.infra_manager.common.AcctConst;
 import com.mpx.infra_manager.common.AcctMsg;
 import com.mpx.infra_manager.model.AcctUser;
+import com.mpx.infra_manager.model.AdminExecCatg;
 import com.mpx.infra_manager.model.AdminRole;
 import com.mpx.infra_manager.model.AdminUser;
 import com.mpx.infra_manager.model.InFlightRow;
@@ -78,6 +84,11 @@ class RoleAdminServiceTest {
 		when(fx.roleAdminDao.countHolders(anyString(), any(), any(), any())).thenReturn(2L);
 		when(fx.roleAdminDao.findInFlightByStagePerm(anyString())).thenReturn(List.of());
 		when(fx.roleAdminDao.findInFlightEmg()).thenReturn(List.of());
+		// 執行人對照：預設排除後仍有人、無在途
+		when(fx.roleAdminDao.updateExecMemberStatus(anyString(), anyString(), anyInt(), anyInt(), any(), anyString())).thenReturn(1);
+		when(fx.roleAdminDao.insertExecMember(anyString(), anyString(), any(), anyString())).thenReturn(1);
+		when(fx.roleAdminDao.countExecutors(anyString(), any())).thenReturn(2L);
+		when(fx.roleAdminDao.findInFlightExecByCatg(anyString())).thenReturn(List.of());
 	}
 
 	static RoleRow role(String roleId, int status) {
@@ -362,5 +373,111 @@ class RoleAdminServiceTest {
 		when(fx.roleAdminDao.updateRoleMemberStatus("GOV", GARY, 1, 0, NOW, HANK)).thenReturn(0);
 		assertStatus(() -> svc.revokeRole(id(HANK), "GOV", GARY, reason("x")), HttpStatus.CONFLICT, AcctMsg.E22);
 		verify(fx.adminLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any());
+	}
+
+	// ------------------------------------------------------------
+	// 執行人對照
+	// ------------------------------------------------------------
+
+	/** 只有 SYS_EXECUTOR、沒有 SYS_ROLE 的身分 */
+	static com.mpx.infra_manager.common.Identity execAdmin() {
+		return TestFixture.idWith(GARY, java.util.Set.of("SYS_EXECUTOR"), List.of());
+	}
+
+	@Test
+	void 執行人清單_需SYS_EXECUTOR_8類全列含關閉類別_成員分組() {
+		MemberRow m = new MemberRow();
+		m.setGroupId("HOST");
+		m.setUserId(TestFixture.ALEX);
+		m.setUserEnName("Alex");
+		m.setUserName("陳儀仁");
+		m.setUserStatus(1);
+		m.setGrantDate(NOW);
+		m.setGrantBy(HANK);
+		when(fx.roleAdminDao.findExecMembers()).thenReturn(List.of(m));
+
+		List<AdminExecCatg> catgs = svc.executors(execAdmin());
+		assertThat(catgs).hasSize(8);
+		assertThat(catgs.get(0).getCatgId()).isEqualTo("HOST");
+		assertThat(catgs.get(0).getCatgName()).isEqualTo("主機帳號");
+		assertThat(catgs.get(0).getEnabled()).isTrue();
+		assertThat(catgs.get(0).getMembers()).hasSize(1);
+		assertThat(catgs.get(0).getMembers().get(0).getUserName()).isEqualTo("Alex (陳儀仁)");
+		// 關閉新申請的類別照樣列出、可維護
+		assertThat(catgs.get(2).getCatgId()).isEqualTo("APP");
+		assertThat(catgs.get(2).getEnabled()).isFalse();
+		assertThat(catgs.get(2).getMembers()).isEmpty();
+		// 只有 SYS_ROLE（沒有 SYS_EXECUTOR）不能看
+		assertStatus(() -> svc.executors(TestFixture.idWith(HANK, java.util.Set.of("SYS_ROLE"), List.of())), HttpStatus.FORBIDDEN,
+				AcctMsg.P01);
+		verify(fx.adminLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void 執行人指派_無權限DENY記catgId_類別不合法400_對象404_關閉類別仍可指派_SUCCESS記類別名() {
+		assertStatus(() -> svc.grantExecutor(id(KEVIN), "HOST", grant(GARY, "支援")), HttpStatus.FORBIDDEN, AcctMsg.P01);
+		verify(fx.adminLogDao).insert(eq(NOW), eq(KEVIN), any(), eq(AcctConst.ADM_EXEC_GRANT), eq(GARY),
+				eq("{\"catgId\":\"HOST\",\"denyCode\":\"NO_PERM\"}"), eq("支援"), eq(AcctConst.ADM_DENY));
+		// 過長的類別代碼在 DENY 裡存空
+		assertStatus(() -> svc.grantExecutor(id(KEVIN), "X".repeat(11), grant(GARY, "支援")), HttpStatus.FORBIDDEN, AcctMsg.P01);
+		verify(fx.adminLogDao).insert(eq(NOW), eq(KEVIN), any(), eq(AcctConst.ADM_EXEC_GRANT), eq(GARY),
+				eq("{\"catgId\":null,\"denyCode\":\"NO_PERM\"}"), eq("支援"), eq(AcctConst.ADM_DENY));
+
+		for (String c : List.of("NOPE", "X".repeat(11))) {
+			assertStatus(() -> svc.grantExecutor(execAdmin(), c, grant(GARY, "支援")), HttpStatus.BAD_REQUEST,
+					AcctMsg.BAD_CODE_PREFIX + "帳號類別");
+		}
+		when(fx.userDao.findById(TESTER)).thenReturn(AuthServiceTest.user(TESTER, 0));
+		assertStatus(() -> svc.grantExecutor(execAdmin(), "HOST", grant(TESTER, "支援")), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		verify(fx.roleAdminDao, never()).lockGlobal();
+
+		when(fx.roleAdminDao.findExecMemberStatus("APP", KEVIN)).thenReturn(null);
+		MemberChangeResult r = svc.grantExecutor(execAdmin(), "APP", grant(KEVIN, "支援"));
+		assertThat(r.getCatgId()).isEqualTo("APP");
+		assertThat(r.getRoleId()).isNull();
+		assertThat(r.getUserId()).isEqualTo(KEVIN);
+		assertThat(r.getResult()).isEqualTo("GRANTED");
+		verify(fx.roleAdminDao).insertExecMember("APP", KEVIN, NOW, GARY);
+		verify(fx.roleAdminDao, never()).insertRoleMember(any(), any(), any(), any());
+		verify(fx.adminLogDao).insert(eq(NOW), eq(GARY), eq("Gary (許永成)"), eq(AcctConst.ADM_EXEC_GRANT), eq(KEVIN),
+				eq("{\"catgId\":\"APP\",\"catgName\":\"應用系統帳號\",\"targetUserName\":\"Kevin (李凱鈞)\",\"before\":{\"status\":null},\"after\":{\"status\":1}}"),
+				eq("支援"), eq(AcctConst.ADM_SUCCESS));
+		assertThat(fx.txm.commits).isEqualTo(1);
+	}
+
+	@Test
+	void 執行人移除_在途卡住_E23_DENY的blockedPerms放類別_不查權限持有人() {
+		when(fx.roleAdminDao.findExecMemberStatus("HOST", TestFixture.ALEX)).thenReturn(1);
+		when(fx.roleAdminDao.countExecutors("HOST", TestFixture.ALEX)).thenReturn(0L);
+		when(fx.roleAdminDao.countExecutors("HOST", null)).thenReturn(1L);
+		when(fx.roleAdminDao.findInFlightExecByCatg("HOST")).thenReturn(List.of(new InFlightRow("AR20261007-003", "執行人")));
+		assertStatus(() -> svc.revokeExecutor(execAdmin(), "HOST", TestFixture.ALEX, reason("離職")), HttpStatus.CONFLICT,
+				AcctMsg.E23_PREFIX + "AR20261007-003（執行人）");
+		verify(fx.roleAdminDao, never()).updateExecMemberStatus(any(), any(), anyInt(), anyInt(), any(), any());
+		verify(fx.roleAdminDao, never()).countHolders(any(), any(), any(), any());
+		assertThat(fx.txm.rollbacks).isEqualTo(1);
+		ArgumentCaptor<String> json = ArgumentCaptor.forClass(String.class);
+		verify(fx.adminLogDao).insert(eq(NOW), eq(GARY), any(), eq(AcctConst.ADM_EXEC_REVOKE), eq(TestFixture.ALEX), json.capture(),
+				eq("離職"), eq(AcctConst.ADM_DENY));
+		assertThat(json.getValue()).contains("\"catgId\":\"HOST\"").contains("\"denyCode\":\"IN_FLIGHT\"")
+				.contains("\"blockedPerms\":[\"HOST\"]").contains("\"blockedTotal\":1").contains("\"blockedIds\":[\"AR20261007-003\"]");
+	}
+
+	@Test
+	void 執行人移除_通過_UPDATE1到0_SUCCESS_不在名單E22_切換中E25() {
+		when(fx.roleAdminDao.findExecMemberStatus("DB", TestFixture.TERRY)).thenReturn(1);
+		MemberChangeResult r = svc.revokeExecutor(execAdmin(), "DB", TestFixture.TERRY, reason("調職"));
+		assertThat(r.getCatgId()).isEqualTo("DB");
+		assertThat(r.getResult()).isEqualTo("REVOKED");
+		verify(fx.roleAdminDao).updateExecMemberStatus("DB", TestFixture.TERRY, 1, 0, NOW, GARY);
+		verify(fx.adminLogDao).insert(eq(NOW), eq(GARY), any(), eq(AcctConst.ADM_EXEC_REVOKE), eq(TestFixture.TERRY),
+				eq("{\"catgId\":\"DB\",\"catgName\":\"資料庫帳號\",\"targetUserName\":\"Terry (邱健唐)\",\"before\":{\"status\":1},\"after\":{\"status\":0}}"),
+				eq("調職"), eq(AcctConst.ADM_SUCCESS));
+		assertThat(fx.txm.commits).isEqualTo(1);
+
+		when(fx.roleAdminDao.findExecMemberStatus("DB", GARY)).thenReturn(null);
+		assertStatus(() -> svc.revokeExecutor(execAdmin(), "DB", GARY, reason("x")), HttpStatus.CONFLICT, AcctMsg.E22);
+		assertStatus(() -> svc.revokeExecutor(impersonate(KEVIN, HANK), "DB", GARY, reason("x")), HttpStatus.CONFLICT, AcctMsg.E25);
+		assertStatus(() -> svc.revokeExecutor(execAdmin(), "DB", GARY, null), HttpStatus.BAD_REQUEST, AcctMsg.E10_PREFIX + "原因");
 	}
 }

@@ -12,6 +12,10 @@ package com.mpx.infra_manager.service;
 //           在途：申請單依關卡 PERM_ID 資料驅動（RoleAdminDao.FIND_IN_FLIGHT_BY_STAGE_PERM）；EMG_DECIDE 另加緊急存取。
 //           每個碼各自計算：一次只動一個角色的一組授予，碼之間沒有組合效應。
 //           本類別只查不寫，須在呼叫端的交易內、取得全域鎖之後呼叫，查到的才是前一位管理員已提交的結果
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 2 回合 1：加執行人對照的檢查 checkExecutor——同一套三條件，「持有人」換成該類別的啟用中執行人、
+//           「在途」換成停在關卡 6 的同類別申請單（裁示 4.A）；Blocked.permId 放類別代碼，軌跡的 blockedPerms 跟著放類別代碼
 // ============================================================
 
 import java.util.ArrayList;
@@ -39,7 +43,7 @@ public class HolderGuard {
 		}
 	}
 
-	/** 某碼被在途案件卡住：單號（最多 ADMIN_BLOCKED_LOG_MAX 筆）與總數 */
+	/** 某碼（執行人對照時為類別代碼）被在途案件卡住：單號（最多 ADMIN_BLOCKED_LOG_MAX 筆）與總數 */
 	public record Blocked(String permId, List<InFlightRow> docs, int total) {
 	}
 
@@ -100,6 +104,28 @@ public class HolderGuard {
 			}
 		}
 		return new Result(sysRoleGone, List.copyOf(blocked));
+	}
+
+	/**
+	 * 移除類別 catgId 的執行人 userId：同一套三條件——變更前執行人 ≥ 1、變更後＝0、該類別有停在關卡 6 的單才擋。
+	 * 執行人對照與 SYS_ROLE 無關，sysRoleGone 恆為 false
+	 */
+	public Result checkExecutor(String catgId, String userId) {
+		long after = roleAdminDao.countExecutors(catgId, userId);
+		if (after > 0) {
+			return new Result(false, List.of());
+		}
+		long before = roleAdminDao.countExecutors(catgId, null);
+		if (before == 0) {
+			// 變更前就沒有執行人（例如移除已停用者）：那些單本來就卡住，不是這次造成的
+			return new Result(false, List.of());
+		}
+		List<InFlightRow> docs = roleAdminDao.findInFlightExecByCatg(catgId);
+		if (docs.isEmpty()) {
+			return new Result(false, List.of());
+		}
+		int keep = Math.min(docs.size(), AcctConst.ADMIN_BLOCKED_LOG_MAX);
+		return new Result(false, List.of(new Blocked(catgId, List.copyOf(docs.subList(0, keep)), docs.size())));
 	}
 
 	/** 需要 permId 才能處理的在途案件（沒有卡單概念的碼回空） */

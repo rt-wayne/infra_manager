@@ -17,9 +17,9 @@
 | 89 | 角色權限維護介面：角色指派、執行人對照兩頁（取代改 DB），另加第三頁設定角色可做哪些事／看到哪些頁面（角色 × 權限碼）；每次異動寫系統管理軌跡、原因必填，移除會卡住在途單或最後一位系統管理員時拒絕 | [backlog/89-角色權限維護介面.md](backlog/89-角色權限維護介面.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：階段 1 已結束（審查 M1 修完、D1 選 B 登記 PRD 偏離第 18 條、S1～S5 登記第 92～97 項）。開階段 2 回合 1：執行人對照後端（`RoleAdminDao` 執行人 SQL 含 `FIND_IN_FLIGHT_EXEC_BY_CATG` 只看關卡 6、`RoleAdminService` 指派／移除執行人、`AdminController` 3 支、測試），依計畫檔「階段 2」；開工時把當下 HEAD 填進「本階段起點」
-- 已改動（未 commit）：無（階段 1 收尾已 commit）
-- 本階段起點：階段 2 開工時填（階段 1 起點 0da1622 已結案）
+- 下一步：階段 2 回合 2——殼 jar `infra_manager_web` 新增 `controller\AdminController.java`（7 支只用 `BackendForwarder.get/post`、路徑變數用 `BackendForwarder.seg`）、`ControllerRoutingTest` 加入與 `routes()` 補 7 列；新增可重跑腳本 `db\infra_manager_89_role_admin.sql`（只更新 IM_EXEC_MAP／IM_ACCT_ADMIN_LOG 等 COMMENT＋檔尾核對查詢，不需 GRANT）；測試 DB 實跑 curl 三情境 ①②③（情境 ③ 同時確認鎖逾時真實例外型別，回填計畫檔風險 11）；PRD API 段註記殼 jar 已轉送；SETUP 第 6 節第 5a～6b 段
+- 已改動（未 commit）：無（回合 1 已 commit）
+- 本階段起點：fc24068（階段 2，2026-10-19）
 - 卡住／待確認：實機測試對象（Alex 測在途擋下、2410305 測指派移除，見第 90 項）尚未裁示，階段 2 回合 2 實機 curl 前要問；鎖逾時真實例外型別待實機情境 ③ 確認（計畫檔風險 11）
 
 ## 僅記錄未拍板

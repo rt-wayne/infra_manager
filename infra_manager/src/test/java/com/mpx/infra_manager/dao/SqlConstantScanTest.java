@@ -59,6 +59,7 @@ package com.mpx.infra_manager.dao;
 // 變更說明: BACKLOG 第 89 項階段 1：掃描清單加 RoleAdminDao；名單維護 SQL 斷言——全域鎖 FOR UPDATE WAIT 5、持有人數排除參數以 NVL 哨兵、
 //           在途申請單依關卡 PERM_ID、緊急存取沿用 UNDECIDED_COND／RETURNED_COND、名單列狀態轉移帶 oldStatus；AdminLogDao.INSERT 的 REASON 改綁參數；
 //           回合 2：CONTROLLERS 加 AdminController，API 數 39 → 43
+//           階段 2 回合 1：執行人對照 SQL 斷言（名單同形狀、執行人數排除哨兵、在途只看 EXEC 關卡 6 同類別），API 數 43 → 46
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -277,6 +278,25 @@ class SqlConstantScanTest {
 		assertThat(AdminLogDao.INSERT).contains(":reason").doesNotContain("NULL,");
 	}
 
+	/** 第 89 項階段 2：執行人對照——與角色指派同形狀的名單 SQL、執行人數排除哨兵、在途只看 EXEC 關卡 6 同類別 */
+	@Test
+	void 執行人對照_名單SQL同形狀_執行人數排除哨兵_在途只看關卡6同類別() {
+		assertThat(RoleAdminDao.FIND_EXEC_MEMBERS).contains("M.CATG_ID AS GROUP_ID").contains("FROM IM_EXEC_MAP M")
+				.contains("NVL(M.UPDATE_DATE, M.CREATE_DATE) AS GRANT_DATE").contains("LEFT JOIN IM_ACCT_USER U ON U.USER_ID = M.USER_ID")
+				.contains("M.STATUS = 1");
+		assertThat(RoleAdminDao.FIND_EXEC_MEMBER_STATUS).contains("FROM IM_EXEC_MAP").contains("CATG_ID = :catgId")
+				.contains("USER_ID = :targetId");
+		assertThat(RoleAdminDao.UPDATE_EXEC_MEMBER_STATUS).contains("UPDATE IM_EXEC_MAP").contains("STATUS = :newStatus")
+				.contains("AND STATUS = :oldStatus").contains("UPDATE_DATE = :now, UPDATE_BY = :userId").doesNotContain("CREATE_");
+		assertThat(RoleAdminDao.INSERT_EXEC_MEMBER).contains("INSERT INTO IM_EXEC_MAP (CATG_ID, USER_ID, STATUS, CREATE_DATE, CREATE_BY)")
+				.doesNotContain("UPDATE_");
+		assertThat(RoleAdminDao.COUNT_EXECUTORS).contains("JOIN IM_ACCT_USER U ON U.USER_ID = M.USER_ID AND U.STATUS = 1")
+				.contains("M.CATG_ID = :catgId").contains("M.STATUS = 1").contains("M.USER_ID <> NVL(:exclUserId, '-')");
+		assertThat(RoleAdminDao.FIND_IN_FLIGHT_EXEC_BY_CATG).contains("R.REQ_STATE_CODE = :execState")
+				.contains("R.CURR_STAGE_ID = :execStage").contains("R.CATG_ID = :catgId")
+				.contains("JOIN IM_ACCT_APPR_STAGE S ON S.STAGE_ID = R.CURR_STAGE_ID").doesNotContain("PERM_ID");
+	}
+
 	@Test
 	void 代碼常數_無已廢除值() throws Exception {
 		List<String> abolished = List.of("EXTEND", "VOID", "CONFIRM", "NA", "EXTEND_DONE", "AC", "AI",
@@ -317,7 +337,8 @@ class SqlConstantScanTest {
 			}
 		}
 		// 第 89 項階段 1：/admin/roles、/admin/users、/admin/roles/{roleId}/members、…/{userId}/revoke（39 → 43）
-		assertThat(apis).isEqualTo(43);
+		// 第 89 項階段 2：/admin/executors、/admin/executors/{catgId}/members、…/{userId}/revoke（43 → 46）
+		assertThat(apis).isEqualTo(46);
 		assertThat(missing).isEmpty();
 	}
 }

@@ -37,6 +37,9 @@ package com.mpx.infra_manager.support;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 1：加 RoleAdminDao、UserDao、AdminLogDao（mock）與 HolderGuard、AdminLogWriter、RoleAdminService（真）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 2：RoleAdminService 建構子多傳 CodeService（執行人對照查帳號類別）
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -270,8 +273,8 @@ public class TestFixture {
 			acctDao, acctHistDao, notificationService, tx, clock);
 	public final HolderGuard holderGuard = new HolderGuard(roleAdminDao);
 	public final AdminLogWriter adminLogWriter = new AdminLogWriter(adminLogDao);
-	public final RoleAdminService roleAdminService = new RoleAdminService(permissionService, roleAdminDao, userDao, holderGuard,
-			adminLogWriter, tx, clock);
+	public final RoleAdminService roleAdminService = new RoleAdminService(permissionService, roleAdminDao, userDao, codeService,
+			holderGuard, adminLogWriter, tx, clock);
 
 	/** 模擬 IM_ACCT_REQ 的單筆申請單（null＝查無） */
 	public AcctReqDetail req;

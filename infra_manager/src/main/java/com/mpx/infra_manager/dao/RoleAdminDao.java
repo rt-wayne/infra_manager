@@ -13,6 +13,11 @@ package com.mpx.infra_manager.dao;
 //           在途案件：申請單依 IM_ACCT_APPR_STAGE.PERM_ID 資料驅動（REVIEW 關卡 2～5、VERIFY 關卡 7；關卡 6 PERM_ID 為空不會比中）；
 //           緊急存取（EMG_DECIDE）＝未處理（含逾期）＋已退回未結案，沿用 EmgDao.UNDECIDED_COND／RETURNED_COND。
 //           移除＝UPDATE STATUS 1→0；重新指派＝UPDATE 0→1（寫 UPDATE_*、保留 CREATE_*），影響 0 筆才 INSERT
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 2 回合 1：執行人對照（IM_EXEC_MAP）——成員清單、名單列狀態、狀態轉移與 INSERT 比照角色指派；
+//           執行人數 COUNT_EXECUTORS（啟用中使用者 × 啟用中對照列，可排除一人）；在途 FIND_IN_FLIGHT_EXEC_BY_CATG＝
+//           EXEC 狀態且停在關卡 6、CATG_ID 相同的申請單（關卡 6 沒有 PERM_ID，由類別決定處理人，裁示 4.A）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -161,6 +166,62 @@ public class RoleAdminDao {
 			 ORDER BY E.SUBMIT_DATE, E.EMG_ID
 			""";
 
+	// ------------------------------------------------------------
+	// 執行人對照（IM_EXEC_MAP）
+	// ------------------------------------------------------------
+
+	/** 啟用中的執行人對照（全部類別一次查）；欄位別名與 FIND_ROLE_MEMBERS 相同，共用 MemberRow */
+	public static final String FIND_EXEC_MEMBERS = """
+			SELECT M.CATG_ID AS GROUP_ID, M.USER_ID, U.USER_EN_NAME, U.USER_NAME, U.STATUS AS USER_STATUS,
+			       NVL(M.UPDATE_DATE, M.CREATE_DATE) AS GRANT_DATE, NVL(M.UPDATE_BY, M.CREATE_BY) AS GRANT_BY
+			  FROM IM_EXEC_MAP M
+			  LEFT JOIN IM_ACCT_USER U ON U.USER_ID = M.USER_ID
+			 WHERE M.STATUS = 1
+			 ORDER BY M.CATG_ID, M.USER_ID
+			""";
+
+	/** 某組執行人對照的現況：查無列、0、1 */
+	public static final String FIND_EXEC_MEMBER_STATUS = """
+			SELECT STATUS
+			  FROM IM_EXEC_MAP
+			 WHERE CATG_ID = :catgId
+			   AND USER_ID = :targetId
+			""";
+
+	public static final String UPDATE_EXEC_MEMBER_STATUS = """
+			UPDATE IM_EXEC_MAP
+			   SET STATUS = :newStatus, UPDATE_DATE = :now, UPDATE_BY = :userId
+			 WHERE CATG_ID = :catgId
+			   AND USER_ID = :targetId
+			   AND STATUS = :oldStatus
+			""";
+
+	public static final String INSERT_EXEC_MEMBER = """
+			INSERT INTO IM_EXEC_MAP (CATG_ID, USER_ID, STATUS, CREATE_DATE, CREATE_BY)
+			VALUES (:catgId, :targetId, 1, :now, :userId)
+			""";
+
+	/** 類別 :catgId 的啟用中執行人數（與 PermDao.FIND_EXEC_USERS 同口徑：使用者啟用中），可排除 :exclUserId 一人（不排除傳 null） */
+	public static final String COUNT_EXECUTORS = """
+			SELECT COUNT(*) AS CNT
+			  FROM IM_EXEC_MAP M
+			  JOIN IM_ACCT_USER U ON U.USER_ID = M.USER_ID AND U.STATUS = 1
+			 WHERE M.CATG_ID = :catgId
+			   AND M.STATUS = 1
+			   AND M.USER_ID <> NVL(:exclUserId, '-')
+			""";
+
+	/** 停在關卡 6（待執行）且類別為 :catgId 的在途申請單；關卡 6 沒有 PERM_ID，處理人由執行人對照決定 */
+	public static final String FIND_IN_FLIGHT_EXEC_BY_CATG = """
+			SELECT R.REQ_ID AS DOC_ID, S.STAGE_NAME
+			  FROM IM_ACCT_REQ R
+			  JOIN IM_ACCT_APPR_STAGE S ON S.STAGE_ID = R.CURR_STAGE_ID
+			 WHERE R.REQ_STATE_CODE = :execState
+			   AND R.CURR_STAGE_ID = :execStage
+			   AND R.CATG_ID = :catgId
+			 ORDER BY R.SUBMIT_DATE, R.REQ_ID
+			""";
+
 	private final DbClient dbClient;
 	private final String itflowDb;
 
@@ -260,5 +321,60 @@ public class RoleAdminDao {
 
 	public List<InFlightRow> findInFlightEmg() {
 		return dbClient.query(itflowDb, FIND_IN_FLIGHT_EMG, null, InFlightRow.class);
+	}
+
+	// ------------------------------------------------------------
+	// 執行人對照
+	// ------------------------------------------------------------
+
+	public List<MemberRow> findExecMembers() {
+		return dbClient.query(itflowDb, FIND_EXEC_MEMBERS, null, MemberRow.class);
+	}
+
+	/** 某組執行人對照的 STATUS；查無列回 null */
+	public Integer findExecMemberStatus(String catgId, String targetId) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("catgId", catgId);
+		params.put("targetId", targetId);
+		StatusRow row = DaoSupport.first(dbClient.query(itflowDb, FIND_EXEC_MEMBER_STATUS, params, StatusRow.class));
+		return row == null ? null : row.getStatus();
+	}
+
+	/** 回影響筆數（現況不是 oldStatus 時 0） */
+	public int updateExecMemberStatus(String catgId, String targetId, int oldStatus, int newStatus, LocalDateTime now,
+			String userId) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("catgId", catgId);
+		params.put("targetId", targetId);
+		params.put("oldStatus", oldStatus);
+		params.put("newStatus", newStatus);
+		params.put("now", DaoSupport.ts(now));
+		params.put("userId", userId);
+		return dbClient.update(itflowDb, UPDATE_EXEC_MEMBER_STATUS, params);
+	}
+
+	public int insertExecMember(String catgId, String targetId, LocalDateTime now, String userId) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("catgId", catgId);
+		params.put("targetId", targetId);
+		params.put("now", DaoSupport.ts(now));
+		params.put("userId", userId);
+		return dbClient.update(itflowDb, INSERT_EXEC_MEMBER, params);
+	}
+
+	/** 類別 catgId 的啟用中執行人數；exclUserId 傳 null＝不排除（變更前的人數） */
+	public long countExecutors(String catgId, String exclUserId) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("catgId", catgId);
+		params.put("exclUserId", exclUserId);
+		return DaoSupport.count(dbClient.query(itflowDb, COUNT_EXECUTORS, params, CountRow.class));
+	}
+
+	public List<InFlightRow> findInFlightExecByCatg(String catgId) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("execState", AcctConst.RS_EXEC);
+		params.put("execStage", AcctConst.STAGE_EXEC);
+		params.put("catgId", catgId);
+		return dbClient.query(itflowDb, FIND_IN_FLIGHT_EXEC_BY_CATG, params, InFlightRow.class);
 	}
 }
