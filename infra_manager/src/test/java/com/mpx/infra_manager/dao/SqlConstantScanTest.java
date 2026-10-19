@@ -57,7 +57,8 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 1：掃描清單加 RoleAdminDao；名單維護 SQL 斷言——全域鎖 FOR UPDATE WAIT 5、持有人數排除參數以 NVL 哨兵、
-//           在途申請單依關卡 PERM_ID、緊急存取沿用 UNDECIDED_COND／RETURNED_COND、名單列狀態轉移帶 oldStatus；AdminLogDao.INSERT 的 REASON 改綁參數
+//           在途申請單依關卡 PERM_ID、緊急存取沿用 UNDECIDED_COND／RETURNED_COND、名單列狀態轉移帶 oldStatus；AdminLogDao.INSERT 的 REASON 改綁參數；
+//           回合 2：CONTROLLERS 加 AdminController，API 數 39 → 43
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -85,6 +86,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import com.mpx.infra_manager.common.AcctConst;
 import com.mpx.infra_manager.common.Identity;
 import com.mpx.infra_manager.controller.AccountController;
+import com.mpx.infra_manager.controller.AdminController;
 import com.mpx.infra_manager.controller.AttachmentController;
 import com.mpx.infra_manager.controller.AuthController;
 import com.mpx.infra_manager.controller.EmergencyController;
@@ -99,8 +101,8 @@ class SqlConstantScanTest {
 			AttachDao.class, CodeDao.class, DocSeqDao.class, EmgDao.class, HomeDao.class, InspDao.class, JobRunDao.class,
 			LoginTokenDao.class, NotifyLogDao.class, PermDao.class, RoleAdminDao.class, UserDao.class);
 
-	static final List<Class<?>> CONTROLLERS = List.of(AccountController.class, AttachmentController.class, AuthController.class,
-			EmergencyController.class, HomeController.class, InspectionController.class, JobController.class,
+	static final List<Class<?>> CONTROLLERS = List.of(AccountController.class, AdminController.class, AttachmentController.class,
+			AuthController.class, EmergencyController.class, HomeController.class, InspectionController.class, JobController.class,
 			RequestController.class);
 
 	/** 既有模組使用者表（IM_ACCT_USER 不算） */
@@ -314,7 +316,8 @@ class SqlConstantScanTest {
 				}
 			}
 		}
-		assertThat(apis).isEqualTo(39);
+		// 第 89 項階段 1：/admin/roles、/admin/users、/admin/roles/{roleId}/members、…/{userId}/revoke（39 → 43）
+		assertThat(apis).isEqualTo(43);
 		assertThat(missing).isEmpty();
 	}
 }

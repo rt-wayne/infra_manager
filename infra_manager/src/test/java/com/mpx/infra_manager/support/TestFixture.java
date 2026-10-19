@@ -34,6 +34,9 @@ package com.mpx.infra_manager.support;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 1：加 RoleAdminDao、UserDao、AdminLogDao（mock）與 HolderGuard、AdminLogWriter、RoleAdminService（真）
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -68,6 +71,7 @@ import com.mpx.infra_manager.common.Identity;
 import com.mpx.infra_manager.dao.AcctDao;
 import com.mpx.infra_manager.dao.AcctHistDao;
 import com.mpx.infra_manager.dao.AcctReqDao;
+import com.mpx.infra_manager.dao.AdminLogDao;
 import com.mpx.infra_manager.dao.AttachDao;
 import com.mpx.infra_manager.dao.CodeDao;
 import com.mpx.infra_manager.dao.DocSeqDao;
@@ -77,6 +81,8 @@ import com.mpx.infra_manager.dao.InspDao;
 import com.mpx.infra_manager.dao.JobRunDao;
 import com.mpx.infra_manager.dao.NotifyLogDao;
 import com.mpx.infra_manager.dao.PermDao;
+import com.mpx.infra_manager.dao.RoleAdminDao;
+import com.mpx.infra_manager.dao.UserDao;
 import com.mpx.infra_manager.model.Acct;
 import com.mpx.infra_manager.model.AcctHist;
 import com.mpx.infra_manager.model.AcctReq;
@@ -85,15 +91,18 @@ import com.mpx.infra_manager.model.ApprStage;
 import com.mpx.infra_manager.model.AssetClass;
 import com.mpx.infra_manager.model.Category;
 import com.mpx.infra_manager.service.AccountService;
+import com.mpx.infra_manager.service.AdminLogWriter;
 import com.mpx.infra_manager.service.AttachmentService;
 import com.mpx.infra_manager.service.CodeService;
 import com.mpx.infra_manager.service.EmergencyService;
+import com.mpx.infra_manager.service.HolderGuard;
 import com.mpx.infra_manager.service.HomeService;
 import com.mpx.infra_manager.service.InspectionService;
 import com.mpx.infra_manager.service.JobService;
 import com.mpx.infra_manager.service.NotificationService;
 import com.mpx.infra_manager.service.PermissionService;
 import com.mpx.infra_manager.service.RequestService;
+import com.mpx.infra_manager.service.RoleAdminService;
 
 public class TestFixture {
 
@@ -241,6 +250,9 @@ public class TestFixture {
 	public final EmgDao emgDao = mock(EmgDao.class);
 	public final NotifyLogDao notifyLogDao = mock(NotifyLogDao.class);
 	public final JobRunDao jobRunDao = mock(JobRunDao.class);
+	public final RoleAdminDao roleAdminDao = mock(RoleAdminDao.class);
+	public final UserDao userDao = mock(UserDao.class);
+	public final AdminLogDao adminLogDao = mock(AdminLogDao.class);
 	public final AttachmentService attachmentService = mock(AttachmentService.class);
 	public final NotificationService notificationService = mock(NotificationService.class);
 
@@ -256,6 +268,10 @@ public class TestFixture {
 			clock);
 	public final EmergencyService emergencyService = new EmergencyService(permissionService, codeService, docSeqService, emgDao,
 			acctDao, acctHistDao, notificationService, tx, clock);
+	public final HolderGuard holderGuard = new HolderGuard(roleAdminDao);
+	public final AdminLogWriter adminLogWriter = new AdminLogWriter(adminLogDao);
+	public final RoleAdminService roleAdminService = new RoleAdminService(permissionService, roleAdminDao, userDao, holderGuard,
+			adminLogWriter, tx, clock);
 
 	/** 模擬 IM_ACCT_REQ 的單筆申請單（null＝查無） */
 	public AcctReqDetail req;

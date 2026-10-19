@@ -668,9 +668,9 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | 層 | 檔案與職責 |
 |---|---|
 | common | `AppConfig`（Clock、TransactionTemplate、啟用排程、載入業務設定）、`Identity`／`IdentityProvider`／`IdentityArgumentResolver`（取身分單一介面，Controller 宣告 Identity 參數即注入）、`TokenCodec`、`PasswordHasher`、`AcctConst`（代碼、時效、通知收件角色）、`AcctMsg`（錯誤文案）、`ApiException`、`GlobalExceptionHandler`（例外轉 `{message}`；multipart 超限轉 413 E15；其他 500 不外洩）、`NoStoreInterceptor`（context 內 `/api/**` 回應 no-store，由 `WebConfig` 註冊）、`DocSeqService`（取號）、`Texts`（顯示名、trim、LIKE 跳脫、欄寬檢查） |
-| controller | `AuthController`、`HomeController`、`AccountController`、`RequestController`、`AttachmentController`、`InspectionController`、`JobController`；只轉呼叫 service，不寫權限邏輯 |
-| service | `AuthService`（登入、鎖定、登出、`/me`、切換身分）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`SmtpMailSender`（SMTP 寄出）／`LogMailSender`（SMTP 未設定時只寫 log）、`MailAllowList`（寄送名單）、`JobService`、`HomeService`、`InspectionService`、`CodeService`、`HolderGuard`（名單維護的「最後一位持有人」檢查）、`AdminLogWriter`（名單維護軌跡與 CONTENT_JSON 組裝；兩者尚無 API 呼叫——角色權限維護介面分批施工中，進度見 BACKLOG 第 89 項） |
-| dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`RoleAdminDao`（角色指派名單、全域互斥鎖、持有人數、在途案件；尚無 API 呼叫，見 BACKLOG 第 89 項）、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
+| controller | `AuthController`、`HomeController`、`AccountController`、`RequestController`、`AttachmentController`、`InspectionController`、`JobController`、`AdminController`（系統管理：角色指派維護）；只轉呼叫 service，不寫權限邏輯 |
+| service | `AuthService`（登入、鎖定、登出、`/me`、切換身分）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`SmtpMailSender`（SMTP 寄出）／`LogMailSender`（SMTP 未設定時只寫 log）、`MailAllowList`（寄送名單）、`JobService`、`HomeService`、`InspectionService`、`CodeService`、`RoleAdminService`（角色指派維護：清單、候選人、指派、移除；驗證順序、全域鎖、HolderGuard、軌跡）、`HolderGuard`（名單維護的「最後一位持有人」檢查）、`AdminLogWriter`（名單維護軌跡與 CONTENT_JSON 組裝） |
+| dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`RoleAdminDao`（角色指派名單、全域互斥鎖、持有人數、在途案件）、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
 | tools | `PwdHashTool`：從主控台讀密碼（不回顯、不收命令列參數）輸出 PWD_HASH 字串 |
 
 **前端主要程式**（`infra_manager_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/infra_manager_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage，key `infra_manager_web.token`、`infra_manager_web.identityChanged`；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\accountExport.ts`（帳號列表匯出與共用儲存格文字）、`utils\perms.ts`、`utils\codes.ts`。
@@ -755,10 +755,10 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | ACT_DATE | DATE | ✓ | 發生時間 |
 | ACT_BY | VARCHAR2(30) | ✓ | 實際操作人 |
 | ACT_BY_NAME | VARCHAR2(100 CHAR) | ✓ | 顯示名快照 |
-| ACTION_CODE | VARCHAR2(30) | ✓ | IMPERSONATE、IMPERSONATE_END；ROLE_GRANT、ROLE_REVOKE、EXEC_GRANT、EXEC_REVOKE 為預留值，目前沒有 API 寫入（角色權限維護介面分批施工中，進度見 BACKLOG 第 89 項） |
-| TARGET_USER_ID | VARCHAR2(30) | | 對象使用者 |
-| CONTENT_JSON | VARCHAR2(2000 CHAR) | | 切換時記 `{"targetUserName":"…"}` |
-| REASON | VARCHAR2(500 CHAR) | | 原因（切換身分可空） |
+| ACTION_CODE | VARCHAR2(30) | ✓ | IMPERSONATE、IMPERSONATE_END（切換身分）；ROLE_GRANT、ROLE_REVOKE（角色指派／移除，後端 API 已寫入）；EXEC_GRANT、EXEC_REVOKE 為預留值（執行人對照頁分批施工中，進度見 BACKLOG 第 89 項） |
+| TARGET_USER_ID | VARCHAR2(30) | | 對象使用者（超過欄寬的輸入存空） |
+| CONTENT_JSON | VARCHAR2(2000 CHAR) | | 切換時記 `{"targetUserName":"…"}`；角色指派成功記 roleId、roleName、targetUserName、before.status（null＝原無此列／0／1）、after.status；被拒記 denyCode（NO_PERM／LAST_SYS_ROLE／IN_FLIGHT）、blockedPerms[]、blockedTotal、blockedIds[]（最多 50 筆；組好超過 3900 bytes 逐筆丟單號、保留總數） |
+| REASON | VARCHAR2(500 CHAR) | | 原因（切換身分可空；角色指派必填，被拒時有帶就存） |
 | RESULT_CODE | VARCHAR2(10) | ✓ | SUCCESS、DENY |
 
 索引 IND_IM_ACCT_ADMIN_LOG_01（ACT_DATE）。
@@ -1161,6 +1161,17 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 |---|---|---|---|---|---|
 | POST | `/jobs/{code}/run` | SYS_JOB_RUN | code＝J01／J02／J03；query：baseDate（選填；J01／J02 為日期 `yyyy-MM-dd`，J03 為時間點 `yyyy-MM-dd HH:mm:ss`、T 可換空白、可省秒） | runId、resultCode、affectedCnt | 403、404（其他 code）、400 E17、400（日期或時間格式錯）、409 E16 |
 
+**系統管理——角色指派**（本功能分批施工中，進度見 BACKLOG 第 89 項；下列 4 支後端 API 已上線，殼 jar 尚未轉送、前端尚無畫面）
+
+| 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
+|---|---|---|---|---|---|
+| GET | `/admin/roles` | SYS_ROLE | — | [roleId、roleName、roleDescr、sortSeq、permNames[]（授予的權限中文名）、members[userId、userName、userActive、grantDate、grantBy]]；不含 GENERAL 與停用角色；成員只列啟用中指派，對象停用 userActive＝false | 403（不寫軌跡） |
+| GET | `/admin/users` | SYS_ROLE 或 SYS_EXECUTOR | — | [userId、userName、deptName]（啟用中使用者、含自己） | 403（不寫軌跡） |
+| POST | `/admin/roles/{roleId}/members` | SYS_ROLE | userId、reason（必填，500 字內） | roleId、userId、result＝GRANTED | 403（寫 DENY）、409 E25、400 E02「對象」、E10／E11「原因」、欄位內容不正確：角色（不存在／停用／GENERAL）、404 N01（對象不存在或停用）、409 E26、E21 |
+| POST | `/admin/roles/{roleId}/members/{userId}/revoke` | SYS_ROLE | reason（必填，500 字內） | roleId、userId、result＝REVOKED | 403（寫 DENY）、409 E25、400 E10／E11、欄位內容不正確：角色、409 E26、E22、E24（寫 DENY）、E23（寫 DENY） |
+
+寫入 API 的交易第一句對 IM_ACCT_ROLE 的 GENERAL 列 `SELECT … FOR UPDATE WAIT 5` 當全域互斥（等待逾時 → E26），取鎖後才做名單現況與持有人檢查；成功時名單與軌跡同一交易，E23／E24 先回滾再於交易外寫 DENY。移除的擋下條件（三者同時成立）：該角色授予的某權限碼在變更前有人持有、變更後無人持有、且有在途案件需要它（申請單依關卡 PERM_ID；EMG_DECIDE 另含緊急存取未處理與已退回未結案）；SYS_ROLE 由有人變無人則不論在途一律 E24。重新指派（原列 STATUS＝0）只更新 UPDATE_*、保留 CREATE_*；對象已停用或使用者表查無的列仍可移除；管理員可改自己。
+
 **錯誤訊息**（後端 message，前端原樣顯示；文案來源 `common/AcctMsg.java`）
 
 | 代號 | 狀態 | 文案 |
@@ -1185,13 +1196,20 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | E18 | 400 | 巡檢項目不完整，請重新整理後再填寫 |
 | E19 | 409 | 此項目已處理或不是異常項目 |
 | E20 | 409 | 目前未切換身分 |
+| E21 | 409 | 此人已在名單中，請重新整理 |
+| E22 | 409 | 此人已不在名單中，請重新整理 |
+| E23 | 409 | 移除後沒有人能處理下列在途案件，請先加入接替人員：{單號（關卡名）、…}（最多 20 筆，超過加「（等共 N 件）」） |
+| E24 | 409 | 不能移除最後一位具角色指派權限的人員 |
+| E25 | 409 | 切換身分中不能調整角色或執行人，請先切回 |
+| E26 | 409 | 其他管理員正在調整名單，請稍後再試 |
+| E27 | 409 | 權限設定已被他人調整，請重新整理（角色權限設定頁用，尚未上線） |
 | A01 | 401 | 帳號或密碼錯誤 |
 | A02 | 401 | 此帳號已鎖定，請聯絡系統管理員 |
 | A03 | 401 | 登入已逾時，請重新登入 |
 | P01 | 403 | 您沒有執行此操作的權限 |
 | N01 | 404 | 查無資料 |
 
-無代號的 400 文案：欄位內容不正確：{欄位}（緊急存取為「預估時長」「帳號類別」「狀態」「回報結果」「受影響帳號」「結案發現」）／日期格式錯誤（yyyy-MM-dd）／時間格式錯誤（yyyy-MM-dd HH:mm:ss）／新增申請不可指定帳號／不可切換為自己／巡檢時間不可晚於現在／申請人尚未回報，不能補核准（緊急存取補核准）。
+無代號的 400 文案：欄位內容不正確：{欄位}（緊急存取為「預估時長」「帳號類別」「狀態」「回報結果」「受影響帳號」「結案發現」；名單維護為「角色」）／日期格式錯誤（yyyy-MM-dd）／時間格式錯誤（yyyy-MM-dd HH:mm:ss）／新增申請不可指定帳號／不可切換為自己／巡檢時間不可晚於現在／申請人尚未回報，不能補核准（緊急存取補核准）。
 
 ### 環境設定
 
