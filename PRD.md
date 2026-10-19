@@ -43,7 +43,7 @@
 
 | 項目 | 現況 |
 |---|---|
-| 維護畫面 | 角色指派、執行人對照、使用者（含重設密碼、解鎖）、巡檢項目、資產分類、帳號類別開關：一律 DB 直接維護，無 API、無畫面、不寫管理軌跡（步驟見 `SETUP.md`） |
+| 維護畫面 | 使用者（含重設密碼、解鎖）、巡檢項目、資產分類、帳號類別開關：一律 DB 直接維護，無 API、無畫面、不寫管理軌跡（步驟見 `SETUP.md`）。角色指派、執行人對照的後端 API 已上線、寫系統管理軌跡（見 API 規格「系統管理——角色指派與執行人對照」），畫面施工中（進度見 BACKLOG 第 89 項）；DB 直接改只作備援 |
 | 帳號匯入、既有帳號轉入 | 無（IM_ACCT.SOURCE_CODE＝MIGRATE 為預留值，程式不寫入） |
 | 其他 | 改密碼、AD 登入、代理人、人員離職處理、系統管理軌跡查詢畫面（以 DB 查）、寄信重試與發件匣 |
 | 展延 | 無；要延長就重新提新增申請，或以「修改」調整已核准帳號的到期日（見 `BACKLOG.md` 已拍板不做） |
@@ -117,7 +117,8 @@
 | INSP_VIEW＝巡檢紀錄查詢與明細 | INSP | 1 |
 | INSP_CREATE＝填寫巡檢 | INSP | 1 |
 | INSP_RESOLVE＝標記異常已處理 | INSP | 1 |
-| SYS_ROLE＝角色指派、SYS_EXECUTOR＝執行人對照維護、SYS_AUDIT_VIEW＝查詢系統管理軌跡 | SYS | 1（只有碼，無對應功能） |
+| SYS_ROLE＝角色指派、SYS_EXECUTOR＝執行人對照維護 | SYS | 1（後端 API 已上線，畫面施工中，見 BACKLOG 第 89 項） |
+| SYS_AUDIT_VIEW＝查詢系統管理軌跡 | SYS | 1（只有碼，無對應功能） |
 | SYS_IMPERSONATE＝切換身分 | SYS | 1 |
 | SYS_JOB_RUN＝手動觸發排程 | SYS | 1 |
 | ACC_EXPORT＝帳號權限清單匯出（帳號列表「匯出 Excel」） | ACCT | 1（同碼的「批次匯出帳號歷史」仍為階段 2，見 BACKLOG 第 14 項） |
@@ -759,7 +760,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | ACTION_CODE | VARCHAR2(30) | ✓ | IMPERSONATE、IMPERSONATE_END（切換身分）；ROLE_GRANT、ROLE_REVOKE（角色指派／移除）；EXEC_GRANT、EXEC_REVOKE（執行人指派／移除）；後端 API 皆已寫入，畫面分批施工中（進度見 BACKLOG 第 89 項） |
 | TARGET_USER_ID | VARCHAR2(30) | | 對象使用者（超過欄寬的輸入存空） |
 | CONTENT_JSON | VARCHAR2(2000 CHAR) | | 切換時記 `{"targetUserName":"…"}`；名單維護成功記 roleId＋roleName（角色）或 catgId＋catgName（執行人）、targetUserName、before.status（null＝原無此列／0／1）、after.status；被拒記 denyCode（NO_PERM／LAST_SYS_ROLE／IN_FLIGHT）、blockedPerms[]（執行人對照時放類別代碼）、blockedTotal、blockedIds[]（最多 50 筆；組好超過 3900 bytes 逐筆丟單號、保留總數） |
-| REASON | VARCHAR2(500 CHAR) | | 原因（切換身分可空；角色指派必填，被拒時有帶就存） |
+| REASON | VARCHAR2(500 CHAR) | | 原因（切換身分為空；名單維護（角色指派、執行人對照）必填，500 字內，被拒時有帶就存） |
 | RESULT_CODE | VARCHAR2(10) | ✓ | SUCCESS、DENY |
 
 索引 IND_IM_ACCT_ADMIN_LOG_01（ACT_DATE）。

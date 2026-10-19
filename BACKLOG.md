@@ -17,9 +17,9 @@
 | 89 | 角色權限維護介面：角色指派、執行人對照兩頁（取代改 DB），另加第三頁設定角色可做哪些事／看到哪些頁面（角色 × 權限碼）；每次異動寫系統管理軌跡、原因必填，移除會卡住在途單或最後一位系統管理員時拒絕 | [backlog/89-角色權限維護介面.md](backlog/89-角色權限維護介面.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：階段 2 結束審查——同一則訊息平行派 code-reviewer（範圍 fc24068..HEAD，含殼 jar 轉送與 locked() 錯誤碼判斷）＋test-runner（後端 `mvnw test`、殼 jar `mvnw test`）；必須修正修完才開階段 3（後端角色權限碼）
-- 已改動（未 commit）：無（實機驗證與 locked() 修正已 commit；實機結果見計畫檔「階段 2」）
-- 本階段起點：fc24068（階段 2，2026-10-19）
+- 下一步：階段 2 已結束（審查必須修正零項、測試 311＋73 全過、建議改善登記第 99～105 項；D1 裁示 A 已改 PRD 第 46、120 行，第 25 行偏離第 3 條照計畫等階段 6 刪）。開階段 3 回合 1（後端角色權限碼：`ADMIN_VISIBLE_PERMS` 常數、GET /admin/role-perms、COUNT_HOLDERS 的「排除某角色＋某碼」路徑），依計畫檔「階段 3」；開工前先問使用者第 100 項（DENY 軌跡灌爆）要不要在第三頁上線前處理；開工時把 HEAD 填進「本階段起點」
+- 已改動（未 commit）：無（階段 2 收尾已 commit）
+- 本階段起點：階段 3 開工時填（階段 2 起點 fc24068 已結案）
 - 卡住／待確認：無
 
 ## 僅記錄未拍板
@@ -89,6 +89,13 @@
 | 95 | `AdminMember.grantDate` 缺 `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，會輸出 ISO 格式（中間帶 T），與 `Acct`、`AcctHist`、`AcctAttach` 等既有回應 model 不一致；階段 4 前端接之前補上。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
 | 96 | 在途申請單查詢 `RoleAdminDao.FIND_IN_FLIGHT_BY_STAGE_PERM` 只以 `REQ_STATE_CODE IN ('REVIEW','VERIFY') AND S.PERM_ID = :permId` 篩選，沒過濾關卡 `S.STATUS = 1`、也沒核對 REVIEW 配關卡 2～5／VERIFY 配關卡 7，比 `PermissionService.canHandleNow` 寬；只有資料異常的單會被多擋（本來就沒人能處理）。改法：至少加 `S.STATUS = 1`。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
 | 97 | `USER_ID_MAX = 30` 在 `RoleAdminService`、`AdminLogWriter`、`AuthService` 各定義一次；`RoleAdminService.requirePermOrDeny` 以比對動作碼決定 JSON 鍵叫 roleId 還是 catgId，階段 2 加執行人對照時要同步。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
+| 99 | SETUP 第 6 節開頭叫讀者 DB 直接改前用「查每個人實際生效的角色」確認類別不會沒人處理，但那句只查角色、不查執行人對照。補一句唯讀查詢：依 CATG_ID 計啟用中執行人數（口徑同 `RoleAdminDao.COUNT_EXECUTORS`），加一句列出停在關卡 6（EXEC、6）的單號。第 89 項階段 2 code-reviewer 提出（S2） | 2026-10-19 | — |
+| 100 | 無權限者能對 4 支名單寫入 API 無限次送 POST，每次在永久保留的 IM_ACCT_ADMIN_LOG 寫一筆 DENY，連同最多 500 字自訂原因，可灌爆軌跡、淹沒真正稽核紀錄；第三頁上線會再多 1 支。現行「403 DENY 有帶原因就存」是計畫已拍板設計，改動要推翻原裁示。方向：同一人一定時間內 DENY 只寫一筆，或 NO_PERM 不存原因只存長度。code-reviewer 建議第三頁（階段 3）上線前請使用者判斷是否處理。第 89 項階段 2 code-reviewer 提出（S3） | 2026-10-19 | — |
+| 101 | `RoleAdminServiceTest` 沒鎖住兩碼分界：「只有 SYS_ROLE 呼叫 grantExecutor／revokeExecutor 要 403＋DENY」「只有 SYS_EXECUTOR 呼叫 grantRole 要 403」；revokeExecutor 的 403 寫 DENY、移除路徑類別不合法 400 也沒單獨案例。第 89 項階段 2 code-reviewer 提出（S4） | 2026-10-19 | — |
+| 102 | `RoleAdminDao.FIND_IN_FLIGHT_EXEC_BY_CATG` 對 IM_ACCT_APPR_STAGE 用內部 JOIN（只為取關卡名）；關卡 6 那列若不見，在途回空，移除最後一位執行人會被放行。改 LEFT JOIN＋`NVL(S.STAGE_NAME, '執行回報')`。資料壞掉時往放行錯的性質，機率低。第 89 項階段 2 code-reviewer 提出（S5） | 2026-10-19 | — |
+| 103 | 帳號類別 STATUS＝0（軟刪除）時，該類別的執行人不出現在 /admin/executors、移除 API 回 400，但 `PermDao.FIND_EXEC_CATGS`／`isExecutor` 不看類別狀態，那些人仍保有執行人身分（能處理該類別關卡 6 單、看到到期帳號）。目前 8 類皆 STATUS＝1。可讓 revoke 允許 STATUS＝0 類別，或在 PRD／SETUP 註明「軟刪除類別前先移除其執行人」。第 89 項階段 2 code-reviewer 提出（S6） | 2026-10-19 | — |
+| 104 | `RoleAdminService.executors()` 呼叫 `codeService.getCodes()`，每次多查資產分類與關卡兩句，實際只用類別；CodeService 加只回類別的方法。第 89 項階段 2 code-reviewer 提出（S7） | 2026-10-19 | — |
+| 105 | `db/infra_manager_89_role_admin.sql` 檔尾第二句只核對 5 個欄位 COMMENT，漏了 IM_EXEC_MAP 的 CREATE_BY／UPDATE_DATE／UPDATE_BY 與 IM_ACCT_ROLE_USER 的 UPDATE_DATE／UPDATE_BY；擴成 10 欄、期望值改 10 列（中文 COMMENT 無聲變亂碼是檔頭警告的失敗模式）。第 89 項階段 2 code-reviewer 提出（S8） | 2026-10-19 | — |
 | 79 | UAT 的附件根目錄（`infra.manager.attach.dir` 的值）目前設在哪、要不要隨改名搬到新目錄名；DB 的 `IM_ACCT_ATTACH.FILE_PATH` 存相對路徑，搬檔＋改設定值即可、不用動資料。改名部署時 SETUP 第 8 節寫「值可以維持原路徑」，不搬也能運作。第 68 項計畫待確認 2，結案時移入 | 2026-10-15 | — |
 
 ## 已拍板不做
