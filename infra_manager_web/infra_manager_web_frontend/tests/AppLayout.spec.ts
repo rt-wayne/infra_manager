@@ -31,6 +31,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 4：「系統管理」區塊與「角色指派」只對 SYS_ROLE 顯示（只有 SYS_EXECUTOR 時暫不顯示）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 5：「角色權限設定」同樣只對 SYS_ROLE 顯示、連 /admin/role-perms
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -121,7 +124,8 @@ async function mountLayout(me: Me, path = '/'): Promise<{ w: VueWrapper; router:
           { path: 'emergency', component: Stub },
           { path: 'inspections', component: Stub, meta: { need: 'INSP_VIEW' } },
           { path: 'inspections/new', component: Stub, meta: { need: 'INSP_CREATE' } },
-          { path: 'admin/roles', component: Stub, meta: { need: 'SYS_ROLE' } }
+          { path: 'admin/roles', component: Stub, meta: { need: 'SYS_ROLE' } },
+          { path: 'admin/role-perms', component: Stub, meta: { need: 'SYS_ROLE' } }
         ]
       }
     ]
@@ -182,6 +186,7 @@ describe('AppLayout', () => {
     const plain = await mountLayout(makeMe())
     expect(plain.w.find('.nav-admin').exists()).toBe(false)
     expect(plain.w.find('.nav-admin-roles').exists()).toBe(false)
+    expect(plain.w.find('.nav-admin-perms').exists()).toBe(false)
     plain.w.unmount()
 
     resetSession()
@@ -190,6 +195,10 @@ describe('AppLayout', () => {
     const link = admin.w.find('.nav-admin-roles')
     expect(link.attributes('href')).toBe('/admin/roles')
     expect(link.classes()).toContain('router-link-active')
+    const perms = admin.w.find('.nav-admin-perms')
+    expect(perms.attributes('href')).toBe('/admin/role-perms')
+    expect(perms.text()).toContain('角色權限設定')
+    expect(perms.classes()).not.toContain('router-link-active')
     admin.w.unmount()
 
     resetSession()

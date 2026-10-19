@@ -3,9 +3,20 @@
 // 修改日期: 2026-10-19
 // 變更說明: 新增：系統管理 API（BACKLOG 第 89 項階段 4；PRD API 表「系統管理」）
 //           角色清單、可指派人員、角色成員指派與移除；後端一律再驗 SYS_ROLE，前端只做顯示控管
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 5：角色權限設定的查詢與存檔
 // ============================================================
 import http from './http'
-import type { AdminRole, AdminUser, MemberChangeResult, MemberPayload } from '../types/admin'
+import type {
+  AdminRole,
+  AdminUser,
+  MemberChangeResult,
+  MemberPayload,
+  RolePermMatrix,
+  RolePermPayload,
+  RolePermSaveResult
+} from '../types/admin'
 
 function roleBase(roleId: string): string {
   return `/admin/roles/${encodeURIComponent(roleId)}`
@@ -31,4 +42,14 @@ export function revokeRole(roleId: string, userId: string, reason: string): Prom
   return http
     .post<MemberChangeResult>(`${roleBase(roleId)}/members/${encodeURIComponent(userId)}/revoke`, { reason })
     .then(r => r.data)
+}
+
+/** 角色 × 可見權限碼現況：GET /admin/role-perms（需 SYS_ROLE） */
+export function getRolePerms(): Promise<RolePermMatrix> {
+  return http.get<RolePermMatrix>('/admin/role-perms').then(r => r.data)
+}
+
+/** 存一個角色的權限差異：POST /admin/roles/{roleId}/perms（需 SYS_ROLE） */
+export function saveRolePerms(roleId: string, payload: RolePermPayload): Promise<RolePermSaveResult> {
+  return http.post<RolePermSaveResult>(`${roleBase(roleId)}/perms`, payload).then(r => r.data)
 }

@@ -15,6 +15,11 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 4 審查 M1（計畫 F7）：移除唯一啟用中成員的黃色提示與不提示的三種情況
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 5 回合 1：角色權限設定頁（唯讀）——左清單（一般人員標唯讀）、預設選第一個可編輯角色、
+//           切換角色、勾選框反映現況且全部停用、簽核拆組與組順序、一般人員說明與人數文字、隱藏碼註記、
+//           缺欄保底、空清單、查詢失敗；分組函式（未知模組排最後）；API 路徑與編碼
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -22,10 +27,12 @@ import type { VueWrapper } from '@vue/test-utils'
 import type { Router } from 'vue-router'
 import http from '../src/api/http'
 import RoleAdminView from '../src/views/RoleAdminView.vue'
-import { grantRole, listAdminRoles, listAdminUsers, revokeRole } from '../src/api/admin'
+import RolePermAdminView from '../src/views/RolePermAdminView.vue'
+import { getRolePerms, grantRole, listAdminRoles, listAdminUsers, revokeRole } from '../src/api/admin'
 import { getMe } from '../src/api/auth'
 import { resetSession, useSession } from '../src/composables/useSession'
-import type { AdminMember, AdminRole, AdminUser } from '../src/types/admin'
+import type { AdminMember, AdminPermModule, AdminRole, AdminRolePerms, AdminUser, RolePermMatrix } from '../src/types/admin'
+import { groupPerms } from '../src/utils/permGroups'
 import { charLen } from '../src/utils/text'
 import { GENERAL_PERMS, httpError, lastToast, makeMe, makeRouter } from './helpers'
 
@@ -33,7 +40,9 @@ vi.mock('../src/api/admin', () => ({
   listAdminRoles: vi.fn(),
   listAdminUsers: vi.fn(),
   grantRole: vi.fn(),
-  revokeRole: vi.fn()
+  revokeRole: vi.fn(),
+  getRolePerms: vi.fn(),
+  saveRolePerms: vi.fn()
 }))
 vi.mock('../src/api/auth', () => ({
   login: vi.fn(),
@@ -52,6 +61,7 @@ vi.mock('../src/api/common', () => ({
 }))
 
 const rolesMock = vi.mocked(listAdminRoles)
+const matrixMock = vi.mocked(getRolePerms)
 const usersMock = vi.mocked(listAdminUsers)
 const grantMock = vi.mocked(grantRole)
 const revokeMock = vi.mocked(revokeRole)
@@ -424,6 +434,169 @@ describe('角色指派頁：指派與移除', () => {
   })
 })
 
+/** 角色權限設定的假模組（取自實機回應的子集，含一個簽核碼、順序同後端） */
+const MODULES: AdminPermModule[] = [
+  {
+    moduleCode: 'ACCT',
+    perms: [
+      { permId: 'ACC_APPLY', permName: '送出帳號申請', sortSeq: 1 },
+      { permId: 'ACC_LIST_FULL', permName: '完整帳號列表', sortSeq: 3 },
+      { permId: 'APPR_G2', permName: '關卡 2 核准／退件', sortSeq: 5 },
+      { permId: 'VERIFY_G7', permName: '關卡 7 複驗通過／退回', sortSeq: 9 },
+      { permId: 'ACC_EXPORT', permName: '帳號權限清單匯出', sortSeq: 18 }
+    ]
+  },
+  { moduleCode: 'INSP', perms: [{ permId: 'INSP_VIEW', permName: '巡檢紀錄查詢與明細', sortSeq: 10 }] },
+  { moduleCode: 'SYS', perms: [{ permId: 'SYS_ROLE', permName: '角色指派', sortSeq: 13 }] },
+  { moduleCode: 'EMG', perms: [{ permId: 'EMG_DECIDE', permName: '緊急存取補核准／退回／結案', sortSeq: 24 }] }
+]
+
+function rp(over: Partial<AdminRolePerms> = {}): AdminRolePerms {
+  return {
+    roleId: 'SYS_ADMIN', roleName: '系統管理員', roleDescr: '切換身分、手動觸發排程', readOnly: false,
+    memberCount: 3, grantedPermIds: ['SYS_ROLE'], hiddenGrantedCount: 1, ...over
+  }
+}
+
+function matrix(): RolePermMatrix {
+  return {
+    modules: MODULES,
+    roles: [
+      rp({ roleId: 'GENERAL', roleName: '一般人員', roleDescr: null, readOnly: true, memberCount: 13, grantedPermIds: ['ACC_APPLY'] }),
+      rp(),
+      rp({ roleId: 'GOV', roleName: '資訊治理', roleDescr: '關卡 4、關卡 7', memberCount: 2, grantedPermIds: ['VERIFY_G7', 'ACC_LIST_FULL'], hiddenGrantedCount: 0 })
+    ]
+  }
+}
+
+describe('角色權限設定頁（唯讀）', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    resetSession()
+    useSession().me.value = makeMe({ permissions: ADMIN_PERMS })
+    matrixMock.mockReset().mockResolvedValue(matrix())
+  })
+
+  afterEach(() => {
+    vi.runAllTimers()
+    vi.useRealTimers()
+  })
+
+  async function mountView(): Promise<VueWrapper> {
+    const router = await makeRouter('/admin/role-perms')
+    const w = mount(RolePermAdminView, { global: { plugins: [router] } })
+    await flushPromises()
+    return w
+  }
+
+  function checked(w: VueWrapper): string[] {
+    return w
+      .findAll('.perm-check')
+      .filter(c => (c.find('input').element as HTMLInputElement).checked)
+      .map(c => c.attributes('data-perm') ?? '')
+  }
+
+  it('左清單依後端順序、一般人員標「（唯讀）」；預設選第一個可編輯的角色', async () => {
+    const w = await mountView()
+    expect(matrixMock).toHaveBeenCalledTimes(1)
+    const items = w.findAll('.role-item')
+    expect(items.map(i => i.text())).toEqual(['一般人員（唯讀）', '系統管理員', '資訊治理'])
+    expect(items[1].classes()).toContain('active')
+    expect(items[1].attributes('aria-current')).toBe('true')
+    expect(w.find('.perm-panel').attributes('data-role')).toBe('SYS_ADMIN')
+    expect(w.find('.panel-title').text()).toBe('系統管理員（SYS_ADMIN）')
+    expect(w.find('.member-count').text()).toBe('成員 3 人')
+    expect(w.find('.role-descr').text()).toBe('切換身分、手動觸發排程')
+    w.unmount()
+  })
+
+  it('分組：帳號 → 簽核 → 巡檢 → 緊急存取 → 系統管理，簽核碼從帳號拆出、組內順序不變', async () => {
+    const w = await mountView()
+    const gs = w.findAll('.perm-group')
+    expect(gs.map(g => g.find('.group-name').text())).toEqual(['帳號', '簽核', '巡檢', '緊急存取', '系統管理'])
+    expect(gs[0].findAll('.perm-check').map(c => c.attributes('data-perm'))).toEqual(['ACC_APPLY', 'ACC_LIST_FULL', 'ACC_EXPORT'])
+    expect(gs[1].findAll('.perm-check').map(c => c.attributes('data-perm'))).toEqual(['APPR_G2', 'VERIFY_G7'])
+    expect(gs[1].find('.perm-check').text()).toBe('關卡 2 核准／退件')
+    w.unmount()
+  })
+
+  it('勾選框反映選中角色的現況、全部停用（本回合唯讀）；切換角色後跟著換', async () => {
+    const w = await mountView()
+    expect(checked(w)).toEqual(['SYS_ROLE'])
+    expect(w.findAll('.perm-check input').every(i => (i.element as HTMLInputElement).disabled)).toBe(true)
+    await w.findAll('.role-item')[2].trigger('click')
+    expect(w.find('.panel-title').text()).toBe('資訊治理（GOV）')
+    expect(checked(w)).toEqual(['ACC_LIST_FULL', 'VERIFY_G7'])
+    expect(w.find('.member-count').text()).toBe('成員 2 人')
+    expect(w.findAll('.role-item')[2].classes()).toContain('active')
+    expect(w.findAll('.role-item')[1].classes()).not.toContain('active')
+    w.unmount()
+  })
+
+  it('一般人員：註明調整請改 DB、人數寫全體啟用中使用者；其他角色不顯示這段', async () => {
+    const w = await mountView()
+    expect(w.find('.ro-note').exists()).toBe(false)
+    await w.findAll('.role-item')[0].trigger('click')
+    expect(w.find('.ro-note').text()).toBe('一般人員權限由系統自動給所有啟用中使用者，調整請改 DB（見 SETUP）。')
+    expect(w.find('.member-count').text()).toBe('全體啟用中使用者 13 人')
+    expect(w.find('.role-descr').exists()).toBe(false)
+    expect(checked(w)).toEqual(['ACC_APPLY'])
+    w.unmount()
+  })
+
+  it('隱藏碼註記：hiddenGrantedCount > 0 才顯示 N', async () => {
+    const w = await mountView()
+    expect(w.find('.hidden-note').text()).toBe('另有 1 個尚未上線的權限碼未顯示，存檔不會變動')
+    await w.findAll('.role-item')[2].trigger('click')
+    expect(w.find('.hidden-note').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('全部唯讀時選第一個；缺欄位當空值；空清單顯示提示', async () => {
+    matrixMock.mockResolvedValueOnce({
+      modules: MODULES,
+      roles: [{ roleId: 'GENERAL', roleName: '一般人員', roleDescr: null, readOnly: true } as unknown as AdminRolePerms]
+    })
+    const w = await mountView()
+    expect(w.find('.perm-panel').attributes('data-role')).toBe('GENERAL')
+    expect(checked(w)).toEqual([])
+    expect(w.find('.member-count').text()).toBe('全體啟用中使用者 0 人')
+    expect(w.find('.hidden-note').exists()).toBe(false)
+    w.unmount()
+
+    matrixMock.mockResolvedValueOnce({ modules: [], roles: [] })
+    const w2 = await mountView()
+    expect(w2.find('.empty').text()).toBe('目前沒有可設定的角色')
+    w2.unmount()
+  })
+
+  it('查詢失敗：toast 後端訊息或通用訊息，不顯示空清單', async () => {
+    matrixMock.mockRejectedValueOnce(httpError(403, { message: '您沒有執行此操作的權限' }))
+    const w = await mountView()
+    expect(lastToast(w)).toContain('您沒有執行此操作的權限')
+    expect(w.find('.empty').exists()).toBe(false)
+    w.unmount()
+
+    matrixMock.mockResolvedValueOnce({ roles: [] } as unknown as RolePermMatrix)
+    const w2 = await mountView()
+    expect(lastToast(w2)).toContain('查詢失敗，請稍後再試')
+    expect(w2.find('.rp-layout').exists()).toBe(false)
+    w2.unmount()
+  })
+})
+
+describe('權限碼分組函式', () => {
+  it('不認得的模組排在最後、組名用代碼；空模組不列；null 回空陣列', () => {
+    const gs = groupPerms([
+      { moduleCode: 'NEW', perms: [{ permId: 'NEW_X', permName: '新功能', sortSeq: 30 }] },
+      { moduleCode: 'INSP', perms: [] },
+      { moduleCode: 'SYS', perms: [{ permId: 'SYS_ROLE', permName: '角色指派', sortSeq: 13 }] }
+    ])
+    expect(gs.map(g => [g.code, g.name])).toEqual([['SYS', '系統管理'], ['NEW', 'NEW']])
+    expect(groupPerms(null)).toEqual([])
+  })
+})
+
 describe('系統管理 API', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -445,5 +618,16 @@ describe('系統管理 API', () => {
     expect(post).toHaveBeenLastCalledWith('/admin/roles/R%2F1/members', { userId: 'U?1', reason: '新進' })
     await api.revokeRole('R/1', 'U?1', '離職')
     expect(post).toHaveBeenLastCalledWith('/admin/roles/R%2F1/members/U%3F1/revoke', { reason: '離職' })
+  })
+
+  it('角色權限：GET 矩陣路徑；存檔路徑帶編碼角色代碼、本文只送差異與原因', async () => {
+    const api = await vi.importActual<typeof import('../src/api/admin')>('../src/api/admin')
+    const get = vi.spyOn(http, 'get').mockResolvedValue({ data: { modules: [], roles: [] } })
+    await expect(api.getRolePerms()).resolves.toEqual({ modules: [], roles: [] })
+    expect(get).toHaveBeenLastCalledWith('/admin/role-perms')
+    const post = vi.spyOn(http, 'post').mockResolvedValue({ data: { roleId: 'R/1', added: ['A'], removed: [], result: 'SAVED' } })
+    const payload = { added: ['A'], removed: [], reason: '調整' }
+    await expect(api.saveRolePerms('R/1', payload)).resolves.toMatchObject({ result: 'SAVED' })
+    expect(post).toHaveBeenLastCalledWith('/admin/roles/R%2F1/perms', payload)
   })
 })

@@ -37,6 +37,9 @@
   修改日期: 2026-10-19
   變更說明: BACKLOG 第 89 項階段 4：機房巡檢區塊後加「系統管理」區塊，目前只有「角色指派」（SYS_ROLE）；
             區塊標題暫時只依 SYS_ROLE 顯示，階段 6 加「執行人對照」時改為持有 SYS_ROLE／SYS_EXECUTOR 其一即顯示
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-19
+  變更說明: BACKLOG 第 89 項階段 5：「角色指派」下方加「角色權限設定」（SYS_ROLE）
 -->
 <template>
   <div class="app">
@@ -60,6 +63,7 @@
       <template v-if="can('SYS_ROLE')">
         <div class="nav-title nav-admin">系統管理</div>
         <RouterLink class="nav-item nav-admin-roles" to="/admin/roles">👥 角色指派</RouterLink>
+        <RouterLink class="nav-item nav-admin-perms" to="/admin/role-perms">🔐 角色權限設定</RouterLink>
       </template>
     </aside>
 
