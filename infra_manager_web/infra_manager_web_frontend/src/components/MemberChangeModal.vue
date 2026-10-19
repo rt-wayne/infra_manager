@@ -12,6 +12,9 @@
   修改日期: 2026-10-19
   變更說明: BACKLOG 第 89 項階段 4 審查 M1（計畫 F7，使用者裁示 A）：加 warning 屬性，移除模式顯示黃色提示（不阻擋送出）；
             文案與顯示條件由呼叫端決定（角色頁與執行人頁的受詞不同）
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-10-19
+  變更說明: BACKLOG 第 89 項階段 5 回合 2：原因欄改用共用的 ReasonField（id、字數樣式不變）
 -->
 <template>
   <BaseModal :title="title" :sub="subText" close-text="取消" @close="close">
@@ -31,11 +34,7 @@
     </div>
     <div v-if="mode === 'revoke' && warning" class="note-box warn last-warning">⚠️ {{ warning }}</div>
 
-    <div class="field">
-      <label for="member-reason">原因<span class="req-mark" title="必填">*</span>（{{ REASON_MAX }} 字內）</label>
-      <textarea id="member-reason" v-model="reason" rows="3" :disabled="busy" placeholder="請填寫原因，會記在系統管理軌跡"></textarea>
-      <div class="hint count" :class="{ warn: reasonCount > REASON_MAX }">{{ reasonCount }} / {{ REASON_MAX }}</div>
-    </div>
+    <ReasonField id="member-reason" v-model="reason" :max="REASON_MAX" :disabled="busy" placeholder="請填寫原因，會記在系統管理軌跡" />
 
     <div v-if="blocked" class="priv-banner blocked" role="alert">{{ blocked }}</div>
 
@@ -50,6 +49,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
+import ReasonField from './ReasonField.vue'
 import { listAdminUsers } from '../api/admin'
 import { errorMessage, errorStatus } from '../api/errors'
 import { useToast } from '../composables/useToast'

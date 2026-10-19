@@ -20,6 +20,13 @@
 // 變更說明: BACKLOG 第 89 項階段 5 回合 1：角色權限設定頁（唯讀）——左清單（一般人員標唯讀）、預設選第一個可編輯角色、
 //           切換角色、勾選框反映現況且全部停用、簽核拆組與組順序、一般人員說明與人數文字、隱藏碼註記、
 //           缺欄保底、空清單、查詢失敗；分組函式（未知模組排最後）；API 路徑與編碼
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 5 回合 2：角色權限設定頁編輯與存檔——勾選→「●未存」與還原、一般人員點了不變；
+//           切換角色與路由離開的放棄確認（繼續編輯／放棄）、關分頁 beforeunload 只在有差異時攔；
+//           黃字警示三種與沒有差異時不顯示；存檔彈窗摘要、原因檢查、送出的差異內容、成功 toast＋重載＋未存消失；
+//           E23 依碼分組常駐、E24 常駐、E27 toast＋關＋重載、403 留著；改到自己所屬角色重載 /me（失去 SYS_ROLE 導無權限頁、
+//           /me 失敗 toast 留在本頁、不含此角色不重載）；切換身分中全部停用
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -28,8 +35,9 @@ import type { Router } from 'vue-router'
 import http from '../src/api/http'
 import RoleAdminView from '../src/views/RoleAdminView.vue'
 import RolePermAdminView from '../src/views/RolePermAdminView.vue'
-import { getRolePerms, grantRole, listAdminRoles, listAdminUsers, revokeRole } from '../src/api/admin'
+import { getRolePerms, grantRole, listAdminRoles, listAdminUsers, revokeRole, saveRolePerms } from '../src/api/admin'
 import { getMe } from '../src/api/auth'
+import { setToken } from '../src/api/tokenStore'
 import { resetSession, useSession } from '../src/composables/useSession'
 import type { AdminMember, AdminPermModule, AdminRole, AdminRolePerms, AdminUser, RolePermMatrix } from '../src/types/admin'
 import { groupPerms } from '../src/utils/permGroups'
@@ -62,6 +70,7 @@ vi.mock('../src/api/common', () => ({
 
 const rolesMock = vi.mocked(listAdminRoles)
 const matrixMock = vi.mocked(getRolePerms)
+const saveMock = vi.mocked(saveRolePerms)
 const usersMock = vi.mocked(listAdminUsers)
 const grantMock = vi.mocked(grantRole)
 const revokeMock = vi.mocked(revokeRole)
@@ -446,7 +455,13 @@ const MODULES: AdminPermModule[] = [
       { permId: 'ACC_EXPORT', permName: '帳號權限清單匯出', sortSeq: 18 }
     ]
   },
-  { moduleCode: 'INSP', perms: [{ permId: 'INSP_VIEW', permName: '巡檢紀錄查詢與明細', sortSeq: 10 }] },
+  {
+    moduleCode: 'INSP',
+    perms: [
+      { permId: 'INSP_VIEW', permName: '巡檢紀錄查詢與明細', sortSeq: 10 },
+      { permId: 'INSP_CREATE', permName: '填寫巡檢', sortSeq: 11 }
+    ]
+  },
   { moduleCode: 'SYS', perms: [{ permId: 'SYS_ROLE', permName: '角色指派', sortSeq: 13 }] },
   { moduleCode: 'EMG', perms: [{ permId: 'EMG_DECIDE', permName: '緊急存取補核准／退回／結案', sortSeq: 24 }] }
 ]
@@ -520,10 +535,10 @@ describe('角色權限設定頁（唯讀）', () => {
     w.unmount()
   })
 
-  it('勾選框反映選中角色的現況、全部停用（本回合唯讀）；切換角色後跟著換', async () => {
+  it('勾選框反映選中角色的現況、可編輯角色的勾選框可用；切換角色後跟著換', async () => {
     const w = await mountView()
     expect(checked(w)).toEqual(['SYS_ROLE'])
-    expect(w.findAll('.perm-check input').every(i => (i.element as HTMLInputElement).disabled)).toBe(true)
+    expect(w.findAll('.perm-check input').every(i => !(i.element as HTMLInputElement).disabled)).toBe(true)
     await w.findAll('.role-item')[2].trigger('click')
     expect(w.find('.panel-title').text()).toBe('資訊治理（GOV）')
     expect(checked(w)).toEqual(['ACC_LIST_FULL', 'VERIFY_G7'])
@@ -541,6 +556,12 @@ describe('角色權限設定頁（唯讀）', () => {
     expect(w.find('.member-count').text()).toBe('全體啟用中使用者 13 人')
     expect(w.find('.role-descr').exists()).toBe(false)
     expect(checked(w)).toEqual(['ACC_APPLY'])
+    // 唯讀：勾選框全部停用、沒有還原／存檔鈕、點了也不變
+    expect(w.findAll('.perm-check input').every(i => (i.element as HTMLInputElement).disabled)).toBe(true)
+    expect(w.find('.save-btn').exists()).toBe(false)
+    await w.find('[data-perm=ACC_LIST_FULL] input').trigger('change')
+    expect(checked(w)).toEqual(['ACC_APPLY'])
+    expect(w.find('.unsaved').exists()).toBe(false)
     w.unmount()
   })
 
@@ -582,6 +603,294 @@ describe('角色權限設定頁（唯讀）', () => {
     expect(lastToast(w2)).toContain('查詢失敗，請稍後再試')
     expect(w2.find('.rp-layout').exists()).toBe(false)
     w2.unmount()
+  })
+})
+
+describe('角色權限設定頁：編輯與存檔', () => {
+  const E23_PERM = '拿掉下列權限後沒有人能處理在途案件，請先讓其他角色持有該權限：【關卡 7 複驗通過／退回（VERIFY_G7）】AR20261007-011、AR20261007-012（等共 25 件）；【角色指派（SYS_ROLE）】AR20261007-013'
+  const E24_PERM = '拿掉後將沒有人持有角色指派權限（SYS_ROLE），不能存檔'
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    resetSession()
+    useSession().me.value = makeMe({ permissions: ADMIN_PERMS, roleIds: ['SYS_ADMIN'] })
+    matrixMock.mockReset().mockResolvedValue(matrix())
+    saveMock.mockReset().mockResolvedValue({ roleId: 'GOV', added: [], removed: [], result: 'SAVED' })
+    meMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.runAllTimers()
+    vi.useRealTimers()
+  })
+
+  async function mountView(): Promise<{ w: VueWrapper; router: Router }> {
+    const router = await makeRouter('/admin/role-perms')
+    const w = mount(RolePermAdminView, { global: { plugins: [router] } })
+    await flushPromises()
+    return { w, router }
+  }
+
+  async function tick(w: VueWrapper, permId: string): Promise<void> {
+    await w.find(`[data-perm=${permId}] input`).trigger('change')
+  }
+
+  async function pickGov(w: VueWrapper): Promise<void> {
+    await w.findAll('.role-item')[2].trigger('click')
+    await flushPromises()
+  }
+
+  it('勾選後角色清單標「●未存」、還原與存檔可按；還原回到現況；勾回原狀也算沒有差異', async () => {
+    const { w } = await mountView()
+    expect(w.find('.unsaved').exists()).toBe(false)
+    expect(w.find('.save-btn').attributes('disabled')).toBeDefined()
+    expect(w.find('.reset-btn').attributes('disabled')).toBeDefined()
+    await tick(w, 'ACC_APPLY')
+    expect(w.findAll('.role-item')[1].find('.unsaved').text()).toBe('●未存')
+    expect(w.find('.save-btn').attributes('disabled')).toBeUndefined()
+    await tick(w, 'ACC_APPLY')
+    expect(w.find('.unsaved').exists()).toBe(false)
+    await tick(w, 'SYS_ROLE')
+    expect(w.find('.unsaved').exists()).toBe(true)
+    await w.find('.reset-btn').trigger('click')
+    expect(w.find('.unsaved').exists()).toBe(false)
+    expect((w.find('[data-perm=SYS_ROLE] input').element as HTMLInputElement).checked).toBe(true)
+    w.unmount()
+  })
+
+  it('有未存變更時切換角色先確認：繼續編輯留在原角色並保留勾選；放棄才切換且草稿重置', async () => {
+    const { w } = await mountView()
+    await tick(w, 'ACC_APPLY')
+    await w.findAll('.role-item')[2].trigger('click')
+    await flushPromises()
+    expect(w.find('.modal h3').text()).toBe('放棄未存的變更？')
+    await w.find('.modal .actions .btn:not(.discard-ok)').trigger('click')
+    await flushPromises()
+    expect(w.find('.modal').exists()).toBe(false)
+    expect(w.find('.perm-panel').attributes('data-role')).toBe('SYS_ADMIN')
+    expect((w.find('[data-perm=ACC_APPLY] input').element as HTMLInputElement).checked).toBe(true)
+
+    await w.findAll('.role-item')[2].trigger('click')
+    await flushPromises()
+    await w.find('.discard-ok').trigger('click')
+    await flushPromises()
+    expect(w.find('.perm-panel').attributes('data-role')).toBe('GOV')
+    expect(w.find('.unsaved').exists()).toBe(false)
+    // 沒有差異時切換不問
+    await w.findAll('.role-item')[1].trigger('click')
+    await flushPromises()
+    expect(w.find('.modal').exists()).toBe(false)
+    expect(w.find('.perm-panel').attributes('data-role')).toBe('SYS_ADMIN')
+    w.unmount()
+  })
+
+  it('路由離開：有未存變更先確認，放棄才離開；沒有差異直接離開；卸載後守衛解除', async () => {
+    const { w, router } = await mountView()
+    await tick(w, 'ACC_APPLY')
+    const nav = router.push('/')
+    await flushPromises()
+    expect(w.find('.modal h3').text()).toBe('放棄未存的變更？')
+    await w.find('.modal .actions .btn:not(.discard-ok)').trigger('click')
+    await nav
+    expect(router.currentRoute.value.path).toBe('/admin/role-perms')
+    expect(w.find('.unsaved').exists()).toBe(true)
+
+    const nav2 = router.push('/')
+    await flushPromises()
+    await w.find('.discard-ok').trigger('click')
+    await nav2
+    expect(router.currentRoute.value.path).toBe('/')
+    w.unmount()
+    await router.push('/admin/role-perms')
+    expect(router.currentRoute.value.path).toBe('/admin/role-perms')
+  })
+
+  it('關分頁（beforeunload）：有差異才攔', async () => {
+    const { w } = await mountView()
+    const clean = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(clean)
+    expect(clean.defaultPrevented).toBe(false)
+    await tick(w, 'ACC_APPLY')
+    const dirtyEv = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(dirtyEv)
+    expect(dirtyEv.defaultPrevented).toBe(true)
+    w.unmount()
+    const after = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(after)
+    expect(after.defaultPrevented).toBe(false)
+  })
+
+  it('黃字警示：拿掉唯一授予的碼、加入系統管理碼、相依組合；沒有差異時不顯示', async () => {
+    const { w } = await mountView()
+    expect(w.find('.warnings').exists()).toBe(false)
+    await pickGov(w)
+    // GOV 拿掉 ACC_LIST_FULL（只有 GOV 授予）、加 SYS_ROLE（成員 2 人）、勾 INSP_CREATE 不勾 INSP_VIEW
+    await tick(w, 'ACC_LIST_FULL')
+    await tick(w, 'SYS_ROLE')
+    await tick(w, 'INSP_CREATE')
+    const lines = w.findAll('.warnings > div').map(d => d.text())
+    expect(lines).toEqual([
+      '⚠️ 拿掉後沒有任何角色持有「完整帳號列表」',
+      '⚠️ 將有 2 人取得「角色指派」',
+      '⚠️ 勾了「填寫巡檢」但沒有「巡檢紀錄查詢與明細」，成員進不了對應的頁面，這個權限會用不到'
+    ])
+    // 拿掉 VERIFY_G7 本來就只有 GOV 授予 → 也警示；加入非系統管理碼不警示
+    await tick(w, 'VERIFY_G7')
+    await tick(w, 'EMG_DECIDE')
+    expect(w.findAll('.warnings > div').map(d => d.text())).toContain('⚠️ 拿掉後沒有任何角色持有「關卡 7 複驗通過／退回」')
+    expect(w.findAll('.warnings > div')).toHaveLength(4)
+    // 拿掉 ACC_APPLY（一般人員也有）不警示
+    await w.findAll('.role-item')[1].trigger('click')
+    await flushPromises()
+    await w.find('.discard-ok').trigger('click')
+    await flushPromises()
+    await tick(w, 'SYS_ROLE')
+    expect(w.findAll('.warnings > div').map(d => d.text())).toEqual(['⚠️ 拿掉後沒有任何角色持有「角色指派」'])
+    w.unmount()
+  })
+
+  it('存檔彈窗：摘要列加入與拿掉的中文名、成員數、警示；原因檢查；送出只送差異與去空白的原因；成功 toast、關彈窗、重載、未存消失', async () => {
+    const { w } = await mountView()
+    await pickGov(w)
+    await tick(w, 'ACC_LIST_FULL')
+    await tick(w, 'SYS_ROLE')
+    await w.find('.save-btn').trigger('click')
+    expect(w.find('.modal h3').text()).toBe('存檔 — 資訊治理')
+    expect(w.find('.sum-added').text()).toBe('加入：角色指派')
+    expect(w.find('.sum-removed').text()).toBe('拿掉：完整帳號列表')
+    expect(w.find('.sum-members').text()).toBe('此角色目前 2 位成員，存檔後他們的下一個動作就生效')
+    expect(w.findAll('.modal .warnings > div')).toHaveLength(2)
+    // 彈窗開著時勾選框停用
+    expect(w.findAll('.perm-check input').every(i => (i.element as HTMLInputElement).disabled)).toBe(true)
+
+    await w.find('.confirm-save').trigger('click')
+    expect(lastToast(w)).toBe('請填寫原因')
+    await w.find('#perm-reason').setValue('😀'.repeat(501))
+    expect(w.find('.modal .count').text()).toBe('501 / 500')
+    await w.find('.confirm-save').trigger('click')
+    expect(lastToast(w)).toBe('原因不可超過 500 字')
+    expect(saveMock).not.toHaveBeenCalled()
+
+    await w.find('#perm-reason').setValue('  組織調整  ')
+    await w.find('.confirm-save').trigger('click')
+    await flushPromises()
+    expect(saveMock).toHaveBeenCalledWith('GOV', { added: ['SYS_ROLE'], removed: ['ACC_LIST_FULL'], reason: '組織調整' })
+    expect(lastToast(w)).toBe('已存檔「資訊治理」的權限設定')
+    expect(w.find('.modal').exists()).toBe(false)
+    expect(w.find('.unsaved').exists()).toBe(false)
+    expect(matrixMock).toHaveBeenCalledTimes(2)
+    expect(meMock).not.toHaveBeenCalled()
+    expect(w.find('.perm-panel').attributes('data-role')).toBe('GOV')
+    w.unmount()
+  })
+
+  it('E23：依碼分組常駐彈窗內（前綴一行、每碼一列）、彈窗不關、不重載；E24 同樣常駐', async () => {
+    saveMock.mockRejectedValueOnce(httpError(409, { message: E23_PERM }))
+    const { w } = await mountView()
+    await pickGov(w)
+    await tick(w, 'VERIFY_G7')
+    await w.find('.save-btn').trigger('click')
+    await w.find('#perm-reason').setValue('調整')
+    await w.find('.confirm-save').trigger('click')
+    await flushPromises()
+    expect(w.find('.blocked-head').text()).toBe('拿掉下列權限後沒有人能處理在途案件，請先讓其他角色持有該權限：')
+    expect(w.findAll('.blocked-groups li').map(li => li.text())).toEqual([
+      '【關卡 7 複驗通過／退回（VERIFY_G7）】AR20261007-011、AR20261007-012（等共 25 件）',
+      '【角色指派（SYS_ROLE）】AR20261007-013'
+    ])
+    expect(w.find('.modal').exists()).toBe(true)
+    expect(matrixMock).toHaveBeenCalledTimes(1)
+    expect(w.find('.unsaved').exists()).toBe(true)
+
+    saveMock.mockRejectedValueOnce(httpError(409, { message: E24_PERM }))
+    await w.find('.confirm-save').trigger('click')
+    await flushPromises()
+    expect(w.find('.blocked-head').text()).toBe(E24_PERM)
+    expect(w.find('.blocked-groups').exists()).toBe(false)
+    expect(w.find('.modal').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('E27／E26：toast 後端訊息、關彈窗、重載（草稿回現況）；403：toast、彈窗留著、不重載', async () => {
+    saveMock.mockRejectedValueOnce(httpError(409, { message: '權限設定已被他人調整，請重新整理' }))
+    const { w } = await mountView()
+    await pickGov(w)
+    await tick(w, 'VERIFY_G7')
+    await w.find('.save-btn').trigger('click')
+    await w.find('#perm-reason').setValue('調整')
+    await w.find('.confirm-save').trigger('click')
+    await flushPromises()
+    expect(lastToast(w)).toBe('權限設定已被他人調整，請重新整理')
+    expect(w.find('.modal').exists()).toBe(false)
+    expect(matrixMock).toHaveBeenCalledTimes(2)
+    expect(w.find('.unsaved').exists()).toBe(false)
+
+    saveMock.mockRejectedValueOnce(httpError(403, { message: '您沒有執行此操作的權限' }))
+    await tick(w, 'VERIFY_G7')
+    await w.find('.save-btn').trigger('click')
+    await w.find('#perm-reason').setValue('調整')
+    await w.find('.confirm-save').trigger('click')
+    await flushPromises()
+    expect(lastToast(w)).toBe('您沒有執行此操作的權限')
+    expect(w.find('.modal').exists()).toBe(true)
+    expect(w.find('.blocked').exists()).toBe(false)
+    expect(matrixMock).toHaveBeenCalledTimes(2)
+    w.unmount()
+  })
+
+  it('改到自己所屬的角色：重載 /me；失去 SYS_ROLE 導向無權限頁、不再重載清單', async () => {
+    meMock.mockResolvedValue(makeMe())
+    saveMock.mockResolvedValue({ roleId: 'SYS_ADMIN', added: [], removed: ['SYS_ROLE'], result: 'SAVED' })
+    const { w, router } = await mountView()
+    await tick(w, 'SYS_ROLE')
+    await w.find('.save-btn').trigger('click')
+    await w.find('#perm-reason').setValue('交接')
+    await w.find('.confirm-save').trigger('click')
+    await flushPromises()
+    expect(meMock).toHaveBeenCalledTimes(1)
+    expect(useSession().can('SYS_ROLE')).toBe(false)
+    expect(router.currentRoute.value.path).toBe('/no-access')
+    expect(matrixMock).toHaveBeenCalledTimes(1)
+    w.unmount()
+  })
+
+  it('改到自己所屬的角色但仍有 SYS_ROLE：留在本頁並重載；/me 重載失敗 toast 並留在本頁', async () => {
+    meMock.mockResolvedValue(makeMe({ permissions: [...ADMIN_PERMS, 'INSP_VIEW'], roleIds: ['SYS_ADMIN'] }))
+    const { w, router } = await mountView()
+    await tick(w, 'ACC_APPLY')
+    await w.find('.save-btn').trigger('click')
+    await w.find('#perm-reason').setValue('調整')
+    await w.find('.confirm-save').trigger('click')
+    await flushPromises()
+    expect(meMock).toHaveBeenCalledTimes(1)
+    expect(useSession().can('INSP_VIEW')).toBe(true)
+    expect(router.currentRoute.value.path).toBe('/admin/role-perms')
+    expect(matrixMock).toHaveBeenCalledTimes(2)
+
+    // loadMe 只在仍持有 token 時把失敗記進 meFailed（沒有 token 代表 401 已處理）
+    setToken('tok')
+    meMock.mockRejectedValueOnce(httpError(500, {}))
+    await tick(w, 'ACC_APPLY')
+    await w.find('.save-btn').trigger('click')
+    await w.find('#perm-reason').setValue('調整')
+    await w.find('.confirm-save').trigger('click')
+    await flushPromises()
+    expect(lastToast(w)).toBe('查詢失敗，請稍後再試')
+    expect(router.currentRoute.value.path).toBe('/admin/role-perms')
+    expect(matrixMock).toHaveBeenCalledTimes(3)
+    w.unmount()
+  })
+
+  it('切換身分中：提示先切回，勾選框與按鈕全部停用、點了不變', async () => {
+    useSession().me.value = makeMe({ permissions: ADMIN_PERMS, impersonating: true, realUserId: '2410303' })
+    const { w } = await mountView()
+    expect(w.find('.imp-note').text()).toBe('切換身分中不能調整權限，請先切回。')
+    expect(w.findAll('.perm-check input').every(i => (i.element as HTMLInputElement).disabled)).toBe(true)
+    await tick(w, 'ACC_APPLY')
+    expect(w.find('.unsaved').exists()).toBe(false)
+    expect(w.find('.save-btn').attributes('disabled')).toBeDefined()
+    expect(w.find('.reset-btn').attributes('disabled')).toBeDefined()
+    w.unmount()
   })
 })
 
