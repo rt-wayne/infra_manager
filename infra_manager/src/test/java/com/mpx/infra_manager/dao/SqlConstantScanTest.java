@@ -382,7 +382,8 @@ class SqlConstantScanTest {
 		}
 		// 第 89 項階段 1：/admin/roles、/admin/users、/admin/roles/{roleId}/members、…/{userId}/revoke（39 → 43）
 		// 第 89 項階段 2：/admin/executors、/admin/executors/{catgId}/members、…/{userId}/revoke（43 → 46）
-		assertThat(apis).isEqualTo(46);
+		// 第 89 項階段 3：/admin/role-perms、/admin/roles/{roleId}/perms（46 → 48）
+		assertThat(apis).isEqualTo(48);
 		assertThat(missing).isEmpty();
 	}
 }

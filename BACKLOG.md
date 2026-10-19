@@ -17,8 +17,8 @@
 | 89 | 角色權限維護介面：角色指派、執行人對照兩頁（取代改 DB），另加第三頁設定角色可做哪些事／看到哪些頁面（角色 × 權限碼）；每次異動寫系統管理軌跡、原因必填，移除會卡住在途單或最後一位系統管理員時拒絕 | [backlog/89-角色權限維護介面.md](backlog/89-角色權限維護介面.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：階段 3 回合 1 已完成（常數、DAO、軌跡組裝器、測試 315 全過，無新 API）。接著回合 2：新增 `service\RolePermAdminService.java`（驗證 11 步，見計畫檔「API 設計」權限存檔段；GET /admin/role-perms 組 modules／roles、hiddenGrantedCount；POST /admin/roles/{roleId}/perms；E27、E23／E24 換文案、400「沒有任何變更」「欄位內容不正確：權限碼」）、後端 `AdminController` 補 2 支（API 數 46 → 48）、殼 jar 補 2 支＋路由測試、遞增腳本補 IM_ACCT_ROLE_PERM 與 ACTION_CODE／TARGET_USER_ID 的 COMMENT；再測試 DB 實跑 curl 三情境（計畫檔階段 3 回合 2）、PRD API 段補 2 支；回合 2 很可能要拆成前後半
-- 已改動（未 commit）：無（回合 1 已 commit）
+- 下一步：階段 3 回合 2 前半已完成（`RolePermAdminService`、後端 2 支 API、測試 329 全過、PRD API 表）。接著回合 2 後半：殼 jar `AdminController` 補 2 支轉送（GET /admin/role-perms、POST /admin/roles/{roleId}/perms）＋`ControllerRoutingTest` 補 2 列（50 → 52）；遞增腳本 `db\infra_manager_89_role_admin.sql` 補 IM_ACCT_ROLE_PERM 表 COMMENT（第 573 行「第一階段 DB 維護」「授予人與時間即 CREATE_BY」改寫）、ACTION_CODE 加 ROLE_PERM_SET、TARGET_USER_ID 補「權限設定時為空」，`db\infra_manager_create_table.sql` 同步；重建重啟兩個 jar 後測試 DB 實跑 curl 三情境（① 對某角色加一個碼再拿掉 ② 若有停在關卡 7 的單，拿掉 GOV 的 VERIFY_G7 預期 E23 ③ 送隱藏碼預期 400；中文原因要從 UTF-8 檔案送）；PRD 殼 jar 段 7 → 9 支；再派 code-reviewer＋test-runner 收階段 3
+- 已改動（未 commit）：無（回合 2 前半已 commit）
 - 本階段起點：98b2484（階段 3，2026-10-19）
 - 卡住／待確認：無
 

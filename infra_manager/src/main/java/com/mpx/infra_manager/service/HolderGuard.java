@@ -16,11 +16,16 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-10-19
 // 變更說明: 階段 2 回合 1：加執行人對照的檢查 checkExecutor——同一套三條件，「持有人」換成該類別的啟用中執行人、
 //           「在途」換成停在關卡 6 的同類別申請單（裁示 4.A）；Blocked.permId 放類別代碼，軌跡的 blockedPerms 跟著放類別代碼
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 3 回合 2：角色權限設定頁拿掉多個碼 checkRolePerms——每碼各自排除「角色 R＋碼 p」那一格（一次存檔只動一個角色，
+//           碼之間沒有組合效應），三條件與 SYS_ROLE 歸零判斷同 check；E23 文案依碼分組 describeByPerm（每碼最多 20 筆單號）
 // ============================================================
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Function;
 
 import org.springframework.stereotype.Service;
 
@@ -79,11 +84,21 @@ public class HolderGuard {
 		this.roleAdminDao = roleAdminDao;
 	}
 
-	/** lostPermIds：這組授予涵蓋的權限碼（移除成員＝該角色授予的所有碼；第三頁＝拿掉的碼） */
+	/** lostPermIds：這組授予涵蓋的權限碼（移除成員＝該角色授予的所有碼），每個碼都排除同一組授予 excl */
 	public Result check(Collection<String> lostPermIds, Exclusion excl) {
+		return check(lostPermIds, p -> excl);
+	}
+
+	/** 角色權限設定頁拿掉 removedPermIds：每個碼 p 各自排除「角色 roleId＋碼 p」那一格 */
+	public Result checkRolePerms(String roleId, Collection<String> removedPermIds) {
+		return check(removedPermIds, p -> Exclusion.rolePerm(roleId, p));
+	}
+
+	Result check(Collection<String> lostPermIds, Function<String, Exclusion> exclOf) {
 		boolean sysRoleGone = false;
 		List<Blocked> blocked = new ArrayList<>();
 		for (String permId : lostPermIds) {
+			Exclusion excl = exclOf.apply(permId);
 			long after = roleAdminDao.countHolders(permId, excl.roleId(), excl.userId(), excl.permId());
 			if (after > 0) {
 				continue;
@@ -151,5 +166,26 @@ public class HolderGuard {
 		}
 		String text = String.join("、", parts);
 		return total > parts.size() ? text + "（等共 " + total + " 件）" : text;
+	}
+
+	/**
+	 * 角色權限設定頁的 E23 明細：依碼分組「【權限名（碼）】單號、…（等共 N 件）」以「；」相接，每碼最多 ADMIN_BLOCKED_MSG_MAX 筆；
+	 * permName 查不到名稱時只放碼
+	 */
+	public static String describeByPerm(Result r, Function<String, String> permName) {
+		List<String> groups = new ArrayList<>();
+		for (Blocked b : r.blocked()) {
+			List<String> ids = new ArrayList<>();
+			for (InFlightRow d : b.docs()) {
+				if (ids.size() < AcctConst.ADMIN_BLOCKED_MSG_MAX) {
+					ids.add(d.getDocId());
+				}
+			}
+			String name = permName.apply(b.permId());
+			String label = name == null ? b.permId() : name + "（" + b.permId() + "）";
+			String text = String.join("、", ids);
+			groups.add("【" + label + "】" + (b.total() > ids.size() ? text + "（等共 " + b.total() + " 件）" : text));
+		}
+		return String.join("；", groups);
 	}
 }

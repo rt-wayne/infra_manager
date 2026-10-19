@@ -11,6 +11,9 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-10-19
 // 變更說明: 階段 2 回合 1：執行人對照 checkExecutor——同一套三條件（排除後仍有人不擋且不查在途、變更前就是 0 不擋、無在途不擋、
 //           有在途擋且 Blocked 放類別代碼、最多 50 筆、sysRoleGone 恆 false）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 3 回合 2：checkRolePerms 每碼各自排除「角色＋該碼」；describeByPerm 依碼分組、每碼最多 20 筆、查不到名稱只放碼
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import com.mpx.infra_manager.common.AcctConst;
 import com.mpx.infra_manager.dao.RoleAdminDao;
 import com.mpx.infra_manager.model.InFlightRow;
+import com.mpx.infra_manager.service.HolderGuard.Blocked;
 import com.mpx.infra_manager.service.HolderGuard.Exclusion;
 import com.mpx.infra_manager.service.HolderGuard.Result;
 
@@ -146,6 +150,25 @@ class HolderGuardTest {
 		verify(dao).countHolders("APPR_G5", "GOV", "U1", null);
 		guard.check(List.of("VERIFY_G7"), Exclusion.rolePerm("GOV", "VERIFY_G7"));
 		verify(dao).countHolders("VERIFY_G7", "GOV", null, "VERIFY_G7");
+	}
+
+	/** 第三頁：拿掉多個碼時每碼各自排除「角色＋該碼」那一格；E23 文案依碼分組、每碼最多 20 筆 */
+	@Test
+	void 角色權限_每碼各自排除該格_文案依碼分組() {
+		when(dao.countHolders(eq("APPR_G5"), isNull(), isNull(), isNull())).thenReturn(1L);
+		when(dao.countHolders(eq("APPR_G5"), eq("GOV"), isNull(), eq("APPR_G5"))).thenReturn(0L);
+		when(dao.countHolders(eq("VERIFY_G7"), eq("GOV"), isNull(), eq("VERIFY_G7"))).thenReturn(3L);
+		when(dao.findInFlightByStagePerm("APPR_G5")).thenReturn(docs("AR", 22, "資訊主管"));
+		Result r = guard.checkRolePerms("GOV", List.of("APPR_G5", "VERIFY_G7"));
+		assertThat(r.blockedPermIds()).containsExactly("APPR_G5");
+		verify(dao).countHolders("VERIFY_G7", "GOV", null, "VERIFY_G7");
+		verify(dao, never()).countHolders("APPR_G5", "GOV", null, "VERIFY_G7");
+		String text = HolderGuard.describeByPerm(r, p -> "APPR_G5".equals(p) ? "關卡 5 核准" : null);
+		assertThat(text).startsWith("【關卡 5 核准（APPR_G5）】AR0001、").contains("AR0020（等共 22 件）").doesNotContain("AR0021")
+				.doesNotContain("；");
+		// 查不到名稱只放碼；多碼以「；」相接
+		Result two = new Result(false, List.of(new Blocked("APPR_G5", docs("AR", 1, "x"), 1), new Blocked("EMG_DECIDE", docs("EA", 2, "y"), 2)));
+		assertThat(HolderGuard.describeByPerm(two, p -> null)).isEqualTo("【APPR_G5】AR0001；【EMG_DECIDE】EA0001、EA0002");
 	}
 
 	@Test

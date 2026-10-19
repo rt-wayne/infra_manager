@@ -24,6 +24,10 @@ package com.mpx.infra_manager.common;
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 1（角色權限維護介面）：名單維護錯誤訊息 E21～E27 與 inFlight()（E23 由呼叫端帶單號明細）；
 //           E02／badCode 的受詞「對象」「角色」「帳號類別」
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 3（角色權限設定頁）：E23／E24 沿用代號換文案（受詞由「人」換成「權限」）、
+//           400「沒有任何變更」、badCode 受詞「權限碼」
 // ============================================================
 
 import java.util.List;
@@ -62,6 +66,12 @@ public final class AcctMsg {
 	public static final String E25 = "切換身分中不能調整角色或執行人，請先切回";
 	public static final String E26 = "其他管理員正在調整名單，請稍後再試";
 	public static final String E27 = "權限設定已被他人調整，請重新整理";
+	// 角色權限設定頁沿用 E23／E24 代號、換文案（E21／E22 的「此人」套在權限碼上不通，改用 E27）
+	/** E23 後面接「【權限名（碼）】單號、…；【…】…」，由 HolderGuard.describeByPerm 組 */
+	public static final String E23_PERM_PREFIX = "拿掉下列權限後沒有人能處理在途案件，請先讓其他角色持有該權限：";
+	public static final String E24_PERM = "拿掉後將沒有人持有角色指派權限（SYS_ROLE），不能存檔";
+	/** 權限存檔 added、removed 皆空（400） */
+	public static final String NO_CHANGE = "沒有任何變更";
 	public static final String A01 = "帳號或密碼錯誤";
 	public static final String A02 = "此帳號已鎖定，請聯絡系統管理員";
 	public static final String A03 = "登入已逾時，請重新登入";
@@ -91,6 +101,8 @@ public final class AcctMsg {
 	public static final String WHAT_TARGET = "對象";
 	public static final String WHAT_ROLE = "角色";
 	public static final String WHAT_CATG = "帳號類別";
+	/** 權限存檔的 badCode 受詞：碼重複、同碼在兩邊、不在可見清單（含不存在、停用、隱藏） */
+	public static final String WHAT_PERM = "權限碼";
 
 	// 文件未定文案、由 developer 補的（400 類）
 	public static final String BAD_CODE_PREFIX = "欄位內容不正確：";
@@ -138,6 +150,11 @@ public final class AcctMsg {
 	/** E23：移除後在途案件無人能處理；detail 為「單號（關卡名）、…」 */
 	public static ApiException inFlight(String detail) {
 		return ApiException.conflict(E23_PREFIX + detail);
+	}
+
+	/** 角色權限設定頁的 E23：拿掉權限後在途案件無人能處理；detail 為「【權限名（碼）】單號、…；…」 */
+	public static ApiException inFlightPerm(String detail) {
+		return ApiException.conflict(E23_PERM_PREFIX + detail);
 	}
 
 	public static ApiException unauthorized() {

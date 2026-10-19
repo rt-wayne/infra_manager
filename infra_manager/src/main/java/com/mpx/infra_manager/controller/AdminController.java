@@ -10,6 +10,9 @@ package com.mpx.infra_manager.controller;
 // 修改日期: 2026-10-19
 // 變更說明: 階段 2 回合 1：執行人對照 3 支——GET /admin/executors、POST /admin/executors/{catgId}/members、
 //           POST /admin/executors/{catgId}/members/{userId}/revoke
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 3 回合 2：角色權限設定 2 支——GET /admin/role-perms、POST /admin/roles/{roleId}/perms（轉 RolePermAdminService）
 // ============================================================
 
 import java.util.List;
@@ -26,18 +29,24 @@ import com.mpx.infra_manager.model.AdminExecCatg;
 import com.mpx.infra_manager.model.AdminRole;
 import com.mpx.infra_manager.model.AdminUser;
 import com.mpx.infra_manager.model.MemberChangeResult;
+import com.mpx.infra_manager.model.RolePermMatrix;
+import com.mpx.infra_manager.model.RolePermSaveResult;
 import com.mpx.infra_manager.model.request.MemberForm;
 import com.mpx.infra_manager.model.request.ReasonForm;
+import com.mpx.infra_manager.model.request.RolePermForm;
 import com.mpx.infra_manager.service.RoleAdminService;
+import com.mpx.infra_manager.service.RolePermAdminService;
 
 @RestController
 @RequestMapping("/api/v1")
 public class AdminController {
 
 	private final RoleAdminService roleAdminService;
+	private final RolePermAdminService rolePermAdminService;
 
-	public AdminController(RoleAdminService roleAdminService) {
+	public AdminController(RoleAdminService roleAdminService, RolePermAdminService rolePermAdminService) {
 		this.roleAdminService = roleAdminService;
+		this.rolePermAdminService = rolePermAdminService;
 	}
 
 	@GetMapping("/admin/roles")
@@ -77,5 +86,16 @@ public class AdminController {
 	public MemberChangeResult revokeExecutor(Identity id, @PathVariable("catgId") String catgId,
 			@PathVariable("userId") String userId, @RequestBody(required = false) ReasonForm form) {
 		return roleAdminService.revokeExecutor(id, catgId, userId, form);
+	}
+
+	@GetMapping("/admin/role-perms")
+	public RolePermMatrix rolePerms(Identity id) {
+		return rolePermAdminService.matrix(id);
+	}
+
+	@PostMapping("/admin/roles/{roleId}/perms")
+	public RolePermSaveResult saveRolePerms(Identity id, @PathVariable("roleId") String roleId,
+			@RequestBody(required = false) RolePermForm form) {
+		return rolePermAdminService.save(id, roleId, form);
 	}
 }

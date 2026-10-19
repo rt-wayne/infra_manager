@@ -670,8 +670,8 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | 層 | 檔案與職責 |
 |---|---|
 | common | `AppConfig`（Clock、TransactionTemplate、啟用排程、載入業務設定）、`Identity`／`IdentityProvider`／`IdentityArgumentResolver`（取身分單一介面，Controller 宣告 Identity 參數即注入）、`TokenCodec`、`PasswordHasher`、`AcctConst`（代碼、時效、通知收件角色）、`AcctMsg`（錯誤文案）、`ApiException`、`GlobalExceptionHandler`（例外轉 `{message}`；multipart 超限轉 413 E15；其他 500 不外洩）、`NoStoreInterceptor`（context 內 `/api/**` 回應 no-store，由 `WebConfig` 註冊）、`DocSeqService`（取號）、`Texts`（顯示名、trim、LIKE 跳脫、欄寬檢查） |
-| controller | `AuthController`、`HomeController`、`AccountController`、`RequestController`、`AttachmentController`、`InspectionController`、`JobController`、`AdminController`（系統管理：角色指派與執行人對照維護）；只轉呼叫 service，不寫權限邏輯 |
-| service | `AuthService`（登入、鎖定、登出、`/me`、切換身分）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`SmtpMailSender`（SMTP 寄出）／`LogMailSender`（SMTP 未設定時只寫 log）、`MailAllowList`（寄送名單）、`JobService`、`HomeService`、`InspectionService`、`CodeService`、`RoleAdminService`（角色指派與執行人對照維護：清單、候選人、指派、移除；兩個名單共用同一條驗證順序、全域鎖、HolderGuard、軌跡流程，差異集中在 Roster）、`HolderGuard`（名單維護的「最後一位持有人」檢查：權限碼口徑與執行人口徑）、`AdminLogWriter`（名單維護軌跡與 CONTENT_JSON 組裝） |
+| controller | `AuthController`、`HomeController`、`AccountController`、`RequestController`、`AttachmentController`、`InspectionController`、`JobController`、`AdminController`（系統管理：角色指派、執行人對照與角色權限設定）；只轉呼叫 service，不寫權限邏輯 |
+| service | `AuthService`（登入、鎖定、登出、`/me`、切換身分）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`SmtpMailSender`（SMTP 寄出）／`LogMailSender`（SMTP 未設定時只寫 log）、`MailAllowList`（寄送名單）、`JobService`、`HomeService`、`InspectionService`、`CodeService`、`RoleAdminService`（角色指派與執行人對照維護：清單、候選人、指派、移除；兩個名單共用同一條驗證順序、全域鎖、HolderGuard、軌跡流程，差異集中在 Roster）、`RolePermAdminService`（角色權限設定：可見碼矩陣、一個角色的差異存檔 11 步驗證；取鎖、角色與原因檢查沿用 RoleAdminService）、`HolderGuard`（名單維護的「最後一位持有人」檢查：權限碼口徑與執行人口徑；第三頁每碼各自排除該格）、`AdminLogWriter`（名單維護軌跡與 CONTENT_JSON 組裝） |
 | dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`RoleAdminDao`（角色指派與執行人對照名單、全域互斥鎖、持有人數與執行人數、在途案件）、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
 | tools | `PwdHashTool`：從主控台讀密碼（不回顯、不收命令列參數）輸出 PWD_HASH 字串 |
 
@@ -757,10 +757,10 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | ACT_DATE | DATE | ✓ | 發生時間 |
 | ACT_BY | VARCHAR2(30) | ✓ | 實際操作人 |
 | ACT_BY_NAME | VARCHAR2(100 CHAR) | ✓ | 顯示名快照 |
-| ACTION_CODE | VARCHAR2(30) | ✓ | IMPERSONATE、IMPERSONATE_END（切換身分）；ROLE_GRANT、ROLE_REVOKE（角色指派／移除）；EXEC_GRANT、EXEC_REVOKE（執行人指派／移除）；後端 API 皆已寫入，畫面分批施工中（進度見 BACKLOG 第 89 項） |
-| TARGET_USER_ID | VARCHAR2(30) | | 對象使用者（超過欄寬的輸入存空） |
-| CONTENT_JSON | VARCHAR2(2000 CHAR) | | 切換時記 `{"targetUserName":"…"}`；名單維護成功記 roleId＋roleName（角色）或 catgId＋catgName（執行人）、targetUserName、before.status（null＝原無此列／0／1）、after.status；被拒記 denyCode（NO_PERM／LAST_SYS_ROLE／IN_FLIGHT）、blockedPerms[]（執行人對照時放類別代碼）、blockedTotal、blockedIds[]（最多 50 筆；組好超過 3900 bytes 逐筆丟單號、保留總數） |
-| REASON | VARCHAR2(500 CHAR) | | 原因（切換身分為空；名單維護（角色指派、執行人對照）必填，500 字內，被拒時有帶就存） |
+| ACTION_CODE | VARCHAR2(30) | ✓ | IMPERSONATE、IMPERSONATE_END（切換身分）；ROLE_GRANT、ROLE_REVOKE（角色指派／移除）；EXEC_GRANT、EXEC_REVOKE（執行人指派／移除）；ROLE_PERM_SET（角色權限存檔，一次存檔可同時有加有拿、只寫一筆）；後端 API 皆已寫入，畫面分批施工中（進度見 BACKLOG 第 89 項） |
+| TARGET_USER_ID | VARCHAR2(30) | | 對象使用者（超過欄寬的輸入存空；ROLE_PERM_SET 為空，對象是角色、roleId 在 CONTENT_JSON） |
+| CONTENT_JSON | VARCHAR2(2000 CHAR) | | 切換時記 `{"targetUserName":"…"}`；名單維護成功記 roleId＋roleName（角色）或 catgId＋catgName（執行人）、targetUserName、before.status（null＝原無此列／0／1）、after.status；被拒記 denyCode（NO_PERM／LAST_SYS_ROLE／IN_FLIGHT）、blockedPerms[]（執行人對照時放類別代碼）、blockedTotal、blockedIds[]（最多 50 筆）。角色權限存檔成功記 roleId、roleName、memberCount、added[]、removed[]；被拒另記 denyCode 與 blocked[{permId、total、ids[]（每碼最多 20 筆）}]，無權限時只記 roleId、addedCount、removedCount、denyCode。組好超過 3900 bytes 逐筆丟單號、保留總數 |
+| REASON | VARCHAR2(500 CHAR) | | 原因（切換身分為空；名單維護（角色指派、執行人對照、角色權限存檔）必填，500 字內，被拒時有帶就存） |
 | RESULT_CODE | VARCHAR2(10) | ✓ | SUCCESS、DENY |
 
 索引 IND_IM_ACCT_ADMIN_LOG_01（ACT_DATE）。
@@ -1163,7 +1163,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 |---|---|---|---|---|---|
 | POST | `/jobs/{code}/run` | SYS_JOB_RUN | code＝J01／J02／J03；query：baseDate（選填；J01／J02 為日期 `yyyy-MM-dd`，J03 為時間點 `yyyy-MM-dd HH:mm:ss`、T 可換空白、可省秒） | runId、resultCode、affectedCnt | 403、404（其他 code）、400 E17、400（日期或時間格式錯）、409 E16 |
 
-**系統管理——角色指派與執行人對照**（本功能分批施工中，進度見 BACKLOG 第 89 項；下列 7 支後端 API 已上線並經殼 jar 轉送，前端尚無畫面）
+**系統管理——角色指派、執行人對照與角色權限設定**（本功能分批施工中，進度見 BACKLOG 第 89 項；下列前 7 支後端 API 已上線並經殼 jar 轉送，後 2 支（角色權限設定）後端已上線、殼 jar 尚未轉送；前端尚無畫面）
 
 | 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
 |---|---|---|---|---|---|
@@ -1174,8 +1174,10 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | GET | `/admin/executors` | SYS_EXECUTOR | — | [catgId、catgName、enabled（是否開放新申請）、sortSeq、members[同上]]；8 類全列（含 enabled＝false——關閉新申請的類別仍可能有在途單要執行），依 SORT_SEQ | 403（不寫軌跡） |
 | POST | `/admin/executors/{catgId}/members` | SYS_EXECUTOR | userId、reason（必填，500 字內） | catgId、userId、result＝GRANTED | 403（寫 DENY）、409 E25、400 E02「對象」、E10／E11「原因」、欄位內容不正確：帳號類別（不存在或 STATUS＝0；enabled＝false 仍可指派）、404 N01、409 E26、E21 |
 | POST | `/admin/executors/{catgId}/members/{userId}/revoke` | SYS_EXECUTOR | reason（必填，500 字內） | catgId、userId、result＝REVOKED | 403（寫 DENY）、409 E25、400 E10／E11、欄位內容不正確：帳號類別、409 E26、E22、E23（寫 DENY；執行人對照與 SYS_ROLE 無關，不會有 E24） |
+| GET | `/admin/role-perms` | SYS_ROLE | — | modules[moduleCode、perms[permId、permName、sortSeq]]（只列可見碼——程式常數 `ADMIN_VISIBLE_PERMS` 的 20 碼且 IM_ACCT_PERM 啟用中，依 SORT_SEQ、模組依首次出現；8 個尚無功能的碼隱藏）；roles[roleId、roleName、roleDescr、readOnly（GENERAL 為 true）、memberCount（啟用中成員數；GENERAL＝啟用中使用者總數）、grantedPermIds[]（只列可見碼）、hiddenGrantedCount（已授予但隱藏的碼數）]；含 GENERAL、不含停用角色 | 403（不寫軌跡） |
+| POST | `/admin/roles/{roleId}/perms` | SYS_ROLE | added[]、removed[]、reason（必填，500 字內）；只送差異、不帶版本欄 | roleId、added[]、removed[]、result＝SAVED | 依序：403（寫 DENY，只記 roleId 與碼數）、409 E25、400 E10／E11、欄位內容不正確：角色（不存在／停用／GENERAL）、400「沒有任何變更」、欄位內容不正確：權限碼（重複、同碼在兩邊、不在可見清單含隱藏碼）、409 E26、E27（任一格現況與請求不符）、E24（拿掉後無人持有 SYS_ROLE，寫 DENY、優先）、E23（拿掉的碼有在途單且無人接手，寫 DENY、依碼分組列單號） |
 
-寫入 API 的交易第一句對 IM_ACCT_ROLE 的 GENERAL 列 `SELECT … FOR UPDATE WAIT 5` 當全域互斥（等待逾時 → E26），取鎖後才做名單現況與持有人檢查；成功時名單與軌跡同一交易，E23／E24 先回滾再於交易外寫 DENY。移除的擋下條件（三者同時成立）：該角色授予的某權限碼在變更前有人持有、變更後無人持有、且有在途案件需要它（申請單依關卡 PERM_ID；EMG_DECIDE 另含緊急存取未處理與已退回未結案）；SYS_ROLE 由有人變無人則不論在途一律 E24。執行人對照用同一套三條件：「持有人」換成該類別的啟用中執行人、「在途」換成停在關卡 6（待執行）的同類別申請單。重新指派（原列 STATUS＝0）只更新 UPDATE_*、保留 CREATE_*；對象已停用或使用者表查無的列仍可移除；管理員可改自己。
+寫入 API 的交易第一句對 IM_ACCT_ROLE 的 GENERAL 列 `SELECT … FOR UPDATE WAIT 5` 當全域互斥（等待逾時 → E26），取鎖後才做名單現況與持有人檢查；成功時名單與軌跡同一交易，E23／E24 先回滾再於交易外寫 DENY。角色權限存檔一次處理一個角色的差異：removed 的碼 UPDATE 1→0；added 的碼原列 STATUS＝0 則 UPDATE 0→1（保留 CREATE_*）、無列才 INSERT；每個拿掉的碼各自以「排除該角色＋該碼那一格」算持有人，一次收集所有被擋的碼；隱藏碼送來回 400、既有授予列原樣保留。移除的擋下條件（三者同時成立）：該角色授予的某權限碼在變更前有人持有、變更後無人持有、且有在途案件需要它（申請單依關卡 PERM_ID；EMG_DECIDE 另含緊急存取未處理與已退回未結案）；SYS_ROLE 由有人變無人則不論在途一律 E24。執行人對照用同一套三條件：「持有人」換成該類別的啟用中執行人、「在途」換成停在關卡 6（待執行）的同類別申請單。重新指派（原列 STATUS＝0）只更新 UPDATE_*、保留 CREATE_*；對象已停用或使用者表查無的列仍可移除；管理員可改自己。
 
 **錯誤訊息**（後端 message，前端原樣顯示；文案來源 `common/AcctMsg.java`）
 
@@ -1203,11 +1205,11 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | E20 | 409 | 目前未切換身分 |
 | E21 | 409 | 此人已在名單中，請重新整理 |
 | E22 | 409 | 此人已不在名單中，請重新整理 |
-| E23 | 409 | 移除後沒有人能處理下列在途案件，請先加入接替人員：{單號（關卡名）、…}（最多 20 筆，超過加「（等共 N 件）」） |
-| E24 | 409 | 不能移除最後一位具角色指派權限的人員 |
+| E23 | 409 | 移除成員：移除後沒有人能處理下列在途案件，請先加入接替人員：{單號（關卡名）、…}（最多 20 筆，超過加「（等共 N 件）」）；角色權限設定：拿掉下列權限後沒有人能處理在途案件，請先讓其他角色持有該權限：【權限名（碼）】單號、…（每碼最多 20 筆，超過加「（等共 N 件）」）；多碼以「；」相接 |
+| E24 | 409 | 移除成員：不能移除最後一位具角色指派權限的人員；角色權限設定：拿掉後將沒有人持有角色指派權限（SYS_ROLE），不能存檔 |
 | E25 | 409 | 切換身分中不能調整角色或執行人，請先切回 |
 | E26 | 409 | 其他管理員正在調整名單，請稍後再試 |
-| E27 | 409 | 權限設定已被他人調整，請重新整理（角色權限設定頁用，尚未上線） |
+| E27 | 409 | 權限設定已被他人調整，請重新整理（角色權限存檔：added 的碼現在已授予、或 removed 的碼現在未授予） |
 | A01 | 401 | 帳號或密碼錯誤 |
 | A02 | 401 | 此帳號已鎖定，請聯絡系統管理員 |
 | A03 | 401 | 登入已逾時，請重新登入 |

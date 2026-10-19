@@ -40,6 +40,9 @@ package com.mpx.infra_manager.support;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 2：RoleAdminService 建構子多傳 CodeService（執行人對照查帳號類別）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 3：加 RolePermAdminService（真；共用 RoleAdminService 的取鎖與角色檢查）
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -106,6 +109,7 @@ import com.mpx.infra_manager.service.NotificationService;
 import com.mpx.infra_manager.service.PermissionService;
 import com.mpx.infra_manager.service.RequestService;
 import com.mpx.infra_manager.service.RoleAdminService;
+import com.mpx.infra_manager.service.RolePermAdminService;
 
 public class TestFixture {
 
@@ -275,6 +279,8 @@ public class TestFixture {
 	public final AdminLogWriter adminLogWriter = new AdminLogWriter(adminLogDao);
 	public final RoleAdminService roleAdminService = new RoleAdminService(permissionService, roleAdminDao, userDao, codeService,
 			holderGuard, adminLogWriter, tx, clock);
+	public final RolePermAdminService rolePermAdminService = new RolePermAdminService(permissionService, roleAdminDao, holderGuard,
+			adminLogWriter, roleAdminService);
 
 	/** 模擬 IM_ACCT_REQ 的單筆申請單（null＝查無） */
 	public AcctReqDetail req;
