@@ -3,20 +3,30 @@
   修改日期: 2026-10-19
   變更說明: 新增：角色指派頁（BACKLOG 第 89 項階段 4 回合 1，唯讀版；GET /admin/roles，需 SYS_ROLE）
             每個角色一張卡：名稱、說明、授予權限中文名、成員（停用者加灰色「（已停用）」、顯示指派日）；
-            GENERAL 不列，頁首說明一般人員由系統自動授予；指派與移除鈕在回合 2 加上
+            GENERAL 不列，頁首說明一般人員由系統自動授予
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-19
+  變更說明: BACKLOG 第 89 項階段 4 回合 2：卡片「＋ 指派」、成員「移除」，開 MemberChangeModal；
+            成功 toast＋關彈窗＋重載；名單已變（409，E23 除外）關彈窗並重載；
+            改到自己（對象＝目前身分）後重載 /me 與徽章，失去 SYS_ROLE 時導向無權限頁；
+            切換身分中按鈕停用並提示先切回（後端同樣以 E25 拒絕）
 -->
 <template>
   <main>
     <p class="section-note page-note">
       一般人員權限由系統自動授予所有啟用中的使用者，不在此維護。
     </p>
+    <p v-if="impersonating" class="note-box warn imp-note">切換身分中不能調整角色，請先切回。</p>
 
     <template v-if="loaded">
       <div v-if="roles.length > 0">
         <section v-for="r in roles" :key="r.roleId" class="module-card role-card" :data-role="r.roleId">
           <div class="role-head">
             <h2 class="role-name">{{ r.roleName }}<span class="role-id">（{{ r.roleId }}）</span></h2>
-            <span class="tag tag-info">{{ r.members.length }} 位成員</span>
+            <span class="head-right">
+              <span class="tag tag-info">{{ r.members.length }} 位成員</span>
+              <button type="button" class="btn grant-btn" :disabled="impersonating" @click="openGrant(r)">＋ 指派</button>
+            </span>
           </div>
           <p v-if="r.roleDescr" class="hint role-descr">{{ r.roleDescr }}</p>
           <div class="perm-row">
@@ -32,6 +42,7 @@
               <span class="m-id">{{ m.userId }}</span>
               <span v-if="!m.userActive" class="m-off">（已停用）</span>
               <span v-if="m.grantDate" class="m-date">指派於 {{ dateOnly(m.grantDate) }}</span>
+              <button type="button" class="btn-link warn revoke-btn" :disabled="impersonating" @click="openRevoke(r, m)">移除</button>
             </li>
           </ul>
           <p v-else class="hint no-member">目前沒有成員</p>
@@ -41,24 +52,80 @@
     </template>
     <p v-else-if="loading" class="hint">載入中…</p>
 
+    <MemberChangeModal
+      v-if="editing"
+      :mode="editing.mode"
+      :group-name="editing.role.roleName"
+      :member="editing.member"
+      :exclude-ids="editing.role.members.map(m => m.userId)"
+      :submit="submitChange"
+      @close="editing = null"
+      @done="onDone"
+      @stale="onStale"
+    />
     <ToastHost />
   </main>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import MemberChangeModal from '../components/MemberChangeModal.vue'
 import ToastHost from '../components/ToastHost.vue'
-import { listAdminRoles } from '../api/admin'
+import { grantRole, listAdminRoles, revokeRole } from '../api/admin'
 import { errorMessage } from '../api/errors'
+import { useSession } from '../composables/useSession'
 import { useToast } from '../composables/useToast'
-import type { AdminRole } from '../types/admin'
+import type { AdminMember, AdminRole } from '../types/admin'
 import { dateOnly } from '../utils/date'
 
 const { toast } = useToast()
+const { me, can, impersonating, loadMe, refreshBadges } = useSession()
+const router = useRouter()
 
 const roles = ref<AdminRole[]>([])
 const loaded = ref(false)
 const loading = ref(false)
+/** 開著的指派／移除彈窗 */
+const editing = ref<{ mode: 'grant' | 'revoke'; role: AdminRole; member: AdminMember | null } | null>(null)
+
+function openGrant(role: AdminRole): void {
+  editing.value = { mode: 'grant', role, member: null }
+}
+
+function openRevoke(role: AdminRole, member: AdminMember): void {
+  editing.value = { mode: 'revoke', role, member }
+}
+
+/** 彈窗的實際送出：依模式打指派或移除 */
+function submitChange(userId: string, reason: string): Promise<unknown> {
+  const x = editing.value
+  if (!x) return Promise.reject(new Error('no target'))
+  return x.mode === 'grant' ? grantRole(x.role.roleId, { userId, reason }) : revokeRole(x.role.roleId, userId, reason)
+}
+
+async function onDone(userId: string, userName: string): Promise<void> {
+  const x = editing.value
+  editing.value = null
+  if (x) {
+    toast(x.mode === 'grant' ? `已將 ${userName} 指派為「${x.role.roleName}」` : `已將 ${userName} 移出「${x.role.roleName}」`, 'teal')
+  }
+  // 改到目前身分（切換中後端以 E25 拒絕，到這裡必是本人）：重載 /me 讓導覽與權限跟上，失去本頁權限就離開
+  if (me.value && userId === me.value.userId) {
+    await loadMe()
+    void refreshBadges()
+    if (me.value && !can('SYS_ROLE')) {
+      await router.replace('/no-access')
+      return
+    }
+  }
+  await load()
+}
+
+function onStale(): void {
+  editing.value = null
+  void load()
+}
 
 async function load(): Promise<void> {
   loading.value = true
@@ -93,4 +160,6 @@ onMounted(load)
 .m-off { color: var(--gray); font-size: 16px; }
 .member.inactive .m-name { color: var(--gray); }
 .m-date { margin-left: auto; }
+.head-right { display: inline-flex; align-items: center; gap: 10px; }
+.imp-note { margin-bottom: 16px; }
 </style>

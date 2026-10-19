@@ -17,8 +17,8 @@
 | 89 | 角色權限維護介面：角色指派、執行人對照兩頁（取代改 DB），另加第三頁設定角色可做哪些事／看到哪些頁面（角色 × 權限碼）；每次異動寫系統管理軌跡、原因必填，移除會卡住在途單或最後一位系統管理員時拒絕 | [backlog/89-角色權限維護介面.md](backlog/89-角色權限維護介面.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：階段 4 回合 1 已完成（角色指派頁唯讀版、前端測試 209 筆全過、建置通過）。開階段 4 回合 2：`components\MemberChangeModal.vue`（指派／移除兩模式、原因必填 500 字按碼點、錯誤顯示，建在 BaseModal 上、比照 `TodoView.vue:102-119`），角色卡加「＋ 指派」與成員「移除」，改到自己後重載 `/me`，補 Vitest；依計畫檔「階段 4」與「前端」段。API 呼叫 `api\admin.ts` 的 grantRole／revokeRole 與可指派人員 listAdminUsers 已寫好。導覽「系統管理」區塊目前只依 SYS_ROLE 顯示，階段 6 加執行人對照時改為兩碼其一（`AppLayout.vue` 檔頭已註明）。使用者 2026-10-19 已重跑 `db\infra_manager_89_role_admin.sql`（階段 3 補的 COMMENT）
-- 已改動（未 commit）：無（階段 4 回合 1 已 commit）
+- 下一步：階段 4 回合 2 已完成（指派／移除彈窗、前端測試 220 筆全過、建置通過）。進階段 4 收尾：同一則訊息平行派 code-reviewer（範圍 a20bb76..HEAD）與 test-runner（`npm test`、`npm run build`，並依計畫完成判定對測試 DB 截圖看過一次指派與移除；截圖前要重建並重啟殼 jar，前端產物才會進 jar）。導覽「系統管理」區塊目前只依 SYS_ROLE 顯示，階段 6 加執行人對照時改為兩碼其一（`AppLayout.vue` 檔頭已註明）
+- 已改動（未 commit）：無（階段 4 回合 2 已 commit）
 - 本階段起點：a20bb76（階段 4，2026-10-19 開工）
 - 卡住／待確認：無
 
@@ -99,6 +99,7 @@
 | 107 | `RolePermAdminServiceTest` 成功案例沒斷言隱藏碼（假資料 GOV 的 REVIEW_LIST＝1）未被更新；計畫完成判定要求「隱藏碼存檔後原樣保留」，目前只測到送隱藏碼回 400。加 `verify(..., never()).updateRolePermStatus(eq("GOV"), eq("REVIEW_LIST"), ...)`。第 89 項階段 3 code-reviewer 提出（S2） | 2026-10-19 | — |
 | 108 | `RolePermAdminService.save` 的軌跡 memberCount 在取鎖前查、且用全部角色的 GROUP BY（`RolePermAdminService.java:161`）；同時有人改成員時軌跡人數可能是舊值。移進取鎖後，可另加單一角色 COUNT。第 89 項階段 3 code-reviewer 提出（S3） | 2026-10-19 | — |
 | 109 | `RolePermAdminService.save` 約 90 行（`:131-220`）超過 50 行門檻；把取鎖後第 ⑦～⑪ 步抽成私有方法，save 只留驗證順序與 DENY 分支。第 89 項階段 3 code-reviewer 提出（S4） | 2026-10-19 | — |
+| 110 | 後端錯誤本文只有 message、沒有錯誤代號（`GlobalExceptionHandler.java:87`），前端指派／移除彈窗只能用文案開頭辨識 E23（`MemberChangeModal.vue` 的 E23_PREFIX 對應 `AcctMsg.E23_PREFIX`）；改 E23 文案沒同步前端時，E23 會退化成 toast，單號清單幾秒後就看不到。可在錯誤本文加 code 欄（例 E23），前端改看代號。使用者目前看不到差別，這是內部品質問題。第 89 項階段 4 回合 2 實作時提出；階段 5 角色權限設定頁的 E23／E24 也要辨識，屆時一併考慮 | 2026-10-19 | — |
 | 79 | UAT 的附件根目錄（`infra.manager.attach.dir` 的值）目前設在哪、要不要隨改名搬到新目錄名；DB 的 `IM_ACCT_ATTACH.FILE_PATH` 存相對路徑，搬檔＋改設定值即可、不用動資料。改名部署時 SETUP 第 8 節寫「值可以維持原路徑」，不搬也能運作。第 68 項計畫待確認 2，結案時移入 | 2026-10-15 | — |
 
 ## 已拍板不做
