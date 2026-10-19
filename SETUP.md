@@ -80,11 +80,13 @@ java -jar target\infra_manager_web-0.0.1-SNAPSHOT.jar
 
 兩個 jar 都是前景程序，在各自的主控台按 Ctrl+C 停止。
 
-## 6. DB 維護（系統沒有維護畫面）
+## 6. DB 維護（無畫面的項目；角色、執行人、角色權限的備援）
 
-使用者、巡檢項目、資產分類、帳號類別開關直接改 RD_USER 的表。改完下一個請求即生效，不用重新部署；系統不留管理軌跡，改動前自行確認影響。
+**角色指派、執行人對照、角色權限平常用畫面**（系統管理 → 角色指派／執行人對照／角色權限設定，需 SYS_ROLE 或 SYS_EXECUTOR）：畫面改會寫系統管理軌跡、原因必填，並擋下「移除或拿掉後沒有人能處理在途案件」與「移除或拿掉後沒有人持有角色指派權限（SYS_ROLE）」。本節的角色、執行人 SQL（第 5a、5b、6a、6b 段）**只作備援**：DB 直接改**不留軌跡、不檢查在途案件**，也不檢查是不是最後一位 SYS_ROLE 持有人。只有兩種情況必須用 DB：建新環境的第一位系統管理員（還沒有人能進畫面，見下方「建新環境」），以及一般人員（GENERAL）的權限（畫面對 GENERAL 唯讀，見第 6c 段，同樣不留軌跡、不檢查在途）。
 
-**角色指派與執行人對照改由系統管理 API 維護**（畫面分批施工中，進度見 `BACKLOG.md` 第 89 項）：經畫面或 API 改會寫系統管理軌跡、原因必填，移除時會擋下「移除後沒有人能處理在途案件」與「移除最後一位具角色指派權限的人」。下方第 5a～6b 段的 SQL **只作備援**（例如第一位管理者、或畫面還沒上線時）：DB 直接改**不留軌跡、不做在途檢查**，改之前先用「查每個人實際生效的角色」確認不會讓某個關卡或類別沒有人能處理。
+使用者（含解鎖、重設密碼）、巡檢項目、資產分類、帳號類別開關沒有畫面，一律直接改 RD_USER 的表。改完下一個請求即生效，不用重新部署；系統不留管理軌跡，改動前自行確認影響。
+
+DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓某個關卡或類別沒有人能處理：角色看「查每個人實際生效的角色」與「查某個權限碼給了哪些角色」；執行人看「查每個帳號類別的啟用中執行人數」與「查停在關卡 6（待執行）的申請單」。
 
 ### 執行前共通注意
 
@@ -103,12 +105,12 @@ java -jar target\infra_manager_web-0.0.1-SNAPSHOT.jar
 
 **既有環境升級到第二階段緊急存取**（已照上面建好 21 張表的測試、正式環境）：以 RD_USER 執行 `db\infra_manager_phase2_emg.sql`（SQL Developer 用「執行指令碼」F5；SQL*Plus 同樣先 `set NLS_LANG=.AL32UTF8`）。本檔可重跑：表與索引已存在就印「已存在，略過」，COMMENT 重覆執行無害；本檔也會建兩張新表的 PUBLIC synonym 並授權給殼 jar 連線帳號 AP_USER（`IM_EMG_ACCESS` 授 SELECT／INSERT／UPDATE、`IM_EMG_AFFECT_ACCT` 授 SELECT／INSERT；比照第一階段的 PUBLIC synonym 建法，RD_USER 自己有 CREATE PUBLIC SYNONYM 權限）。檔尾五句查詢會列出兩張表、三個 IND_ 索引（主鍵索引已排除）、兩表欄數（30、11）及無 COMMENT 欄位數（期望 0）、兩個 PUBLIC synonym、AP_USER 的 5 筆授權供核對，期望值寫在該段註解。檔頭設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑。全新環境用建表檔建完表後**仍須跑本檔**：建表檔沒有 synonym 與授權，本檔重跑時表與索引會印「已存在，略過」，只補上這兩張表的 synonym 與 GRANT；第一階段 21 張表的 synonym 與授權建法仍未記載（見 `BACKLOG.md` 第 48 項）。
 
-**既有環境升級到角色權限維護介面**（第 89 項）：以 RD_USER 執行 `db\infra_manager_89_role_admin.sql`（執行方式同上）。本檔只更新 IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP 三張表的 COMMENT、不動結構、不寫資料、不需 GRANT（AP_USER 對相關表本來就有四種權限，2026-10-19 於測試 DB 實查；正式環境執行後用檔尾第三句再核對一次，少了 INSERT 或 UPDATE 就要補 GRANT）。可重跑；全新環境用建表檔建完不必跑（建表檔同句）。檔尾三句查詢的期望值寫在該段註解。
+**既有環境升級到角色權限維護介面**（角色指派、執行人對照、角色權限設定三個畫面）：以 RD_USER 執行 `db\infra_manager_89_role_admin.sql`（執行方式同上）。本檔只更新 IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM 四張表的 COMMENT、不動結構、不需 GRANT（AP_USER 對相關表本來就有四種權限，2026-10-19 於測試 DB 實查；正式環境執行後用檔尾第三句再核對一次，少了 INSERT 或 UPDATE 就要補 GRANT）；資料只改一個值：SYS_ADMIN 的角色說明拿掉「角色指派與執行人對照第一階段以 DB 維護」，且只在說明仍是初始舊字時才改。可重跑；全新環境用建表檔與初始資料檔建完不必跑（兩檔已同步）。檔尾四句查詢的期望值寫在該段註解。
 
-建完補第一位管理者，**用 SQL Developer 另開一個連線**執行（姓名含中文；也不要接在跑 init_data 檔的 SQL*Plus 連線裡——該檔的遇錯即停設定整個連線都有效，之後任何一句打錯都會直接結束 SQL*Plus 並回滾）：
+建完補第一位系統管理員。**這一步只能用 DB 設定**：角色指派畫面需要 SYS_ROLE，新環境還沒有任何人持有，進不了畫面；第一位設好、登入後，其他人的角色與執行人改用畫面指派。**用 SQL Developer 另開一個連線**執行（姓名含中文；也不要接在跑 init_data 檔的 SQL*Plus 連線裡——該檔的遇錯即停設定整個連線都有效，之後任何一句打錯都會直接結束 SQL*Plus 並回滾）：
 
 1. 打開 `infra_manager_init_data.sql` 檔尾的「初始管理者範本」，把最下面兩句 INSERT 複製到 SQL 工具，**只去掉這幾行行首的「-- 」**（沒去掉的話整段都是註解，執行不會報錯、但什麼都沒寫入），把【工號】【密碼雜湊】等占位符換成實際值。
-2. 要讓這位管理者能處理申請單的執行回報，再依下方第 6a 段為**每個帳號類別各加一列**（關卡 6 認執行人對照表 IM_EXEC_MAP、不認角色；類別代碼用下方查代碼的第二句查）。
+2. 要讓這位管理者能處理申請單的執行回報，再依下方第 6a 段為**每個帳號類別各加一列**（關卡 6 認執行人對照表 IM_EXEC_MAP、不認角色；類別代碼用下方查代碼的第二句查）。這一步也可以省略，改在第 3 步完成、登入後到執行人對照頁指派（範本的 SYS_ADMIN 角色初始就有 SYS_EXECUTOR）。
 3. 執行以上全部 INSERT，確認每句都影響 1 筆後，執行 `COMMIT;`。
 
 ### 各操作的可執行 SQL
@@ -143,6 +145,27 @@ SELECT RP.ROLE_ID, P.PERM_NAME
   JOIN IM_ACCT_ROLE R ON R.ROLE_ID = RP.ROLE_ID AND R.STATUS = 1
   JOIN IM_ACCT_PERM P ON P.PERM_ID = RP.PERM_ID AND P.STATUS = 1
  WHERE RP.PERM_ID = '【權限碼】' AND RP.STATUS = 1;
+```
+
+**查每個帳號類別的啟用中執行人數**（口徑同系統移除執行人時的檢查：對照列 STATUS＝1 且使用者也啟用中；0 人的類別也會列出）
+
+```sql
+SELECT C.CATG_ID, C.CATG_NAME, COUNT(U.USER_ID) AS EXEC_CNT
+  FROM IM_ACCT_CATG C
+  LEFT JOIN IM_EXEC_MAP M ON M.CATG_ID = C.CATG_ID AND M.STATUS = 1
+  LEFT JOIN IM_ACCT_USER U ON U.USER_ID = M.USER_ID AND U.STATUS = 1
+ WHERE C.STATUS = 1
+ GROUP BY C.CATG_ID, C.CATG_NAME, C.SORT_SEQ
+ ORDER BY C.SORT_SEQ;
+```
+
+**查停在關卡 6（待執行）的申請單**（這些單只有該類別的執行人能處理；有單的類別不要讓執行人數變成 0）
+
+```sql
+SELECT R.CATG_ID, R.REQ_ID, R.SUBMIT_DATE
+  FROM IM_ACCT_REQ R
+ WHERE R.REQ_STATE_CODE = 'EXEC' AND R.CURR_STAGE_ID = 6
+ ORDER BY R.CATG_ID, R.SUBMIT_DATE, R.REQ_ID;
 ```
 
 **1. 新增使用者**（工號＝登入帳號；英文名必填；雜湊用下方 PwdHashTool 產生；分機電話選填：使用者在申請表單按「同申請人」、且表單上沒填申請人分機與 Email 時，會帶入「使用人聯絡方式」並蓋掉原本填的內容（門禁卡類別不帶入）；不填就把 `'【分機電話】'` 換成 `NULL`）
@@ -189,14 +212,14 @@ UPDATE IM_ACCT_LOGIN_TOKEN
  WHERE USER_ID = '【工號】' AND LOGOUT_DATE IS NULL;
 ```
 
-**5a. 指派角色**（備援用，平常走系統管理 API；第一次指派；不得為 GENERAL——一般人員權限是程式自動給的）
+**5a. 指派角色**（備援用，平常用角色指派畫面；DB 改不留軌跡。第一次指派；不得為 GENERAL——一般人員權限是程式自動給的）
 
 ```sql
 INSERT INTO IM_ACCT_ROLE_USER (ROLE_ID, USER_ID, STATUS, CREATE_DATE, CREATE_BY)
 VALUES ('【角色代碼】', '【工號】', 1, SYSDATE, '【操作人工號】');
 ```
 
-**5b. 移除角色**（備援用；重新指派曾移除的人＝同句把 STATUS 改回 1，不能再 INSERT，會主鍵衝突。DB 直接改時系統不檢查：移除前自行確認沒有在途申請卡在只有該人能處理的關卡、也不是最後一位具角色指派權限（SYS_ROLE）的人）
+**5b. 移除角色**（備援用，平常用角色指派畫面；重新指派曾移除的人＝同句把 STATUS 改回 1，不能再 INSERT，會主鍵衝突。DB 直接改不留軌跡、系統不檢查在途：移除前自行確認沒有在途申請卡在只有該人能處理的關卡、也不是最後一位具角色指派權限（SYS_ROLE）的人）
 
 ```sql
 UPDATE IM_ACCT_ROLE_USER
@@ -204,19 +227,33 @@ UPDATE IM_ACCT_ROLE_USER
  WHERE ROLE_ID = '【角色代碼】' AND USER_ID = '【工號】';
 ```
 
-**6a. 指派執行人**（備援用，平常走系統管理 API；第一次指派；一列對一個帳號類別）
+**6a. 指派執行人**（備援用，平常用執行人對照畫面；DB 改不留軌跡。第一次指派；一列對一個帳號類別）
 
 ```sql
 INSERT INTO IM_EXEC_MAP (CATG_ID, USER_ID, STATUS, CREATE_DATE, CREATE_BY)
 VALUES ('【帳號類別代碼】', '【工號】', 1, SYSDATE, '【操作人工號】');
 ```
 
-**6b. 移除執行人**（備援用；重新指派＝同句改回 1。DB 直接改時系統不檢查：移除前自行確認該類別沒有停在關卡 6 待執行的申請單只剩這一人能處理）
+**6b. 移除執行人**（備援用，平常用執行人對照畫面；重新指派＝同句改回 1。DB 直接改不留軌跡、系統不檢查在途：移除前用上方「查每個帳號類別的啟用中執行人數」與「查停在關卡 6（待執行）的申請單」確認，該類別若只剩這一人且有單停在關卡 6，先指派接替人員再移除）
 
 ```sql
 UPDATE IM_EXEC_MAP
    SET STATUS = 0, UPDATE_DATE = SYSDATE, UPDATE_BY = '【操作人工號】'
  WHERE CATG_ID = '【帳號類別代碼】' AND USER_ID = '【工號】';
+```
+
+**6c. 調整一般人員（GENERAL）的權限**（畫面對 GENERAL 唯讀，只能 DB 改；GENERAL 的權限**所有啟用中使用者**都有，改完下一個請求起全體生效，已開著的頁面導覽要重新整理才更新。DB 改**不留軌跡、不做在途檢查**：拿掉的若是關卡 2～5 核准、關卡 7 複驗（APPR_G2～APPR_G5、VERIFY_G7）或 EMG_DECIDE，先用上方「查某個權限碼給了哪些角色」確認還有其他角色授予、且那些角色有啟用中成員，否則停在對應關卡的在途單會沒有人能處理。權限碼先用 `SELECT PERM_ID, PERM_NAME FROM IM_ACCT_PERM WHERE STATUS = 1 ORDER BY SORT_SEQ;` 查，代碼打錯 SQL 照樣成功但不會生效）
+
+先跑 UPDATE（1＝授予、0＝拿掉）。影響 1 筆就 COMMIT；**影響 0 筆＝GENERAL 從沒有過這個碼的列**：要拿掉的話本來就沒有、直接 ROLLBACK；要授予的話接著跑下面的 INSERT，影響 1 筆再 COMMIT。
+
+```sql
+UPDATE IM_ACCT_ROLE_PERM
+   SET STATUS = 【1 或 0】, UPDATE_DATE = SYSDATE, UPDATE_BY = '【操作人工號】'
+ WHERE ROLE_ID = 'GENERAL' AND PERM_ID = '【權限碼】';
+
+-- 只在上一句影響 0 筆、且要授予時執行
+INSERT INTO IM_ACCT_ROLE_PERM (ROLE_ID, PERM_ID, STATUS, CREATE_DATE, CREATE_BY)
+VALUES ('GENERAL', '【權限碼】', 1, SYSDATE, '【操作人工號】');
 ```
 
 **7. 開放／關閉某帳號類別的新增申請**（1＝開放、0＝關閉；使用者要重新整理頁面或重新登入才看到新的下拉選項）

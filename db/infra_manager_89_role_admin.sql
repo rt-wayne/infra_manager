@@ -1,7 +1,7 @@
 -- ============================================================================
 -- 機房巡檢與帳號權限管理系統：第 89 項「角色權限維護介面」遞增腳本（既有環境升級用）
 -- ============================================================================
--- 內容：只更新 COMMENT、不動結構、不寫任何資料列、不需 GRANT——
+-- 內容：更新 COMMENT、不動結構、不需 GRANT；資料只改一個值（SYS_ADMIN 的角色說明，見「資料」段）——
 --       角色指派（IM_ACCT_ROLE_USER）、執行人對照（IM_EXEC_MAP）改由畫面維護並寫系統管理軌跡（IM_ACCT_ADMIN_LOG），
 --       三張表與軌跡欄位的說明從「第一階段 DB 維護」「預留」改成現況；重新指派只寫 UPDATE_*、保留 CREATE_*（裁示 ⑦A），
 --       「指派人與時間即 CREATE_BY」的說法跟著修正。
@@ -11,7 +11,7 @@
 --       已有 SELECT／INSERT／UPDATE／DELETE（2026-10-19 以 RD_USER 實查測試 DB；正式環境執行前請用檔尾第三句再查一次）。
 -- 對象：已依 infra_manager_create_table.sql（＋infra_manager_phase2_emg.sql）建好 23 張表的既有環境（測試、正式）。
 --       全新環境：infra_manager_create_table.sql 的 COMMENT 已與本檔同句，不必再跑本檔（跑了也無害）。
--- 可重跑：COMMENT 重覆執行無害；跑到一半失敗直接從頭再跑即可。
+-- 可重跑：COMMENT 重覆執行無害；角色說明只在仍是舊字時才改（第二次跑影響 0 筆）；跑到一半失敗直接從頭再跑即可。
 -- 前提：以表的擁有者（RD_USER）執行。檔案編碼 UTF-8；SQL*Plus 執行前先 set NLS_LANG=.AL32UTF8、SQL Developer 開檔選 UTF-8，
 --       否則 COMMENT 的中文會無聲變成亂碼（不會報錯）。SQL Developer 請用「執行指令碼」（F5）。
 -- 注意：本檔不含任何帳密、主機位址。AP_USER 是殼 jar 的連線帳號名，不是機密。
@@ -47,12 +47,22 @@ COMMENT ON COLUMN IM_ACCT_ROLE_PERM.CREATE_BY IS '第一次授予人員工號；
 COMMENT ON COLUMN IM_ACCT_ROLE_PERM.UPDATE_DATE IS '最後更新日期（含時分秒）：拿掉或重新授予時寫入。新增時為空';
 COMMENT ON COLUMN IM_ACCT_ROLE_PERM.UPDATE_BY IS '最後更新人員工號：拿掉或重新授予的人';
 
+-- ===== 資料：SYS_ADMIN 的角色說明（角色指派頁、角色權限設定頁會顯示）
+-- 初始資料原本寫「…；角色指派與執行人對照第一階段以 DB 維護」，畫面上線後拿掉後半句（與 db\infra_manager_init_data.sql 同步）。
+-- 只在說明仍是初始舊字時才改，避免蓋掉之後有人改過的值；不寫 UPDATE_*（比照初始資料，CREATE_BY＝SYSTEM 的資料修正）。
+UPDATE IM_ACCT_ROLE
+   SET ROLE_DESCR = '切換身分、手動觸發排程'
+ WHERE ROLE_ID = 'SYS_ADMIN'
+   AND ROLE_DESCR = '切換身分、手動觸發排程；角色指派與執行人對照第一階段以 DB 維護';
+COMMIT;
+
 -- ===== 執行後自我檢查（唯讀）
 -- 期望：第一句 4 列，COMMENTS 皆不含「第一階段」「預留」字樣；
 --       第二句 6 列（IM_ACCT_ADMIN_LOG 的 ACTION_CODE、CONTENT_JSON、REASON、TARGET_USER_ID，加 IM_ACCT_ROLE_USER.CREATE_BY、
 --       IM_ACCT_ROLE_PERM.CREATE_BY），ACTION_CODE 那列含 ROLE_PERM_SET；
 --       第三句 AP_USER 對 IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_PERM、IM_ACCT_ROLE_PERM 至少各有 SELECT 與 UPDATE、
---       IM_ACCT_ROLE_USER／IM_EXEC_MAP／IM_ACCT_ROLE_PERM／IM_ACCT_ADMIN_LOG 另有 INSERT（名單維護與角色權限設定 API 需要；沒有就要補 GRANT 並更新本檔）。
+--       IM_ACCT_ROLE_USER／IM_EXEC_MAP／IM_ACCT_ROLE_PERM／IM_ACCT_ADMIN_LOG 另有 INSERT（名單維護與角色權限設定 API 需要；沒有就要補 GRANT 並更新本檔）；
+--       第四句 1 列，ROLE_DESCR＝「切換身分、手動觸發排程」（若是別的字，代表有人改過，本檔不動它）。
 -- 以下解除遇錯即停：互動式 SQL*Plus 用 @ 執行本檔後，同一連線再打錯指令才不會直接結束 SQL*Plus。
 WHENEVER SQLERROR CONTINUE
 SELECT TABLE_NAME, COMMENTS FROM USER_TAB_COMMENTS
@@ -65,3 +75,4 @@ SELECT GRANTEE, TABLE_NAME, PRIVILEGE FROM USER_TAB_PRIVS
  WHERE GRANTEE = 'AP_USER'
    AND TABLE_NAME IN ('IM_ACCT_ADMIN_LOG', 'IM_ACCT_ROLE', 'IM_ACCT_ROLE_USER', 'IM_EXEC_MAP', 'IM_ACCT_PERM', 'IM_ACCT_ROLE_PERM')
  ORDER BY TABLE_NAME, PRIVILEGE;
+SELECT ROLE_ID, ROLE_DESCR FROM IM_ACCT_ROLE WHERE ROLE_ID = 'SYS_ADMIN';

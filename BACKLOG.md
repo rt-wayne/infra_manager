@@ -17,7 +17,7 @@
 | 89 | 角色權限維護介面：角色指派、執行人對照兩頁（取代改 DB），另加第三頁設定角色可做哪些事／看到哪些頁面（角色 × 權限碼）；每次異動寫系統管理軌跡、原因必填，移除會卡住在途單或最後一位系統管理員時拒絕 | [backlog/89-角色權限維護介面.md](backlog/89-角色權限維護介面.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：階段 6 回合 1 已完成（執行人對照頁 `/admin/executors`、導覽兩碼其一顯示；前端測試 257 筆全過、建置通過；結果見計畫檔階段 6）。開階段 6 回合 2＝文件收尾，依計畫檔「階段 6」段與「文件影響」段逐條做：PRD 全段改現況（含第 46 行維護畫面列與第 106 項、API 段標題下「前端尚無畫面」、導覽列「本功能分批施工中」、第 120 行 SYS_ROLE／SYS_EXECUTOR 狀態、第 982 行初始資料說明、「角色 × 權限」表改「初始資料、現況以 DB 為準」）、SETUP 第 6 節改「平常用畫面、DB 只作備援」並加 GENERAL 權限調整 SQL 段、`db\infra_manager_init_data.sql:170-171` 說明 (c)、`db\infra_manager_create_table.sql` COMMENT 同步遞增腳本、SYS_ADMIN 角色說明「第一階段以 DB 維護」（DB 資料文字，回合 1 結果有記）；第 11 項與第 89 項結案；完成判定逐條對照（計畫第 88 行）。之後階段 6 收尾：code-reviewer（起點 a3bed5b）＋test-runner 端到端（含執行人頁與 E23 畫面），殼 jar 要重建才帶新前端
+- 下一步：階段 6 回合 2（文件收尾）已完成，第 11、82、99、106 項已結案；第 89 項留在進行中，等階段 6 收尾審查通過才結案。**使用者要先以 RD_USER 重跑 `db\infra_manager_89_role_admin.sql`**（新增 SYS_ADMIN 角色說明的 UPDATE），再開階段 6 收尾：平行派 code-reviewer（起點 a3bed5b，含回合 1 程式與回合 2 文件、遞增腳本）＋test-runner（前端單元測試＋實機端到端：執行人頁指派／移除、F7 提示、不開放新增類別加註、只有 SYS_EXECUTOR 時導覽只見執行人對照、E23 畫面；殼 jar 已於 2026-10-19 重建帶入新前端）；通過後第 89 項結案（BACKLOG 移除、CHANGELOG、計畫檔審查結果）
 - 已改動（未 commit）：無（回合 1 已 commit）
 - 本階段起點：a3bed5b（階段 6，2026-10-19 開工）
 - 卡住／待確認：無
@@ -27,7 +27,6 @@
 | ID | 摘要 | 提出日 | 詳情 |
 |----|------|--------|------|
 | 8 | `/me` 回 401 以外的錯誤時，需權限的頁面導向無權限頁而非顯示 U09「查詢失敗，請稍後再試」，要整頁重新整理才恢復（`useSession.ts:59-64`） | 2026-10-10 | — |
-| 11 | IM_ACCT_ADMIN_LOG.CONTENT_JSON 宣告 VARCHAR2(2000 CHAR)，受單欄 4000 bytes 限制實際約只容 1333 個中文字；目前只存切換對象顯示名不會超過，日後寫入更多內容前須處理 | 2026-10-10 | — |
 | 12 | DAO 以參數顯式綁定 NULL 會蓋過 DB DEFAULT（IS_PRIV、EXPIRY_TYPE_CODE、IS_UNIQUE_CONF 等必填欄）；目前 Service 都先填值所以沒出事，日後新路徑漏填會直接 ORA-01400 | 2026-10-10 | — |
 | 13 | 顯示名兩種算法不一致：`AcctReqDao.nameExpr`（第 42 行，用於第 56-58、181 行與 `AttachDao.java:43`）不 trim、無工號退回；快照用的 `Texts.displayName`（`Texts.java:35-42`）有 trim 與英文名 → 中文名 → 工號退回 | 2026-10-10 | — |
 | 14 | 第二階段功能：定期審查、統計頁、批次匯出帳號歷史（SA 第 8.2 節，同用 ACC_EXPORT）、巡檢匯出、資產分類與巡檢項目維護（緊急存取已拆出為第 46 項；帳號權限清單匯出已於第 80 項完成）；目前只有權限碼與預留欄位，無程式 | 2026-10-10 | — |
@@ -74,7 +73,6 @@
 | 73 | `SETUP.md` 第 8 節「改名部署步驟」第 6 步新增 Apache `ProxyPass` 後沒寫要重載 Apache（例如 `apachectl -t` 檢查語法後重載，實際指令依 UAT 環境），第 9 步「移除舊規則」同樣；漏做時驗證會出現「直連通、經 Apache 404」，負責人會誤以為規則寫錯。第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
 | 74 | `SETUP.md` 第 8 節「改完 `host.properties` 要重啟殼 jar」（暗示不用重新打包）與 `infra_manager_web\README.md` 第 399 行「打包在 jar 內，改完要重新建置」互相矛盾；要先向 UAT 負責人確認 UAT 實際讀 jar 內那份還是共用 config 目錄的同名檔，再統一說法。已知線索（2026-10-16）：jar 一律在開發機打包、由使用者人工交給 UAT 負責人；UAT 啟動參數帶 `--spring.config.additional-location=<共用 config 目錄>`，該目錄同名檔**有寫到的鍵**優先於 jar 內的值（逐鍵合併）——若 UAT 共用目錄的 `host.properties` 有那個鍵，改它重啟即可，否則要在開發機改 jar 內那份並重新打包。批 1 之前就存在，第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
 | 81 | 帳號列表匯出沒有後端參與，兩個缺口：(1) ACC_EXPORT 只在前端判斷（決定按鈕顯示），沒有匯出 API、後端不檢查——檔案由瀏覽器用 `/accounts` 已查到的資料產生，那支 API 只檢查 ACC_LIST_FULL；目前只有 ACCT_REGISTRY 同時有兩碼，沒有實際落差，日後把兩碼拆給不同角色時要改成後端產檔並檢查 ACC_EXPORT。(2) 匯出不寫稽核紀錄，與 `~/.claude/security.md`「批量資料操作（匯出）必須記錄 audit log」衝突：清冊含特權帳號名稱、所屬系統、使用人且可離線流通，外流時查不到誰、何時匯出；補法是後端加輕量 API，前端匯出前呼叫，寫一筆 IM_ACCT_ADMIN_LOG（誰、何時、篩選條件、筆數）。第 80 項使用者裁示 ④A（前端產檔）時登記 (1)；code-reviewer 提出 (2)，使用者 2026-10-16 裁示維持現狀、併入本項 | 2026-10-16 | — |
-| 82 | `PRD.md` 權限碼段「階段 2、3 的權限碼只存在於資料，程式沒有對應功能」與現況不符：EMG_APPLY、EMG_VIEW_ALL、EMG_DECIDE 表上仍標階段 2，但緊急存取已上線（第 46 項）。第 80 項改 ACC_EXPORT 階段時發現，未改 | 2026-10-16 | — |
 | 83 | 帳號匯出 xlsx 公式注入殘留：字串一律寫成文字（sharedStrings），開檔不會執行；但帳號名稱、所屬系統、使用人是自由輸入，使用者在 Excel 對以 `=`／`+`／`-`／`@` 開頭的格子按 F2→Enter 或另存 CSV 再開時會被當公式。較窄修法：這幾欄寫成 `{ value, format: '@' }`（`write-excel-file` 的 `row.js:76` 支援），CSV 路徑仍擋不住。第 80 項 code-reviewer 提出 | 2026-10-16 | — |
 | 84 | 帳號匯出在背景執行緒被擋時會卡在「匯出中…」不報錯：fflate 的 `wk` 只掛 `onmessage` 沒有 `onerror`，CSP 擋下時 Promise 永不結束（test-runner 實測對照組 25 秒逾時、無錯誤）。目前殼 jar CSP 已放行，只在另有更嚴的 CSP（例如 UAT Apache 另加標頭、公司瀏覽器原則）時發生。建議 `exportAccounts` 外包約 30 秒逾時（`Promise.race`）並 toast；同時修正 `SecurityHeadersConfig.java` 註解、PRD「安全標頭」段寫的「匯出失敗」（實際是卡住），以及 `AccountExport.spec.ts` 以 reject 模擬失敗的不真實案例。第 80 項 code-reviewer 提出 | 2026-10-16 | — |
 | 85 | 申請表單必填星號測試只涵蓋新增、門禁卡新增、停用三種；異動（只標未鎖的申請單位、使用人、原因、有效期限）、門禁卡異動（門禁範圍有、卡號無）、重新啟用、新增單退件重送（類別不標、名稱與系統要標）、刪除都沒測；預期陣列手寫、未從 `missingFields` 推導，「與送出檢查一致」本身沒有被鎖住。第 80 項 code-reviewer 提出 | 2026-10-16 | — |
@@ -89,13 +87,11 @@
 | 95 | `AdminMember.grantDate` 缺 `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`，會輸出 ISO 格式（中間帶 T），與 `Acct`、`AcctHist`、`AcctAttach` 等既有回應 model 不一致；階段 4 前端接之前補上。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
 | 96 | 在途申請單查詢 `RoleAdminDao.FIND_IN_FLIGHT_BY_STAGE_PERM` 只以 `REQ_STATE_CODE IN ('REVIEW','VERIFY') AND S.PERM_ID = :permId` 篩選，沒過濾關卡 `S.STATUS = 1`、也沒核對 REVIEW 配關卡 2～5／VERIFY 配關卡 7，比 `PermissionService.canHandleNow` 寬；只有資料異常的單會被多擋（本來就沒人能處理）。改法：至少加 `S.STATUS = 1`。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
 | 97 | `USER_ID_MAX = 30` 在 `RoleAdminService`、`AdminLogWriter`、`AuthService` 各定義一次；`RoleAdminService.requirePermOrDeny` 以比對動作碼決定 JSON 鍵叫 roleId 還是 catgId，階段 2 加執行人對照時要同步。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
-| 99 | SETUP 第 6 節開頭叫讀者 DB 直接改前用「查每個人實際生效的角色」確認類別不會沒人處理，但那句只查角色、不查執行人對照。補一句唯讀查詢：依 CATG_ID 計啟用中執行人數（口徑同 `RoleAdminDao.COUNT_EXECUTORS`），加一句列出停在關卡 6（EXEC、6）的單號。第 89 項階段 2 code-reviewer 提出（S2） | 2026-10-19 | — |
 | 101 | `RoleAdminServiceTest` 沒鎖住兩碼分界：「只有 SYS_ROLE 呼叫 grantExecutor／revokeExecutor 要 403＋DENY」「只有 SYS_EXECUTOR 呼叫 grantRole 要 403」；revokeExecutor 的 403 寫 DENY、移除路徑類別不合法 400 也沒單獨案例。第 89 項階段 2 code-reviewer 提出（S4） | 2026-10-19 | — |
 | 102 | `RoleAdminDao.FIND_IN_FLIGHT_EXEC_BY_CATG` 對 IM_ACCT_APPR_STAGE 用內部 JOIN（只為取關卡名）；關卡 6 那列若不見，在途回空，移除最後一位執行人會被放行。改 LEFT JOIN＋`NVL(S.STAGE_NAME, '執行回報')`。資料壞掉時往放行錯的性質，機率低。第 89 項階段 2 code-reviewer 提出（S5） | 2026-10-19 | — |
 | 103 | 帳號類別 STATUS＝0（軟刪除）時，該類別的執行人不出現在 /admin/executors、移除 API 回 400，但 `PermDao.FIND_EXEC_CATGS`／`isExecutor` 不看類別狀態，那些人仍保有執行人身分（能處理該類別關卡 6 單、看到到期帳號）。目前 8 類皆 STATUS＝1。可讓 revoke 允許 STATUS＝0 類別，或在 PRD／SETUP 註明「軟刪除類別前先移除其執行人」。第 89 項階段 2 code-reviewer 提出（S6） | 2026-10-19 | — |
 | 104 | `RoleAdminService.executors()` 呼叫 `codeService.getCodes()`，每次多查資產分類與關卡兩句，實際只用類別；CodeService 加只回類別的方法。第 89 項階段 2 code-reviewer 提出（S7） | 2026-10-19 | — |
 | 105 | `db/infra_manager_89_role_admin.sql` 檔尾第二句只核對 5 個欄位 COMMENT，漏了 IM_EXEC_MAP 的 CREATE_BY／UPDATE_DATE／UPDATE_BY 與 IM_ACCT_ROLE_USER 的 UPDATE_DATE／UPDATE_BY；擴成 10 欄、期望值改 10 列（中文 COMMENT 無聲變亂碼是檔頭警告的失敗模式）。第 89 項階段 2 code-reviewer 提出（S8） | 2026-10-19 | — |
-| 106 | PRD 第 46 行（「系統不提供的功能」維護畫面列）括號引用的 API 段標題「系統管理——角色指派與執行人對照」已改名為「…與角色權限設定」，且沒寫角色權限設定 API 已上線、寫軌跡；改成「角色指派、執行人對照、角色權限設定的後端 API 已上線…（見 API 規格『系統管理——角色指派、執行人對照與角色權限設定』）」。第 89 項階段 3 code-reviewer 提出（S1） | 2026-10-19 | — |
 | 107 | `RolePermAdminServiceTest` 成功案例沒斷言隱藏碼（假資料 GOV 的 REVIEW_LIST＝1）未被更新；計畫完成判定要求「隱藏碼存檔後原樣保留」，目前只測到送隱藏碼回 400。加 `verify(..., never()).updateRolePermStatus(eq("GOV"), eq("REVIEW_LIST"), ...)`。第 89 項階段 3 code-reviewer 提出（S2） | 2026-10-19 | — |
 | 108 | `RolePermAdminService.save` 的軌跡 memberCount 在取鎖前查、且用全部角色的 GROUP BY（`RolePermAdminService.java:161`）；同時有人改成員時軌跡人數可能是舊值。移進取鎖後，可另加單一角色 COUNT。第 89 項階段 3 code-reviewer 提出（S3） | 2026-10-19 | — |
 | 109 | `RolePermAdminService.save` 約 90 行（`:131-220`）超過 50 行門檻；把取鎖後第 ⑦～⑪ 步抽成私有方法，save 只留驗證順序與 DENY 分支。第 89 項階段 3 code-reviewer 提出（S4） | 2026-10-19 | — |
@@ -110,6 +106,7 @@
 | 118 | 角色權限設定頁 `beforeunload` 用 `ev.preventDefault()`＋`ev.returnValue = ''`：依 HTML 規格 returnValue 空字串不觸發提示、只靠 preventDefault，Chrome／Edge 119 以上才支援；公司環境瀏覽器較舊時關分頁不會攔。改設非空字串（例 `'unsaved'`）即可。第 89 項階段 5 code-reviewer 提出（S5） | 2026-10-19 | — |
 | 119 | `RolePermSaveModal.vue` 定義 `REASON_MAX = 500` 做送出檢查，但沒把 `:max` 傳給 ReasonField，字數顯示靠 ReasonField 的預設值 500；日後只改一處會讓「N / 上限」與送出檢查不一致。比照 `MemberChangeModal.vue` 傳入 `:max`。使用者看不到差別，這是內部品質問題。第 89 項階段 5 code-reviewer 提出（S7） | 2026-10-19 | — |
 | 120 | 共用版面在 1440×900 視窗下整頁高度 932px、比視窗多約 32px，左側深色導覽列底下露出一條淺色帶（`app.css` 的 `.sidebar` 高度跟著 `.app` 的 `min-height: 100vh`，內容區超出時導覽列不延伸）；階段 4、5 的實機截圖都有，不是第 89 項造成。可讓 `.sidebar` 用 sticky 或 `.app` 改 `min-height` 為內容高。第 89 項階段 5 test-runner 實機截圖時觀察到 | 2026-10-19 | — |
+| 121 | `PRD.md` 約 160 KB、約 4 萬 tokens（÷4 換算），超過健康線 3 萬，每次開工載入成本高；可委派 doc-writer 依「PRD 健檢與重整」段做一次瘦身（例如把 API 規格或資料字典拆到附檔）。既有體積、非第 89 項造成。第 89 項階段 6 回合 2 doc-writer 量測時提出 | 2026-10-19 | — |
 | 79 | UAT 的附件根目錄（`infra.manager.attach.dir` 的值）目前設在哪、要不要隨改名搬到新目錄名；DB 的 `IM_ACCT_ATTACH.FILE_PATH` 存相對路徑，搬檔＋改設定值即可、不用動資料。改名部署時 SETUP 第 8 節寫「值可以維持原路徑」，不搬也能運作。第 68 項計畫待確認 2，結案時移入 | 2026-10-15 | — |
 
 ## 已拍板不做

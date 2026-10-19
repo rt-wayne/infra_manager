@@ -17,7 +17,7 @@
 WHENEVER SQLERROR EXIT ROLLBACK
 
 -- ===== IM_ACCT_ROLE（9 筆角色）
-INSERT INTO IM_ACCT_ROLE (ROLE_ID, ROLE_NAME, ROLE_DESCR, IS_SYSTEM, SORT_SEQ, STATUS, CREATE_DATE, CREATE_BY, UPDATE_DATE, UPDATE_BY) VALUES ('SYS_ADMIN', '系統管理員', '切換身分、手動觸發排程；角色指派與執行人對照第一階段以 DB 維護', 1, 1, 1, SYSDATE, 'SYSTEM', NULL, NULL);
+INSERT INTO IM_ACCT_ROLE (ROLE_ID, ROLE_NAME, ROLE_DESCR, IS_SYSTEM, SORT_SEQ, STATUS, CREATE_DATE, CREATE_BY, UPDATE_DATE, UPDATE_BY) VALUES ('SYS_ADMIN', '系統管理員', '切換身分、手動觸發排程', 1, 1, 1, SYSDATE, 'SYSTEM', NULL, NULL);
 INSERT INTO IM_ACCT_ROLE (ROLE_ID, ROLE_NAME, ROLE_DESCR, IS_SYSTEM, SORT_SEQ, STATUS, CREATE_DATE, CREATE_BY, UPDATE_DATE, UPDATE_BY) VALUES ('GENERAL', '一般人員', '送出申請、查自己的申請；所有啟用中使用者自動擁有，不存角色人員資料列', 1, 2, 1, SYSDATE, 'SYSTEM', NULL, NULL);
 INSERT INTO IM_ACCT_ROLE (ROLE_ID, ROLE_NAME, ROLE_DESCR, IS_SYSTEM, SORT_SEQ, STATUS, CREATE_DATE, CREATE_BY, UPDATE_DATE, UPDATE_BY) VALUES ('DC_ADMIN', '機房管理員', '關卡 2', 0, 3, 1, SYSDATE, 'SYSTEM', NULL, NULL);
 INSERT INTO IM_ACCT_ROLE (ROLE_ID, ROLE_NAME, ROLE_DESCR, IS_SYSTEM, SORT_SEQ, STATUS, CREATE_DATE, CREATE_BY, UPDATE_DATE, UPDATE_BY) VALUES ('INFRA_MGR', 'Infra 主管', '關卡 3；鈴鐺看全部', 0, 4, 1, SYSDATE, 'SYSTEM', NULL, NULL);
@@ -167,8 +167,10 @@ COMMIT;
 -- (b) 關卡 6（執行回報）認的是執行人對照表 IM_EXEC_MAP、不是角色：每個帳號
 --     類別要另外 INSERT 一列（CATG_ID＋USER_ID），否則該類別的申請單走到
 --     關卡 6 會沒有人能執行
--- (c) 使用者、角色指派、執行人對照第一階段都沒有維護畫面，之後新增其他
---     使用者也一律比照本範本用 DB 維護（維護 SQL 見 SETUP.md「DB 維護」）。
+-- (c) 使用者沒有維護畫面，之後新增其他使用者也一律比照本範本用 DB 維護
+--     （維護 SQL 見 SETUP.md 第 6 節）。角色指派與執行人對照平常用系統管理
+--     畫面維護（寫系統管理軌跡），DB 直接改只作備援、不留軌跡；只有第一位
+--     系統管理員因為還沒有人能進畫面，才必須用本範本以 DB 設定。
 --
 -- INSERT INTO IM_ACCT_USER (USER_ID, USER_EN_NAME, USER_NAME, DEPT_NAME, EMAIL, PWD_HASH, PWD_UPDATE_DATE, STATUS, CREATE_DATE, CREATE_BY)
 -- VALUES ('【工號】', '【英文名】', '【中文姓名】', '【部門】', '【Email】', '【密碼雜湊】', SYSDATE, 1, SYSDATE, 'SYSTEM');

@@ -18,12 +18,12 @@
 
 ### 刻意偏離 SA v0.5 的決定
 
+條號固定、不重新編號（本檔與 `CHANGELOG.md` 以條號互指）；表中缺號是已不再偏離的條目。
+
 | # | SA 規則 | 現況 |
 |---|---|---|
 | 1 | 登入與使用者管理與其他模組共用，本模組不開發 | 自建 IM_ACCT_USER、IM_ACCT_LOGIN_TOKEN；取身分集中在單一介面（`IdentityProvider`），日後換共用登入只換實作 |
 | 2 | 毫秒時間戳 | 一律 DATE（到秒）；同秒事件以流水號排序 |
-| 3 | 角色、執行人對照由畫面維護、每次變更寫軌跡、原因必填 | 純 DB 維護，不留軌跡；管理軌跡只記切換身分／切回 |
-| 4 | 移除角色最後一位成員時，若有在途項目卡在該角色則拒絕 | 不檢查；改 DB 的人自行確認 |
 | 5 | J01 單筆：狀態、歷史、通知紀錄同一交易 | 狀態＋歷史同一交易；寄信與通知紀錄在交易提交後，漏寄由下次執行補上 |
 | 6 | §3.2 代理操作一律顯示「Hank（以 Gary 身分）」格式 | 帳號歷史沿用 SA 格式；**巡檢**的填寫人與處理人改顯示「{代理身分}（實際操作人：{實際操作人}）」（見「切換身分」） |
 | 7 | §4.3 權限清單 | 另加 ACC_EXPIRY_ALL（到期提醒看全部帳號）、SYS_JOB_RUN（手動觸發排程）兩個權限碼 |
@@ -43,7 +43,7 @@
 
 | 項目 | 現況 |
 |---|---|
-| 維護畫面 | 使用者（含重設密碼、解鎖）、巡檢項目、資產分類、帳號類別開關：一律 DB 直接維護，無 API、無畫面、不寫管理軌跡（步驟見 `SETUP.md`）。角色指派、執行人對照的後端 API 已上線、寫系統管理軌跡（見 API 規格「系統管理——角色指派與執行人對照」），畫面施工中（進度見 BACKLOG 第 89 項）；DB 直接改只作備援 |
+| 維護畫面 | 使用者（含重設密碼、解鎖）、巡檢項目、資產分類、帳號類別開關：一律 DB 直接維護，無 API、無畫面、不寫管理軌跡（步驟見 `SETUP.md` 第 6 節）。一般人員（GENERAL）的權限也只能 DB 維護（角色權限設定頁對 GENERAL 唯讀）。角色指派、執行人對照、角色權限設定有畫面（見「畫面說明」`/admin/roles`、`/admin/executors`、`/admin/role-perms`）與後端 API（見 API 規格「系統管理——角色指派、執行人對照與角色權限設定」），每次變更寫系統管理軌跡、原因必填；DB 直接改名單只作備援，不留軌跡、不做在途檢查與「最後一位角色指派權限持有人」檢查。第一位系統管理員仍須以 DB 設定（沒有人持有 SYS_ROLE 時進不了畫面） |
 | 帳號匯入、既有帳號轉入 | 無（IM_ACCT.SOURCE_CODE＝MIGRATE 為預留值，程式不寫入） |
 | 其他 | 改密碼、AD 登入、代理人、人員離職處理、系統管理軌跡查詢畫面（以 DB 查）、寄信重試與發件匣 |
 | 展延 | 無；要延長就重新提新增申請，或以「修改」調整已核准帳號的到期日（見 `BACKLOG.md` 已拍板不做） |
@@ -86,7 +86,7 @@
 #### 2. 權限與資料範圍
 
 - 程式只判斷**權限碼**，不判斷角色名或人名。使用者的權限＝其有效角色展開的權限碼，再加上 GENERAL 角色的權限（所有啟用中使用者自動擁有，不存角色人員資料列）。
-- 每次請求依當下 DB 名單重算，不跨請求快取：改 DB 的角色、執行人對照，下一個請求就生效；已完成的簽核不受影響。
+- 每次請求依當下 DB 名單重算，不跨請求快取：不論用畫面或直接改 DB 調整角色指派、執行人對照、角色權限，下一個請求就生效；已完成的簽核不受影響。
 - 沒有權限 → 403 P01；有權限但狀態或版本不符 → 409。
 - 前端只依 `/me` 的 permissions[] 決定導覽與按鈕；後端一律再驗。
 
@@ -94,7 +94,7 @@
 
 | 代碼＝中文 | 職責 |
 |---|---|
-| SYS_ADMIN＝系統管理員 | 切換身分、手動觸發排程；排程失敗通知收件人 |
+| SYS_ADMIN＝系統管理員 | 角色指派、執行人對照、角色權限設定、切換身分、手動觸發排程；排程失敗通知收件人（初始資料的授予，見「角色 × 權限」） |
 | GENERAL＝一般人員 | 送出申請、查自己的申請；所有啟用中使用者自動擁有 |
 | DC_ADMIN＝機房管理員 | 關卡 2 |
 | INFRA_MGR＝Infra 主管 | 關卡 3；鈴鐺看全部 |
@@ -117,21 +117,21 @@
 | INSP_VIEW＝巡檢紀錄查詢與明細 | INSP | 1 |
 | INSP_CREATE＝填寫巡檢 | INSP | 1 |
 | INSP_RESOLVE＝標記異常已處理 | INSP | 1 |
-| SYS_ROLE＝角色指派、SYS_EXECUTOR＝執行人對照維護 | SYS | 1（後端 API 已上線，畫面施工中，見 BACKLOG 第 89 項） |
+| SYS_ROLE＝角色指派（含角色權限設定）、SYS_EXECUTOR＝執行人對照維護 | SYS | 1 |
 | SYS_AUDIT_VIEW＝查詢系統管理軌跡 | SYS | 1（只有碼，無對應功能） |
 | SYS_IMPERSONATE＝切換身分 | SYS | 1 |
 | SYS_JOB_RUN＝手動觸發排程 | SYS | 1 |
 | ACC_EXPORT＝帳號權限清單匯出（帳號列表「匯出 Excel」） | ACCT | 1（同碼的「批次匯出帳號歷史」仍為階段 2，見 BACKLOG 第 14 項） |
 | REVIEW_LIST、REVIEW_SIGN_INFRA、REVIEW_SIGN_GOV＝定期審查清單／Infra 半簽核／治理半簽核 | REVIEW | 2 |
-| EMG_APPLY、EMG_VIEW_ALL、EMG_DECIDE＝緊急存取申請／看全部／補核准退回結案 | EMG | 2 |
+| EMG_APPLY、EMG_VIEW_ALL、EMG_DECIDE＝緊急存取申請／看全部／補核准退回結案 | EMG | 1（見「14. 緊急存取」） |
 | STATS_VIEW＝統計頁 | STATS | 2 |
 | INSP_EXPORT＝巡檢紀錄匯出 | INSP | 2 |
 | MAINT_ASSET_CODE＝資產分類說明維護 | ACCT | 3 |
 | MAINT_INSP_ITEM＝巡檢項目維護 | INSP | 3 |
 
-階段 2、3 的權限碼只存在於資料，程式沒有對應功能。MAINT_ASSET_CODE、MAINT_INSP_ITEM 不授予任何角色。
+「階段」欄以程式現況為準：標 2、3 的權限碼只存在於資料，程式沒有對應功能。程式不讀 IM_ACCT_PERM 的 PHASE_CODE，所以兩者可能不同——ACC_EXPORT 與 EMG_APPLY、EMG_VIEW_ALL、EMG_DECIDE 在初始資料的 PHASE_CODE 為 2。有功能的碼以程式常數 `ADMIN_VISIBLE_PERMS`（20 碼）為準，角色權限設定頁只顯示這 20 碼；其餘 8 碼（SYS_AUDIT_VIEW 與標 2、3 的 7 碼）在頁上隱藏、不能勾選，既有授予原樣保留。MAINT_ASSET_CODE、MAINT_INSP_ITEM 初始資料不授予任何角色。
 
-**角色 × 權限（35 列）**
+**角色 × 權限**（初始資料 35 列，隨 `db\infra_manager_init_data.sql` 建立；上線後可在角色權限設定頁調整（GENERAL 除外，只能 DB 維護），現況以 DB 的 IM_ACCT_ROLE_PERM 為準，查詢 SQL 見 `SETUP.md` 第 6 節「查某個權限碼給了哪些角色」）
 
 | 角色 | 權限碼 |
 |---|---|
@@ -154,7 +154,7 @@
 | 對既有帳號提出異動（查詢） | ACC_SELF_SERVICE | 帳號名稱**完整精確比對**（去前後空白、區分大小寫），狀態為已核准／已逾期／已停用；不提供模糊查詢或瀏覽 |
 | 異動表單帶入 | ACC_APPLY | 須同時帶帳號名稱且精確相符，或我「可看該帳號」；狀態同上；否則 404 |
 | 完整帳號列表 | ACC_LIST_FULL | 全部（預設不含已刪除） |
-| 帳號列表匯出 | ACC_EXPORT（**只在前端判斷**是否顯示按鈕） | 目前列表已查到的資料，一律排除已刪除；檔案在瀏覽器產生、沒有匯出 API，資料來源是完整帳號列表（後端檢查 ACC_LIST_FULL）。目前只有 ACCT_REGISTRY 同時有這兩個碼，日後兩碼拆給不同角色時要改後端產檔。匯出**不寫稽核紀錄**（後端不知道誰、何時匯出；使用者 2026-10-16 裁示維持現狀）。兩者見 BACKLOG 第 81 項 |
+| 帳號列表匯出 | ACC_EXPORT（**只在前端判斷**是否顯示按鈕） | 目前列表已查到的資料，一律排除已刪除；檔案在瀏覽器產生、沒有匯出 API，資料來源是完整帳號列表（後端檢查 ACC_LIST_FULL）。初始資料只有 ACCT_REGISTRY 有這兩個碼；兩碼在角色權限設定頁可拆給不同角色（只有 ACC_EXPORT 沒有 ACC_LIST_FULL 時頁上黃字警示、不阻擋），拆開的後果見 BACKLOG 第 81 項。匯出**不寫稽核紀錄**（後端不知道誰、何時匯出；使用者 2026-10-16 裁示維持現狀）。兩者見 BACKLOG 第 81 項 |
 | 帳號明細、歷史 | 登入 | 「可看帳號」者 |
 | 申請單明細、附件下載與網頁開啟 | 登入 | 「可看申請單」者 |
 | 待辦 | 登入 | 我此刻能處理的 |
@@ -163,11 +163,15 @@
 | 代碼、資產分類說明 | 登入 | 全部 |
 | 切換身分名單 | 實際操作人有 SYS_IMPERSONATE | 啟用中、不含自己 |
 | 巡檢 | INSP_VIEW | 全部 |
+| 角色指派 | SYS_ROLE | 啟用中角色（不含 GENERAL）與 STATUS＝1 的指派（對象使用者已停用也列出、標示停用） |
+| 角色權限設定 | SYS_ROLE | 啟用中角色（含 GENERAL，唯讀）；只列 20 個有功能的權限碼 |
+| 執行人對照 | SYS_EXECUTOR | 8 個帳號類別（含不開放新增申請者）與 STATUS＝1 的對照（同上） |
+| 指派候選人 | SYS_ROLE 或 SYS_EXECUTOR | 啟用中使用者，含自己 |
 
 - **可看申請單**（任一）：我是申請人；我有 ACC_LIST_FULL；申請單在途且我此刻能處理目前關卡；我曾在這張單上操作過（歷史的實際操作人或代理身分是我）。
 - **可看帳號**（任一）：我有 ACC_LIST_FULL；我是原新增申請人；我曾對該帳號送過申請；我可看該帳號的任一張申請單（依上一條第 3、4 款）；該帳號在到期提醒範圍內，且我有 ACC_EXPIRY_ALL 或是該類別執行人。
 
-**執行人對照（關卡 6）**：IM_EXEC_MAP 中類別＝申請單類別、工號＝有效身分、STATUS＝1；同類別多人時任一人可執行。同一人可兼簽核人與執行人（系統不阻擋，只在歷史記 IS_SELF_ACTION）。
+**執行人對照（關卡 6）**：IM_EXEC_MAP 中類別＝申請單類別、工號＝有效身分、STATUS＝1；同類別多人時任一人可執行；名單在執行人對照頁（`/admin/executors`）維護。同一人可兼簽核人與執行人（系統不阻擋，只在歷史記 IS_SELF_ACTION）。
 
 #### 3. 切換身分
 
@@ -404,6 +408,7 @@
 - 寄送名單（設定檔的工號清單）限制誰會真的收到信：名單留空＝誰都不寄；「寄給所有人」打開時忽略名單。測試環境名單是 2410305、2606459（以 `environment.properties` 為準）。
 - 每位收件人寫一筆通知紀錄，依序判斷：無 Email → SKIP（ERR_MSG 空）；不在寄送名單 → SKIP（ERR_MSG「不在寄送名單」）；寄送例外 → FAIL（ERR_MSG＝例外類別名）；否則 SUCCESS。SKIP 不存 Email。收件人在寄送當下計算，只含啟用中使用者，同一封信同一人去重。
 - 角色型收件人為程式常數：到期前 7 天、轉逾期、每週彙總 → GOV；排程失敗 → SYS_ADMIN。
+- 下表寫「有某權限的人」的收件人，在寄送當下依權限碼計算：在角色權限設定頁改某角色的權限碼，會連帶改變誰收到依該權限寄的信（例：EMG_SUBMIT、EMG_OVERDUE 寄給 EMG_DECIDE 持有人，SUBMIT 寄給 APPR_G2 持有人）。
 
 | 事件 | 收件人 | 主旨 |
 |---|---|---|
@@ -581,7 +586,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | 資產分類說明 | 一律 |
 | 機房巡檢 → 巡檢紀錄 | 有 INSP_VIEW（整個區塊） |
 | 機房巡檢 → 新增巡檢 | 有 INSP_VIEW 且 INSP_CREATE |
-| 系統管理 → 角色指派 | 有 SYS_ROLE（整個區塊在 SYS_ROLE、SYS_EXECUTOR 持有其一時顯示，各項依自己的碼；本功能分批施工中，見 BACKLOG 第 89 項） |
+| 系統管理 → 角色指派 | 有 SYS_ROLE（整個區塊在 SYS_ROLE、SYS_EXECUTOR 持有其一時顯示，各項依自己的碼） |
 | 系統管理 → 角色權限設定 | 有 SYS_ROLE |
 | 系統管理 → 執行人對照 | 有 SYS_EXECUTOR |
 
@@ -698,13 +703,15 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | 巡檢送出 | 取號 → INSERT 巡檢單 → INSERT 全部結果 | — |
 | 標記處理 | 帶條件 UPDATE 結果（異常且未處理） | — |
 | 切換身分／切回 | UPDATE token 列 → INSERT 管理軌跡 | — |
+| 角色指派、執行人對照的指派／移除 | 鎖 IM_ACCT_ROLE 的 GENERAL 列（全域互斥）→ 名單現況（E21／E22）→ 移除才做持有人與在途檢查（E24／E23）→ 指派 UPDATE 0→1（無列才 INSERT）、移除 UPDATE 1→0 → INSERT 管理軌跡 SUCCESS | 被 E23／E24 擋下時先回滾，再於交易外寫 DENY |
+| 角色權限存檔 | 鎖同上 → 現況比對（E27）、持有人與在途檢查 → removed UPDATE 1→0、added UPDATE 0→1（影響 0 筆才 INSERT）→ INSERT 管理軌跡 ROLE_PERM_SET | 同上 |
 | J01 單筆轉逾期 | 帶條件 UPDATE 主表 → 歷史 EXPIRE | 由下一步驟寄 EXPIRED |
 
 **取號**（IM_DOC_SEQ）：樂觀 CAS——讀 CURR_SEQ → `UPDATE … SET CURR_SEQ＝原值＋1 WHERE DOC_TYPE_ID、SEQ_DATE、CURR_SEQ＝原值`，影響 0 筆重試，最多 10 次；當日第一筆先 INSERT，主鍵衝突改走 UPDATE。
 
 ### 資料結構
 
-23 張表、47 個索引（PK 23＋一般 24）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（23 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對）；角色指派與執行人對照改由畫面維護後，三張表（IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP）的 COMMENT 另有升級腳本 `db/infra_manager_89_role_admin.sql`（只改 COMMENT、不動結構、不需 GRANT——AP_USER 對相關表已有四種權限；可重跑；建表檔同句，新環境不必跑），命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
+23 張表、47 個索引（PK 23＋一般 24）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（23 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對）；系統管理相關四張表（IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM，說明由畫面維護與軌跡內容）的 COMMENT 另有既有環境升級腳本 `db/infra_manager_89_role_admin.sql`（改 COMMENT、不動結構、不需 GRANT——AP_USER 對相關表已有四種權限；資料只改 SYS_ADMIN 角色說明一個值，仍是初始舊字時才改；可重跑；建表檔與初始資料檔同步，新環境不必跑），命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
 
 **慣例**
 
@@ -736,11 +743,11 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 **IM_ACCT_PERM 權限碼**：PERM_ID（PK）VARCHAR2(30)；PERM_NAME VARCHAR2(50 CHAR) 必；MODULE_CODE VARCHAR2(10) 必（ACCT、INSP、SYS、REVIEW、EMG、STATS）；PHASE_CODE VARCHAR2(1) 必（1、2、3）；SORT_SEQ NUMBER(3) 必。STATUS＝0 不計入。
 
-**IM_ACCT_ROLE_PERM 角色權限對照**：ROLE_ID（PK）VARCHAR2(20)、PERM_ID（PK）VARCHAR2(30)；含 GENERAL 的列。STATUS＝0 即不再授予。索引 IND_IM_ACCT_ROLE_PERM_01（PERM_ID）。
+**IM_ACCT_ROLE_PERM 角色權限對照**：ROLE_ID（PK）VARCHAR2(20)、PERM_ID（PK）VARCHAR2(30)；含 GENERAL 的列。STATUS＝0 即不再授予。由角色權限設定頁維護（GENERAL 的列只能 DB 維護）；重新授予＝同列改回 1、只寫 UPDATE_*、保留 CREATE_*。索引 IND_IM_ACCT_ROLE_PERM_01（PERM_ID）。
 
-**IM_ACCT_ROLE_USER 角色人員**：ROLE_ID（PK）VARCHAR2(20)（不得為 GENERAL）、USER_ID（PK）VARCHAR2(30)。STATUS＝0 即不再具此角色（下一個請求生效）。索引 IND_IM_ACCT_ROLE_USER_01（USER_ID）。
+**IM_ACCT_ROLE_USER 角色人員**：ROLE_ID（PK）VARCHAR2(20)（不得為 GENERAL）、USER_ID（PK）VARCHAR2(30)。STATUS＝0 即不再具此角色（下一個請求生效）。由角色指派頁維護；重新指派＝同列改回 1、只寫 UPDATE_*、保留 CREATE_*。索引 IND_IM_ACCT_ROLE_USER_01（USER_ID）。
 
-**IM_EXEC_MAP 執行人對照**：CATG_ID（PK）VARCHAR2(10)、USER_ID（PK）VARCHAR2(30)。STATUS＝0 即失效。索引 IND_IM_EXEC_MAP_01（USER_ID）。
+**IM_EXEC_MAP 執行人對照**：CATG_ID（PK）VARCHAR2(10)、USER_ID（PK）VARCHAR2(30)。STATUS＝0 即失效。由執行人對照頁維護；重新指派同上。索引 IND_IM_EXEC_MAP_01（USER_ID）。
 
 **IM_ACCT_LOGIN_TOKEN 登入 token**（每次登入一列；過期列不自動清除；CREATE_BY＝登入者）
 
@@ -763,7 +770,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | ACT_DATE | DATE | ✓ | 發生時間 |
 | ACT_BY | VARCHAR2(30) | ✓ | 實際操作人 |
 | ACT_BY_NAME | VARCHAR2(100 CHAR) | ✓ | 顯示名快照 |
-| ACTION_CODE | VARCHAR2(30) | ✓ | IMPERSONATE、IMPERSONATE_END（切換身分）；ROLE_GRANT、ROLE_REVOKE（角色指派／移除）；EXEC_GRANT、EXEC_REVOKE（執行人指派／移除）；ROLE_PERM_SET（角色權限存檔，一次存檔可同時有加有拿、只寫一筆）；後端 API 皆已寫入，畫面分批施工中（進度見 BACKLOG 第 89 項） |
+| ACTION_CODE | VARCHAR2(30) | ✓ | IMPERSONATE、IMPERSONATE_END（切換身分）；ROLE_GRANT、ROLE_REVOKE（角色指派／移除）；EXEC_GRANT、EXEC_REVOKE（執行人指派／移除）；ROLE_PERM_SET（角色權限存檔，一次存檔可同時有加有拿、只寫一筆）。DB 直接改名單不寫本表 |
 | TARGET_USER_ID | VARCHAR2(30) | | 對象使用者（超過欄寬的輸入存空；ROLE_PERM_SET 為空，對象是角色、roleId 在 CONTENT_JSON） |
 | CONTENT_JSON | VARCHAR2(2000 CHAR) | | 切換時記 `{"targetUserName":"…"}`；名單維護成功記 roleId＋roleName（角色）或 catgId＋catgName（執行人）、targetUserName、before.status（null＝原無此列／0／1）、after.status；被拒記 denyCode（NO_PERM／LAST_SYS_ROLE／IN_FLIGHT）、blockedPerms[]（執行人對照時放類別代碼）、blockedTotal、blockedIds[]（最多 50 筆）。角色權限存檔成功記 roleId、roleName、memberCount、added[]、removed[]；被拒另記 denyCode 與 blocked[{permId、total、ids[]（每碼最多 20 筆）}]，無權限時只記 roleId、addedCount、removedCount、denyCode。組好超過 3900 bytes 逐筆丟單號、保留總數 |
 | REASON | VARCHAR2(500 CHAR) | | 原因（切換身分為空；名單維護（角色指派、執行人對照、角色權限存檔）必填，500 字內，被拒時有帶就存） |
@@ -981,21 +988,21 @@ END
 
 **顯示名的兩種算法**：快照欄（*_NAME）由 `Texts.displayName` 產生（含 trim、英文名空白退回中文名再退回工號）；申請單明細的 applyByName／execByName／verifyByName 與附件上傳人則由 SQL 即時 JOIN 計算（`AcctReqDao.nameExpr`：中文名為空只顯示英文名，否則「英文名 (中文名)」，不 trim、無工號退回）。見 BACKLOG 第 13 項。
 
-**初始資料**（代碼表 7 張隨 `db\infra_manager_init_data.sql` 建立，CREATE_BY＝SYSTEM、STATUS＝1；人員三表 IM_ACCT_USER、IM_ACCT_ROLE_USER、IM_EXEC_MAP 不在該檔——使用者以 DB 手動維護，角色指派與執行人對照由系統管理 API 維護（畫面施工中，見 BACKLOG 第 89 項）、DB 直接改只作備援；筆數為測試 DB 實查值）
+**初始資料**（代碼表 7 張隨 `db\infra_manager_init_data.sql` 建立，CREATE_BY＝SYSTEM、STATUS＝1；人員三表 IM_ACCT_USER、IM_ACCT_ROLE_USER、IM_EXEC_MAP 不在該檔——使用者以 DB 手動維護，角色指派與執行人對照由系統管理畫面維護、DB 直接改只作備援；代碼表中 IM_ACCT_ROLE_PERM 的 35 列只是**初始**授予，上線後可在角色權限設定頁調整，現況以 DB 為準；筆數為測試 DB 2026-10-19 實查值，含 STATUS＝0 的列）
 
 | 表 | 筆數 | 內容 |
 |---|---|---|
 | IM_ACCT_ROLE | 9 | 見「角色」，SORT_SEQ 1～9 依表列順序（SYS_ADMIN、GENERAL、DC_ADMIN、INFRA_MGR、GOV、GOV_MGR、IT_HEAD、ACCT_REGISTRY、INSP_STAFF） |
 | IM_ACCT_PERM | 28 | 見「權限碼」 |
-| IM_ACCT_ROLE_PERM | 35 | 見「角色 × 權限」 |
+| IM_ACCT_ROLE_PERM | 36 | 啟用 35 筆，即「角色 × 權限」；另 1 筆 STATUS＝0 是實機測試加入再拿掉的 INSP_STAFF／ACC_EXPIRY_ALL |
 | IM_ACCT_APPR_STAGE | 7 | 見上方表定義 |
 | IM_ACCT_CATG | 8 | 見下 |
 | IM_ASSET_CLASS | 15 | 見「資產分類碼」與下方 CTRL_DESCR，SORT_SEQ 1～15 依代碼順序 |
 | IM_INSP_ITEM | 14 | 見「巡檢項目」，SORT_SEQ 1～14，ITEM_DESCR 為空 |
 | IM_EXEC_MAP | 52 | 啟用 12 筆；見下 |
 | IM_ACCT_USER | 13 | 見下 |
-| IM_ACCT_ROLE_USER | 54 | 啟用 22 筆；見下 |
-| 其他業務與紀錄表 | 0 | IM_ACCT、IM_ACCT_REQ、IM_ACCT_ATTACH、IM_ACCT_HIST、IM_INSP、IM_INSP_RESULT、IM_ACCT_NOTIFY_LOG、IM_ACCT_JOB_RUN、IM_ACCT_LOGIN_TOKEN、IM_ACCT_ADMIN_LOG、IM_DOC_SEQ |
+| IM_ACCT_ROLE_USER | 55 | 啟用 22 筆；見下 |
+| 其他業務與紀錄表 | — | 測試 DB 已有測試資料、筆數隨測試變動，不記：IM_ACCT、IM_ACCT_REQ、IM_ACCT_ATTACH、IM_ACCT_HIST、IM_INSP、IM_INSP_RESULT、IM_ACCT_NOTIFY_LOG、IM_ACCT_JOB_RUN、IM_ACCT_LOGIN_TOKEN、IM_ACCT_ADMIN_LOG、IM_DOC_SEQ |
 
 測試 DB 使用者（皆為真實人員；本表只記英文名，工號、中文姓名、部門以 DB 的 IM_ACCT_USER 為準；13 位皆啟用、未鎖定、有密碼雜湊）。表中只列啟用中（STATUS＝1）的角色指派與執行人對照：
 
@@ -1059,11 +1066,11 @@ END
 
 | 狀態碼 | 意義 |
 |---|---|
-| 400 | 驗證失敗（E01～E06、E10～E14、E17、E18、缺 versionNo 或必填 E02、欄位內容不正確、日期格式錯、不可切換為自己、新增申請不可指定帳號、巡檢時間不可晚於現在） |
+| 400 | 驗證失敗（E01～E06、E10～E14、E17、E18、缺 versionNo 或必填 E02、欄位內容不正確、日期格式錯、不可切換為自己、新增申請不可指定帳號、巡檢時間不可晚於現在、角色權限存檔沒有任何變更） |
 | 401 | A01、A02（登入）、A03（其他 API） |
 | 403 | P01：無權限碼、不在資料範圍、非原申請人重送、非該類別執行人 |
-| 404 | N01：單號／帳號／附件／巡檢單不存在、lookup 名稱不符、排程代碼不是 J01／J02／J03、切換對象不存在或停用 |
-| 409 | E07 在途、E08 版本或狀態不符、E09 帳號狀態不符前提、E16 排程執行中、E19 巡檢項目已處理或非異常、E20 未切換身分 |
+| 404 | N01：單號／帳號／附件／巡檢單不存在、lookup 名稱不符、排程代碼不是 J01／J02／J03、切換對象或指派對象不存在或停用 |
+| 409 | E07 在途、E08 版本或狀態不符、E09 帳號狀態不符前提、E16 排程執行中、E19 巡檢項目已處理或非異常、E20 未切換身分、E21～E27 系統管理（名單已變動、在途案件無人接手、最後一位 SYS_ROLE、切換身分中、鎖逾時、權限設定已被調整） |
 | 413 | E15 |
 | 500 | 其他（不外洩例外內容） |
 
@@ -1169,7 +1176,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 |---|---|---|---|---|---|
 | POST | `/jobs/{code}/run` | SYS_JOB_RUN | code＝J01／J02／J03；query：baseDate（選填；J01／J02 為日期 `yyyy-MM-dd`，J03 為時間點 `yyyy-MM-dd HH:mm:ss`、T 可換空白、可省秒） | runId、resultCode、affectedCnt | 403、404（其他 code）、400 E17、400（日期或時間格式錯）、409 E16 |
 
-**系統管理——角色指派、執行人對照與角色權限設定**（本功能分批施工中，進度見 BACKLOG 第 89 項；下列 9 支後端 API 已上線並經殼 jar 轉送，前端尚無畫面）
+**系統管理——角色指派、執行人對照與角色權限設定**（9 支，經殼 jar 轉送；前端畫面為 `/admin/roles`、`/admin/executors`、`/admin/role-perms`，見「畫面說明」路由表）
 
 | 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
 |---|---|---|---|---|---|
