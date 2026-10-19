@@ -677,7 +677,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 **前端主要程式**（`infra_manager_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/infra_manager_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage，key `infra_manager_web.token`、`infra_manager_web.identityChanged`；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\accountExport.ts`（帳號列表匯出與共用儲存格文字）、`utils\perms.ts`、`utils\codes.ts`。
 
-**殼 jar**：`BackendForwarder` 共用轉送（去掉長度類 header；log 不記 Authorization 與本文）；8 個 Controller 路徑與後端一一對應（含 `AdminController` 系統管理 7 支），只呼叫 BackendForwarder；`config\SecurityHeadersConfig` 以過濾器為所有回應加安全標頭。
+**殼 jar**：`BackendForwarder` 共用轉送（去掉長度類 header；log 不記 Authorization 與本文）；8 個 Controller 路徑與後端一一對應（含 `AdminController` 系統管理 9 支），只呼叫 BackendForwarder；`config\SecurityHeadersConfig` 以過濾器為所有回應加安全標頭。
 
 **各模組交易內容**
 
@@ -1163,7 +1163,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 |---|---|---|---|---|---|
 | POST | `/jobs/{code}/run` | SYS_JOB_RUN | code＝J01／J02／J03；query：baseDate（選填；J01／J02 為日期 `yyyy-MM-dd`，J03 為時間點 `yyyy-MM-dd HH:mm:ss`、T 可換空白、可省秒） | runId、resultCode、affectedCnt | 403、404（其他 code）、400 E17、400（日期或時間格式錯）、409 E16 |
 
-**系統管理——角色指派、執行人對照與角色權限設定**（本功能分批施工中，進度見 BACKLOG 第 89 項；下列前 7 支後端 API 已上線並經殼 jar 轉送，後 2 支（角色權限設定）後端已上線、殼 jar 尚未轉送；前端尚無畫面）
+**系統管理——角色指派、執行人對照與角色權限設定**（本功能分批施工中，進度見 BACKLOG 第 89 項；下列 9 支後端 API 已上線並經殼 jar 轉送，前端尚無畫面）
 
 | 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
 |---|---|---|---|---|---|

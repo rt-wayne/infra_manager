@@ -559,7 +559,7 @@ CREATE SEQUENCE SEQ_IM_ACCT_NOTIFY_LOG MINVALUE 1 INCREMENT BY 1 START WITH 1 NO
 
 -- ===== COMMENTS
 COMMENT ON TABLE IM_ACCT IS '帳號主表。被管理的帳號／憑證／門禁卡清冊，存目前生效的內容；新增申請送出時建立（狀態 REVIEW），關卡 6 執行回報時依申請內容更新；審查異常旗標 5 欄（IS_REVIEW_FLAG、REVIEW_FLAG_REASON、REVIEW_FLAG_SOURCE_CODE、REVIEW_FLAG_DATE、REVIEW_FLAG_BY）由緊急存取寫入，修改／停用／重新啟用申請在關卡 7 複驗通過時清除（決策 D42）。帳號單號（ACCT_ID）＝建立它的新增申請 REQ_ID。資料來源：IM_ACCT_REQ 流程寫入、緊急存取旗標。主鍵：ACCT_ID。保留：永久（刪除為狀態 DELETED）';
-COMMENT ON TABLE IM_ACCT_ADMIN_LOG IS '系統管理軌跡。只增不改；記切換身分（IMPERSONATE）與切回（IMPERSONATE_END）、角色指派／移除（ROLE_GRANT／ROLE_REVOKE）、執行人指派／移除（EXEC_GRANT／EXEC_REVOKE）；無權限或被規則擋下（最後一位持有人、在途案件）記 DENY。資料來源：切換身分 API、名單維護 API。主鍵：LOG_ID（序列 SEQ_IM_ACCT_ADMIN_LOG）。保留：永久';
+COMMENT ON TABLE IM_ACCT_ADMIN_LOG IS '系統管理軌跡。只增不改；記切換身分（IMPERSONATE）與切回（IMPERSONATE_END）、角色指派／移除（ROLE_GRANT／ROLE_REVOKE）、執行人指派／移除（EXEC_GRANT／EXEC_REVOKE）、角色權限存檔（ROLE_PERM_SET）；無權限或被規則擋下（最後一位持有人、在途案件）記 DENY。資料來源：切換身分 API、名單維護 API、角色權限設定 API。主鍵：LOG_ID（序列 SEQ_IM_ACCT_ADMIN_LOG）。保留：永久';
 COMMENT ON TABLE IM_ACCT_APPR_STAGE IS '簽核關卡。帳號申請單的關卡 1～7 與各關所需權限；五種申請類型（新增、修改、停用、重新啟用、刪除）皆走 1～7 關。資料來源：初始資料。主鍵：STAGE_ID。保留：永久';
 COMMENT ON TABLE IM_ACCT_ATTACH IS '申請單附件。關卡 1 的公文與關卡 6 的執行佐證；被新檔取代的舊檔 STATUS＝0（檔案保留）。上傳人與時間即 CREATE_BY、CREATE_DATE。資料來源：申請表單、執行回報。主鍵：ATTACH_ID（序列 SEQ_IM_ACCT_ATTACH）。保留：隨申請單永久';
 COMMENT ON TABLE IM_ACCT_CATG IS '帳號類別。帳號申請表單的 8 種類別；IS_ENABLED 控制新增表單是否可選（不影響既有帳號）；DOOR（機房門禁卡）有特殊欄位規則。資料來源：初始資料。主鍵：CATG_ID。保留：永久';
@@ -570,7 +570,7 @@ COMMENT ON TABLE IM_ACCT_NOTIFY_LOG IS '通知紀錄。每位收件人每封信�
 COMMENT ON TABLE IM_ACCT_PERM IS '權限碼。SA 4.3 的 26 個加上本案新增 ACC_EXPIRY_ALL、SYS_JOB_RUN，共 28 個一次建齊；程式以 can(身分, 權限碼) 判斷。資料來源：初始資料。主鍵：PERM_ID。保留：永久';
 COMMENT ON TABLE IM_ACCT_REQ IS '帳號申請單。存申請的內容與簽核進度，在途期間不動主表；停用、刪除申請由主表複製當下內容（快照）。同一帳號同時只能有一筆在途申請（IND_IM_ACCT_REQ_04）。資料來源：申請表單、各關卡動作。主鍵：REQ_ID。保留：永久';
 COMMENT ON TABLE IM_ACCT_ROLE IS '角色（帳號權限管理／機房巡檢專用）。角色經 IM_ACCT_ROLE_PERM 展開為權限碼，程式只判斷權限碼、不判斷角色名稱；與既有機房異動申請模組的角色表各自獨立。資料來源：初始資料。主鍵：ROLE_ID。保留：永久';
-COMMENT ON TABLE IM_ACCT_ROLE_PERM IS '角色權限對照。角色授予的權限碼；GENERAL 的權限以資料列存在，程式對每位啟用中使用者自動加上。授予人與時間即 CREATE_BY、CREATE_DATE。資料來源：初始資料（第一階段 DB 維護）。主鍵：ROLE_ID＋PERM_ID。保留：永久';
+COMMENT ON TABLE IM_ACCT_ROLE_PERM IS '角色權限對照。角色授予的權限碼；GENERAL 的權限以資料列存在，程式對每位啟用中使用者自動加上。拿掉＝STATUS 改 0；重新授予＝同列 STATUS 改回 1、只寫 UPDATE_*、保留第一次的 CREATE_*。資料來源：初始資料；上線後由角色權限設定畫面維護（寫系統管理軌跡 ROLE_PERM_SET；只開放有功能的權限碼，GENERAL 那列仍以 DB 維護）；DB 直接改不留軌跡、不檢查在途案件，只作備援。主鍵：ROLE_ID＋PERM_ID。保留：永久';
 COMMENT ON TABLE IM_ACCT_ROLE_USER IS '角色人員。一位人員可擁有多個角色；權限每次請求依當下名單判斷。不得存 GENERAL。移除＝STATUS 改 0；重新指派＝同列 STATUS 改回 1、只寫 UPDATE_*、保留第一次的 CREATE_*，所以最近一次指派人與時間＝NVL(UPDATE_*, CREATE_*)。資料來源：角色指派畫面（寫系統管理軌跡）；DB 直接改不留軌跡、不檢查在途案件，只作備援。主鍵：ROLE_ID＋USER_ID。保留：永久';
 COMMENT ON TABLE IM_ACCT_USER IS '使用者。本模組自建的登入使用者表（偏離 SA 3.1，日後合併共用登入時只換取身分實作）；STATUS＝1 才能登入，並自動擁有 GENERAL 角色權限。與既有機房異動申請模組的使用者表各自獨立。資料來源：DB 維護（第一階段無維護畫面）。主鍵：USER_ID。保留：永久';
 COMMENT ON TABLE IM_ASSET_CLASS IS '資產分類碼。依 SR-008-A04 資訊資產標示、保護與處置說明表的硬體／軟體分類碼，供申請表單選擇與資產分類說明頁顯示；IS_REVIEW_TRIGGER＝1 者納入定期審查條件。「未分類」不建資料列，以 ASSET_CLASS_ID 為空表示。資料來源：初始資料。主鍵：ASSET_CLASS_ID。保留：永久';
@@ -616,10 +616,10 @@ COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.LOG_ID IS '軌跡流水號（同秒事件以
 COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.ACT_DATE IS '發生時間（伺服器時間，含時分秒）';
 COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.ACT_BY IS '實際操作人工號，參照 IM_ACCT_USER.USER_ID';
 COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.ACT_BY_NAME IS '操作人顯示名快照（英文名 (中文名)）';
-COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.ACTION_CODE IS '動作：IMPERSONATE＝切換身分、IMPERSONATE_END＝切回、ROLE_GRANT＝指派角色、ROLE_REVOKE＝移除角色、EXEC_GRANT＝指派執行人、EXEC_REVOKE＝移除執行人';
-COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.TARGET_USER_ID IS '對象使用者工號（切換／切回的代理身分；名單維護的被指派或被移除者），參照 IM_ACCT_USER.USER_ID；超過欄寬的輸入存空';
-COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.CONTENT_JSON IS '內容（JSON 文字）：切換時記對象顯示名；名單維護成功記 roleId＋roleName 或 catgId＋catgName、targetUserName、before.status（null＝原無此列／0／1）、after.status；被拒記 denyCode（NO_PERM／LAST_SYS_ROLE／IN_FLIGHT）、blockedPerms、blockedTotal、blockedIds（最多 50 筆，超過 3900 bytes 逐筆丟單號保留總數）';
-COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.REASON IS '原因：名單維護必填（500 字內，被拒時有帶就存）；切換身分為空';
+COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.ACTION_CODE IS '動作：IMPERSONATE＝切換身分、IMPERSONATE_END＝切回、ROLE_GRANT＝指派角色、ROLE_REVOKE＝移除角色、EXEC_GRANT＝指派執行人、EXEC_REVOKE＝移除執行人、ROLE_PERM_SET＝角色權限存檔（一次存檔可同時有加有拿，只寫一筆）';
+COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.TARGET_USER_ID IS '對象使用者工號（切換／切回的代理身分；名單維護的被指派或被移除者），參照 IM_ACCT_USER.USER_ID；超過欄寬的輸入存空；權限設定（ROLE_PERM_SET）時為空，對象是角色、roleId 在 CONTENT_JSON';
+COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.CONTENT_JSON IS '內容（JSON 文字）：切換時記對象顯示名；名單維護成功記 roleId＋roleName 或 catgId＋catgName、targetUserName、before.status（null＝原無此列／0／1）、after.status；被拒記 denyCode（NO_PERM／LAST_SYS_ROLE／IN_FLIGHT）、blockedPerms、blockedTotal、blockedIds（最多 50 筆）；角色權限存檔成功記 roleId、roleName、memberCount、added、removed，被拒另記 denyCode 與 blocked[{permId、total、ids（每碼最多 20 筆）}]，無權限只記 roleId、addedCount、removedCount。超過 3900 bytes 逐筆丟單號保留總數';
+COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.REASON IS '原因：名單維護與角色權限存檔必填（500 字內，被拒時有帶就存）；切換身分為空';
 COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.RESULT_CODE IS '結果：SUCCESS＝成功、DENY＝拒絕';
 COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.STATUS IS '資料狀態：固定 1。default 1';
 COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.CREATE_DATE IS '建立日期（含時分秒）。default SYSDATE';
@@ -789,9 +789,9 @@ COMMENT ON COLUMN IM_ACCT_ROLE_PERM.ROLE_ID IS '角色代碼，參照 IM_ACCT_RO
 COMMENT ON COLUMN IM_ACCT_ROLE_PERM.PERM_ID IS '權限碼，參照 IM_ACCT_PERM.PERM_ID';
 COMMENT ON COLUMN IM_ACCT_ROLE_PERM.STATUS IS '資料狀態：1＝啟用、0＝停用（停用即不再授予）。default 1';
 COMMENT ON COLUMN IM_ACCT_ROLE_PERM.CREATE_DATE IS '建立日期（含時分秒）。default SYSDATE';
-COMMENT ON COLUMN IM_ACCT_ROLE_PERM.CREATE_BY IS '授予人員工號';
-COMMENT ON COLUMN IM_ACCT_ROLE_PERM.UPDATE_DATE IS '最後更新日期（含時分秒）。新增時為空';
-COMMENT ON COLUMN IM_ACCT_ROLE_PERM.UPDATE_BY IS '最後更新人員工號';
+COMMENT ON COLUMN IM_ACCT_ROLE_PERM.CREATE_BY IS '第一次授予人員工號；重新授予不改此欄';
+COMMENT ON COLUMN IM_ACCT_ROLE_PERM.UPDATE_DATE IS '最後更新日期（含時分秒）：拿掉或重新授予時寫入。新增時為空';
+COMMENT ON COLUMN IM_ACCT_ROLE_PERM.UPDATE_BY IS '最後更新人員工號：拿掉或重新授予的人';
 COMMENT ON COLUMN IM_ACCT_ROLE_USER.ROLE_ID IS '角色代碼，參照 IM_ACCT_ROLE.ROLE_ID；不得存 GENERAL';
 COMMENT ON COLUMN IM_ACCT_ROLE_USER.USER_ID IS '人員工號，參照 IM_ACCT_USER.USER_ID';
 COMMENT ON COLUMN IM_ACCT_ROLE_USER.STATUS IS '資料狀態：1＝啟用、0＝停用（停用即不再具此角色）。default 1';

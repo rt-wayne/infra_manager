@@ -7,6 +7,9 @@ package com.mpx.infra_manager_web.controller;
 //           /admin/roles、/admin/users、/admin/roles/{roleId}/members、/admin/roles/{roleId}/members/{userId}/revoke、
 //           /admin/executors、/admin/executors/{catgId}/members、/admin/executors/{catgId}/members/{userId}/revoke；
 //           Authorization、Content-Type、查詢字串原樣轉送，不解析 payload；路徑變數經 BackendForwarder.seg 編碼
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: 階段 3 回合 2：角色權限設定 2 支——/admin/role-perms、/admin/roles/{roleId}/perms
 // ============================================================
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -76,5 +79,17 @@ public class AdminController {
 			HttpServletRequest request) {
 		return backend.post(
 				"/admin/executors/" + BackendForwarder.seg(catgId) + "/members/" + BackendForwarder.seg(userId) + "/revoke", request);
+	}
+
+	/** 角色權限矩陣：GET <backend>/admin/role-perms */
+	@GetMapping("/admin/role-perms")
+	public ResponseEntity<byte[]> rolePerms(HttpServletRequest request) {
+		return backend.get("/admin/role-perms", request);
+	}
+
+	/** 角色權限存檔：POST <backend>/admin/roles/{roleId}/perms，JSON {added[], removed[], reason} */
+	@PostMapping("/admin/roles/{roleId}/perms")
+	public ResponseEntity<byte[]> saveRolePerms(@PathVariable("roleId") String roleId, HttpServletRequest request) {
+		return backend.post("/admin/roles/" + BackendForwarder.seg(roleId) + "/perms", request);
 	}
 }

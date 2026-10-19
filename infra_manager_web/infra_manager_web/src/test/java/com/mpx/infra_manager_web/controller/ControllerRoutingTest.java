@@ -17,6 +17,9 @@ package com.mpx.infra_manager_web.controller;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 2：加 AdminController 7 條路徑（角色清單、候選人、指派／移除角色、執行人清單、指派／移除執行人）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 3：AdminController 補 2 條（角色權限矩陣、角色權限存檔），50 → 52 案
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -126,7 +129,9 @@ class ControllerRoutingTest {
 				Arguments.of("POST", "/admin/roles/GOV/members/0000010/revoke", "/admin/roles/GOV/members/0000010/revoke"),
 				Arguments.of("GET", "/admin/executors", "/admin/executors"),
 				Arguments.of("POST", "/admin/executors/HOST/members", "/admin/executors/HOST/members"),
-				Arguments.of("POST", "/admin/executors/HOST/members/0000006/revoke", "/admin/executors/HOST/members/0000006/revoke"));
+				Arguments.of("POST", "/admin/executors/HOST/members/0000006/revoke", "/admin/executors/HOST/members/0000006/revoke"),
+				Arguments.of("GET", "/admin/role-perms", "/admin/role-perms"),
+				Arguments.of("POST", "/admin/roles/GOV/perms", "/admin/roles/GOV/perms"));
 	}
 
 	@ParameterizedTest(name = "{0} {1}")
