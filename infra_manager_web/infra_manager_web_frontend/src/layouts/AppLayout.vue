@@ -33,6 +33,10 @@
             類別 3 緊急存取已退回未結案），空的類別整節不顯示、兩類都空顯示「目前沒有與您相關的通知」；
             類別 3 一筆點擊（D18）：有 EMG_VIEW_ALL → 緊急存取清單（已退回篩選），否則（原申請人）開該單明細彈窗
             （彈窗動作自行依權限顯示；申請人對已退回單沒有可用動作＝唯讀）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-19
+  變更說明: BACKLOG 第 89 項階段 4：機房巡檢區塊後加「系統管理」區塊，目前只有「角色指派」（SYS_ROLE）；
+            區塊標題暫時只依 SYS_ROLE 顯示，階段 6 加「執行人對照」時改為持有 SYS_ROLE／SYS_EXECUTOR 其一即顯示
 -->
 <template>
   <div class="app">
@@ -52,6 +56,10 @@
         <div class="nav-title nav-insp">機房巡檢</div>
         <RouterLink class="nav-item" to="/inspections">📋 巡檢紀錄</RouterLink>
         <RouterLink v-if="can('INSP_CREATE')" class="nav-item nav-insp-new" to="/inspections/new">＋ 新增巡檢</RouterLink>
+      </template>
+      <template v-if="can('SYS_ROLE')">
+        <div class="nav-title nav-admin">系統管理</div>
+        <RouterLink class="nav-item nav-admin-roles" to="/admin/roles">👥 角色指派</RouterLink>
       </template>
     </aside>
 

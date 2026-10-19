@@ -10,6 +10,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S3：緊急存取清單登入即可進、申請頁需 EMG_APPLY（並直接核對正式路由的 meta）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 4：/admin/roles 需 SYS_ROLE（並核對正式路由的 meta）
 // ============================================================
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError } from 'axios'
@@ -58,6 +61,7 @@ function makeGuardedRouter(): Router {
       { path: '/inspections/new', component: Stub, meta: need('INSP_CREATE') },
       { path: '/emergency', component: Stub },
       { path: '/emergency/new', component: Stub, meta: need('EMG_APPLY') },
+      { path: '/admin/roles', component: Stub, meta: need('SYS_ROLE') },
       { path: '/no-access', component: Stub }
     ]
   })
@@ -145,6 +149,21 @@ describe('全域路由守衛', () => {
     const r = makeGuardedRouter()
     await r.push('/emergency/new')
     expect(r.currentRoute.value.path).toBe('/emergency/new')
+  })
+
+  it('角色指派：正式路由需 SYS_ROLE；沒有 → 無權限頁、有 → 可進', async () => {
+    expect(appRouter.resolve('/admin/roles').meta.need).toBe('SYS_ROLE')
+    expect(appRouter.resolve('/admin/roles').meta.title).toBe('角色指派')
+    setToken('tok')
+    const r = makeGuardedRouter()
+    await r.push('/admin/roles')
+    expect(r.currentRoute.value.path).toBe('/no-access')
+
+    resetSession()
+    meMock.mockResolvedValue(makeMe({ permissions: ['ACC_SELF_SERVICE', 'SYS_ROLE'] }))
+    const r2 = makeGuardedRouter()
+    await r2.push('/admin/roles')
+    expect(r2.currentRoute.value.path).toBe('/admin/roles')
   })
 
   it('/me 回 401（token 失效）：導向登入頁並保留原目標', async () => {

@@ -19,6 +19,9 @@
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S3：/emergency 緊急存取清單（登入即可，與通知信連結 #/emergency 一致）、
 //           /emergency/new 緊急存取申請（需 EMG_APPLY）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 4：/admin/roles 角色指派（需 SYS_ROLE）
 // ============================================================
 import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteLocationNormalized, RouteLocationRaw, RouteRecordRaw, Router } from 'vue-router'
@@ -84,6 +87,11 @@ const routes: RouteRecordRaw[] = [
         path: 'inspections/new',
         component: () => import('../views/InspectionFormView.vue'),
         meta: { title: '新增巡檢', need: 'INSP_CREATE' }
+      },
+      {
+        path: 'admin/roles',
+        component: () => import('../views/RoleAdminView.vue'),
+        meta: { title: '角色指派', need: 'SYS_ROLE' }
       },
       { path: 'no-access', component: () => import('../views/NoAccessView.vue'), meta: { title: '沒有存取權限' } }
     ]

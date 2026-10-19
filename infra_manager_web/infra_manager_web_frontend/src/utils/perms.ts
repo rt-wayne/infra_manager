@@ -12,6 +12,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 80 項：加 ACC_EXPORT（帳號列表「匯出 Excel」鈕）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 4：加 SYS_ROLE（角色指派頁、角色權限設定頁）、SYS_EXECUTOR（執行人對照頁）
 // ============================================================
 
 /** 畫面會用到的權限碼（第一階段＋緊急存取） */
@@ -31,6 +34,8 @@ export type PermCode =
   | 'INSP_RESOLVE'
   | 'SYS_IMPERSONATE'
   | 'SYS_JOB_RUN'
+  | 'SYS_ROLE'
+  | 'SYS_EXECUTOR'
   | 'EMG_APPLY'
   | 'EMG_VIEW_ALL'
   | 'EMG_DECIDE'

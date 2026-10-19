@@ -28,6 +28,9 @@
 // AI版本  : Claude Fable 5 (claude-fable-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S9 審查第 3(a) 項：單路查詢失敗只當該類空，另一類照常顯示（鎖住 allSettled 容錯）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 4：「系統管理」區塊與「角色指派」只對 SYS_ROLE 顯示（只有 SYS_EXECUTOR 時暫不顯示）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -117,7 +120,8 @@ async function mountLayout(me: Me, path = '/'): Promise<{ w: VueWrapper; router:
           { path: 'assets', component: Stub },
           { path: 'emergency', component: Stub },
           { path: 'inspections', component: Stub, meta: { need: 'INSP_VIEW' } },
-          { path: 'inspections/new', component: Stub, meta: { need: 'INSP_CREATE' } }
+          { path: 'inspections/new', component: Stub, meta: { need: 'INSP_CREATE' } },
+          { path: 'admin/roles', component: Stub, meta: { need: 'SYS_ROLE' } }
         ]
       }
     ]
@@ -172,6 +176,26 @@ describe('AppLayout', () => {
     expect(w.find('.nav-insp').exists()).toBe(true)
     expect(w.find('.nav-insp-new').exists()).toBe(false)
     w.unmount()
+  })
+
+  it('系統管理區塊：只有 GENERAL 不顯示；有 SYS_ROLE 顯示「角色指派」連 /admin/roles；只有 SYS_EXECUTOR 暫不顯示', async () => {
+    const plain = await mountLayout(makeMe())
+    expect(plain.w.find('.nav-admin').exists()).toBe(false)
+    expect(plain.w.find('.nav-admin-roles').exists()).toBe(false)
+    plain.w.unmount()
+
+    resetSession()
+    const admin = await mountLayout(makeMe({ permissions: [...GENERAL_PERMS, 'SYS_ROLE'] }), '/admin/roles')
+    expect(admin.w.find('.nav-admin').text()).toBe('系統管理')
+    const link = admin.w.find('.nav-admin-roles')
+    expect(link.attributes('href')).toBe('/admin/roles')
+    expect(link.classes()).toContain('router-link-active')
+    admin.w.unmount()
+
+    resetSession()
+    const exec = await mountLayout(makeMe({ permissions: [...GENERAL_PERMS, 'SYS_EXECUTOR'] }))
+    expect(exec.w.find('.nav-admin').exists()).toBe(false)
+    exec.w.unmount()
   })
 
   it('無 ACC_LIST_FULL 在申請單列表頁：沒有「帳號列表」，「帳號申請單列表」反白', async () => {

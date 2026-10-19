@@ -9,6 +9,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S3：假路由加 /emergency、/emergency/new
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 4：假路由加 /admin/roles
 // ============================================================
 import { AxiosError, AxiosHeaders } from 'axios'
 import type { AxiosResponse } from 'axios'
@@ -35,6 +38,7 @@ export async function makeRouter(path = '/'): Promise<Router> {
       '/inspections/new',
       '/emergency',
       '/emergency/new',
+      '/admin/roles',
       '/no-access'
     ].map(p => ({ path: p, component: Stub }))
   })

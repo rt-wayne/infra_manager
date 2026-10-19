@@ -17,9 +17,9 @@
 | 89 | 角色權限維護介面：角色指派、執行人對照兩頁（取代改 DB），另加第三頁設定角色可做哪些事／看到哪些頁面（角色 × 權限碼）；每次異動寫系統管理軌跡、原因必填，移除會卡住在途單或最後一位系統管理員時拒絕 | [backlog/89-角色權限維護介面.md](backlog/89-角色權限維護介面.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：階段 3 已結束（審查必須修正零項、測試 329＋75 全過、建議改善登記第 106～109 項）。開階段 4 回合 1（前端角色指派頁唯讀版：`utils\perms.ts` 加 SYS_ROLE／SYS_EXECUTOR、路由 `/admin/roles`、`AppLayout.vue` 系統管理區塊、`api\admin.ts`、`types\admin.ts`、`views\RoleAdminView.vue`＋測試），依計畫檔「階段 4」與「前端」段；開工時把 HEAD 填進「本階段起點」；提醒使用者重跑 `db\infra_manager_89_role_admin.sql`（階段 3 補的 COMMENT）
-- 已改動（未 commit）：無（階段 3 收尾已 commit）
-- 本階段起點：階段 4 開工時填（階段 3 起點 98b2484 已結案）
+- 下一步：階段 4 回合 1 已完成（角色指派頁唯讀版、前端測試 209 筆全過、建置通過）。開階段 4 回合 2：`components\MemberChangeModal.vue`（指派／移除兩模式、原因必填 500 字按碼點、錯誤顯示，建在 BaseModal 上、比照 `TodoView.vue:102-119`），角色卡加「＋ 指派」與成員「移除」，改到自己後重載 `/me`，補 Vitest；依計畫檔「階段 4」與「前端」段。API 呼叫 `api\admin.ts` 的 grantRole／revokeRole 與可指派人員 listAdminUsers 已寫好。導覽「系統管理」區塊目前只依 SYS_ROLE 顯示，階段 6 加執行人對照時改為兩碼其一（`AppLayout.vue` 檔頭已註明）。使用者 2026-10-19 已重跑 `db\infra_manager_89_role_admin.sql`（階段 3 補的 COMMENT）
+- 已改動（未 commit）：無（階段 4 回合 1 已 commit）
+- 本階段起點：a20bb76（階段 4，2026-10-19 開工）
 - 卡住／待確認：無
 
 ## 僅記錄未拍板
