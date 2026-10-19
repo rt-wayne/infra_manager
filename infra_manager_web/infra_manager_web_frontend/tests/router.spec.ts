@@ -16,6 +16,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 5：/admin/role-perms 需 SYS_ROLE（只有 SYS_EXECUTOR 進不去）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 6：/admin/executors 需 SYS_EXECUTOR（只有 SYS_ROLE 進不去）
 // ============================================================
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError } from 'axios'
@@ -66,6 +69,7 @@ function makeGuardedRouter(): Router {
       { path: '/emergency/new', component: Stub, meta: need('EMG_APPLY') },
       { path: '/admin/roles', component: Stub, meta: need('SYS_ROLE') },
       { path: '/admin/role-perms', component: Stub, meta: need('SYS_ROLE') },
+      { path: '/admin/executors', component: Stub, meta: need('SYS_EXECUTOR') },
       { path: '/no-access', component: Stub }
     ]
   })
@@ -184,6 +188,22 @@ describe('全域路由守衛', () => {
     const r2 = makeGuardedRouter()
     await r2.push('/admin/role-perms')
     expect(r2.currentRoute.value.path).toBe('/admin/role-perms')
+  })
+
+  it('執行人對照：正式路由需 SYS_EXECUTOR；只有 SYS_ROLE → 無權限頁、有 SYS_EXECUTOR → 可進', async () => {
+    expect(appRouter.resolve('/admin/executors').meta.need).toBe('SYS_EXECUTOR')
+    expect(appRouter.resolve('/admin/executors').meta.title).toBe('執行人對照')
+    setToken('tok')
+    meMock.mockResolvedValue(makeMe({ permissions: ['ACC_SELF_SERVICE', 'SYS_ROLE'] }))
+    const r = makeGuardedRouter()
+    await r.push('/admin/executors')
+    expect(r.currentRoute.value.path).toBe('/no-access')
+
+    resetSession()
+    meMock.mockResolvedValue(makeMe({ permissions: ['ACC_SELF_SERVICE', 'SYS_EXECUTOR'] }))
+    const r2 = makeGuardedRouter()
+    await r2.push('/admin/executors')
+    expect(r2.currentRoute.value.path).toBe('/admin/executors')
   })
 
   it('/me 回 401（token 失效）：導向登入頁並保留原目標', async () => {

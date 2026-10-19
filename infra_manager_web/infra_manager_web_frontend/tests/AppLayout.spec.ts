@@ -34,6 +34,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 5：「角色權限設定」同樣只對 SYS_ROLE 顯示、連 /admin/role-perms
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 6：只有 SYS_EXECUTOR 時改為顯示區塊、只有「執行人對照」；兩碼都有時三項都顯示
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -125,7 +128,8 @@ async function mountLayout(me: Me, path = '/'): Promise<{ w: VueWrapper; router:
           { path: 'inspections', component: Stub, meta: { need: 'INSP_VIEW' } },
           { path: 'inspections/new', component: Stub, meta: { need: 'INSP_CREATE' } },
           { path: 'admin/roles', component: Stub, meta: { need: 'SYS_ROLE' } },
-          { path: 'admin/role-perms', component: Stub, meta: { need: 'SYS_ROLE' } }
+          { path: 'admin/role-perms', component: Stub, meta: { need: 'SYS_ROLE' } },
+          { path: 'admin/executors', component: Stub, meta: { need: 'SYS_EXECUTOR' } }
         ]
       }
     ]
@@ -182,7 +186,7 @@ describe('AppLayout', () => {
     w.unmount()
   })
 
-  it('系統管理區塊：只有 GENERAL 不顯示；有 SYS_ROLE 顯示「角色指派」連 /admin/roles；只有 SYS_EXECUTOR 暫不顯示', async () => {
+  it('系統管理區塊：只有 GENERAL 不顯示；只有 SYS_ROLE 顯示角色兩項、無執行人對照；只有 SYS_EXECUTOR 只顯示執行人對照', async () => {
     const plain = await mountLayout(makeMe())
     expect(plain.w.find('.nav-admin').exists()).toBe(false)
     expect(plain.w.find('.nav-admin-roles').exists()).toBe(false)
@@ -199,12 +203,27 @@ describe('AppLayout', () => {
     expect(perms.attributes('href')).toBe('/admin/role-perms')
     expect(perms.text()).toContain('角色權限設定')
     expect(perms.classes()).not.toContain('router-link-active')
+    expect(admin.w.find('.nav-admin-execs').exists()).toBe(false)
     admin.w.unmount()
 
     resetSession()
-    const exec = await mountLayout(makeMe({ permissions: [...GENERAL_PERMS, 'SYS_EXECUTOR'] }))
-    expect(exec.w.find('.nav-admin').exists()).toBe(false)
+    const exec = await mountLayout(makeMe({ permissions: [...GENERAL_PERMS, 'SYS_EXECUTOR'] }), '/admin/executors')
+    expect(exec.w.find('.nav-admin').text()).toBe('系統管理')
+    expect(exec.w.find('.nav-admin-roles').exists()).toBe(false)
+    expect(exec.w.find('.nav-admin-perms').exists()).toBe(false)
+    const execs = exec.w.find('.nav-admin-execs')
+    expect(execs.attributes('href')).toBe('/admin/executors')
+    expect(execs.text()).toContain('執行人對照')
+    expect(execs.classes()).toContain('router-link-active')
     exec.w.unmount()
+
+    resetSession()
+    const both = await mountLayout(makeMe({ permissions: [...GENERAL_PERMS, 'SYS_ROLE', 'SYS_EXECUTOR'] }))
+    expect(both.w.findAll('.nav-admin')).toHaveLength(1)
+    expect(both.w.find('.nav-admin-roles').exists()).toBe(true)
+    expect(both.w.find('.nav-admin-perms').exists()).toBe(true)
+    expect(both.w.find('.nav-admin-execs').exists()).toBe(true)
+    both.w.unmount()
   })
 
   it('無 ACC_LIST_FULL 在申請單列表頁：沒有「帳號列表」，「帳號申請單列表」反白', async () => {

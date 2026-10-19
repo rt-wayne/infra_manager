@@ -25,6 +25,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 5：/admin/role-perms 角色權限設定（需 SYS_ROLE）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 6：/admin/executors 執行人對照（需 SYS_EXECUTOR）
 // ============================================================
 import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteLocationNormalized, RouteLocationRaw, RouteRecordRaw, Router } from 'vue-router'
@@ -100,6 +103,11 @@ const routes: RouteRecordRaw[] = [
         path: 'admin/role-perms',
         component: () => import('../views/RolePermAdminView.vue'),
         meta: { title: '角色權限設定', need: 'SYS_ROLE' }
+      },
+      {
+        path: 'admin/executors',
+        component: () => import('../views/ExecutorAdminView.vue'),
+        meta: { title: '執行人對照', need: 'SYS_EXECUTOR' }
       },
       { path: 'no-access', component: () => import('../views/NoAccessView.vue'), meta: { title: '沒有存取權限' } }
     ]

@@ -6,6 +6,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 5：角色權限設定（GET /admin/role-perms、POST /admin/roles/{roleId}/perms）型別
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 6：執行人對照（GET /admin/executors）型別
 // ============================================================
 
 /** 角色或執行人類別的一位成員（只列啟用中的指派） */
@@ -28,6 +31,16 @@ export interface AdminRole {
   sortSeq: number | null
   /** 此角色授予的權限中文名（含尚未上線的碼） */
   permNames: string[]
+  members: AdminMember[]
+}
+
+/** GET /admin/executors 一列：帳號類別與其執行人（關卡 6），8 類全列 */
+export interface AdminExecCatg {
+  catgId: string
+  catgName: string
+  /** 是否開放新申請；關閉的類別仍可能有在途單，照樣列出與維護 */
+  enabled: boolean
+  sortSeq: number | null
   members: AdminMember[]
 }
 

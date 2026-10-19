@@ -40,6 +40,10 @@
   AI版本  : Claude Opus 5.5 (claude-opus-5-5)
   修改日期: 2026-10-19
   變更說明: BACKLOG 第 89 項階段 5：「角色指派」下方加「角色權限設定」（SYS_ROLE）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-19
+  變更說明: BACKLOG 第 89 項階段 6：「系統管理」區塊改為持有 SYS_ROLE／SYS_EXECUTOR 其一即顯示；
+            「角色指派」「角色權限設定」仍依 SYS_ROLE，新增「執行人對照」依 SYS_EXECUTOR
 -->
 <template>
   <div class="app">
@@ -60,10 +64,13 @@
         <RouterLink class="nav-item" to="/inspections">📋 巡檢紀錄</RouterLink>
         <RouterLink v-if="can('INSP_CREATE')" class="nav-item nav-insp-new" to="/inspections/new">＋ 新增巡檢</RouterLink>
       </template>
-      <template v-if="can('SYS_ROLE')">
+      <template v-if="can('SYS_ROLE') || can('SYS_EXECUTOR')">
         <div class="nav-title nav-admin">系統管理</div>
-        <RouterLink class="nav-item nav-admin-roles" to="/admin/roles">👥 角色指派</RouterLink>
-        <RouterLink class="nav-item nav-admin-perms" to="/admin/role-perms">🔐 角色權限設定</RouterLink>
+        <template v-if="can('SYS_ROLE')">
+          <RouterLink class="nav-item nav-admin-roles" to="/admin/roles">👥 角色指派</RouterLink>
+          <RouterLink class="nav-item nav-admin-perms" to="/admin/role-perms">🔐 角色權限設定</RouterLink>
+        </template>
+        <RouterLink v-if="can('SYS_EXECUTOR')" class="nav-item nav-admin-execs" to="/admin/executors">🛠️ 執行人對照</RouterLink>
       </template>
     </aside>
 

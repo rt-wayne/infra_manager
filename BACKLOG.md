@@ -17,9 +17,9 @@
 | 89 | 角色權限維護介面：角色指派、執行人對照兩頁（取代改 DB），另加第三頁設定角色可做哪些事／看到哪些頁面（角色 × 權限碼）；每次異動寫系統管理軌跡、原因必填，移除會卡住在途單或最後一位系統管理員時拒絕 | [backlog/89-角色權限維護介面.md](backlog/89-角色權限維護介面.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：階段 5 已結束（審查 M1 守衛只在存得了時才問、M2 補回完成判定、M3 PRD 補登出與切換身分丟草稿；前端測試 244 筆全過、建置通過；實機 7 步符合預期；建議改善登記第 117～120 項、擴充第 111／112／114／115 項）。開階段 6 回合 1（前端執行人對照頁：`views\ExecutorAdminView.vue` 重用 MemberChangeModal（warning 屬性由頁面傳入、文案另定，計畫第 126 行 F7）、`api\admin.ts` 補 GET /admin/executors 與 POST /admin/executors/{catgId}/members、…/revoke、`types\admin.ts` 補 AdminExecCatg、路由 `/admin/executors`（need SYS_EXECUTOR）、導覽「系統管理」區塊改為持有 SYS_ROLE／SYS_EXECUTOR 其一即顯示、各項依自己的碼（`AppLayout.vue` 檔頭有註）＋測試；8 類各一列、不開放新增的類別加註，計畫「前端」段第 141 行），依計畫檔「階段 6」段；開工時把 HEAD 填進「本階段起點」。動手前把計畫「前端」段與風險段再讀一遍（避免 F7 類漏做）。回合 2 是文件收尾（PRD 全段改現況、SETUP、init_data 說明、create_table COMMENT、第 11 項與第 89 項結案）
-- 已改動（未 commit）：無（階段 5 收尾已 commit）
-- 本階段起點：階段 6 開工時填（階段 5 起點 21a8a45 已結案）
+- 下一步：階段 6 回合 1 已完成（執行人對照頁 `/admin/executors`、導覽兩碼其一顯示；前端測試 257 筆全過、建置通過；結果見計畫檔階段 6）。開階段 6 回合 2＝文件收尾，依計畫檔「階段 6」段與「文件影響」段逐條做：PRD 全段改現況（含第 46 行維護畫面列與第 106 項、API 段標題下「前端尚無畫面」、導覽列「本功能分批施工中」、第 120 行 SYS_ROLE／SYS_EXECUTOR 狀態、第 982 行初始資料說明、「角色 × 權限」表改「初始資料、現況以 DB 為準」）、SETUP 第 6 節改「平常用畫面、DB 只作備援」並加 GENERAL 權限調整 SQL 段、`db\infra_manager_init_data.sql:170-171` 說明 (c)、`db\infra_manager_create_table.sql` COMMENT 同步遞增腳本、SYS_ADMIN 角色說明「第一階段以 DB 維護」（DB 資料文字，回合 1 結果有記）；第 11 項與第 89 項結案；完成判定逐條對照（計畫第 88 行）。之後階段 6 收尾：code-reviewer（起點 a3bed5b）＋test-runner 端到端（含執行人頁與 E23 畫面），殼 jar 要重建才帶新前端
+- 已改動（未 commit）：無（回合 1 已 commit）
+- 本階段起點：a3bed5b（階段 6，2026-10-19 開工）
 - 卡住／待確認：無
 
 ## 僅記錄未拍板
@@ -100,7 +100,7 @@
 | 108 | `RolePermAdminService.save` 的軌跡 memberCount 在取鎖前查、且用全部角色的 GROUP BY（`RolePermAdminService.java:161`）；同時有人改成員時軌跡人數可能是舊值。移進取鎖後，可另加單一角色 COUNT。第 89 項階段 3 code-reviewer 提出（S3） | 2026-10-19 | — |
 | 109 | `RolePermAdminService.save` 約 90 行（`:131-220`）超過 50 行門檻；把取鎖後第 ⑦～⑪ 步抽成私有方法，save 只留驗證順序與 DENY 分支。第 89 項階段 3 code-reviewer 提出（S4） | 2026-10-19 | — |
 | 110 | 後端錯誤本文只有 message、沒有錯誤代號（`GlobalExceptionHandler.java:87`），前端指派／移除彈窗只能用文案開頭辨識 E23（`MemberChangeModal.vue` 的 E23_PREFIX 對應 `AcctMsg.E23_PREFIX`）；改 E23 文案沒同步前端時，E23 會退化成 toast，單號清單幾秒後就看不到。可在錯誤本文加 code 欄（例 E23），前端改看代號。使用者目前看不到差別，這是內部品質問題。第 89 項階段 4 回合 2 實作時提出；階段 5 角色權限設定頁的 E23／E24 也要辨識，屆時一併考慮 | 2026-10-19 | — |
-| 111 | 角色指派頁移除自己且失去 SYS_ROLE 時，先發成功 toast 再導向無權限頁；版面與 `NoAccessView.vue` 都沒放 `<ToastHost />`，使用者看不到「已移出」，只看到無權限說明，不知道移除已成功（`RoleAdminView.vue` 的 onDone）。只在自己之外還有人持有 SYS_ROLE 時會發生（否則 E24 擋）。可在無權限頁加 ToastHost，或導向前改發「您已不具角色指派權限」。第 89 項階段 4 code-reviewer 提出（S1）。**階段 5 審查 S4 擴大範圍**：角色權限設定頁改到自己所屬角色、失去 SYS_ROLE 時同樣先 toast 再導向，成功訊息一樣看不到（`RolePermAdminView.vue` 的 onSaved）；修法一起做（ToastHost 移到版面層最省） | 2026-10-19 | — |
+| 111 | 角色指派頁移除自己且失去 SYS_ROLE 時，先發成功 toast 再導向無權限頁；版面與 `NoAccessView.vue` 都沒放 `<ToastHost />`，使用者看不到「已移出」，只看到無權限說明，不知道移除已成功（`RoleAdminView.vue` 的 onDone）。只在自己之外還有人持有 SYS_ROLE 時會發生（否則 E24 擋）。可在無權限頁加 ToastHost，或導向前改發「您已不具角色指派權限」。第 89 項階段 4 code-reviewer 提出（S1）。**階段 5 審查 S4 擴大範圍**：角色權限設定頁改到自己所屬角色、失去 SYS_ROLE 時同樣先 toast 再導向，成功訊息一樣看不到（`RolePermAdminView.vue` 的 onSaved）；修法一起做（ToastHost 移到版面層最省）。**階段 6 同類**：執行人對照頁移除自己且失去 SYS_EXECUTOR 時一樣（`ExecutorAdminView.vue` 的 onDone） | 2026-10-19 | — |
 | 112 | 角色指派頁成功或 409 後先關彈窗再重載清單，重載期間舊卡片的「＋ 指派」「移除」仍可按；此時開的彈窗 `editing.role` 指向舊物件，排除名單一直是舊的，剛指派的人會出現在下拉，選了得 E21（後端有擋，不會改錯資料）。可在 loading 時停用按鈕，或 excludeIds 依 roleId 從最新清單取。第 89 項階段 4 code-reviewer 提出（S2）。**階段 5 審查 S1 同類**：角色權限設定頁存檔成功或 409 後重載期間（含重載 `/me`），勾選框與「存檔…」仍可按；重載一回來 `watch(selected)` 把草稿重置，剛勾的被靜默洗掉；重載中開了存檔彈窗再重載完成，摘要變空、送出得 400「沒有任何變更」（資料不會壞）。可加 reloading 旗標，重載期間停用勾選、還原與存檔 | 2026-10-19 | — |
 | 113 | 角色指派頁改到自己後重載 `/me` 失敗時，`loadMe` 把 me 設成 null，側欄需權限的區塊與右上角姓名無聲消失，沒有任何提示（版面的 meFailed 提示只在掛載時發一次）。onDone 在 loadMe 後檢查 meFailed，失敗 toast U09。第 89 項階段 4 code-reviewer 提出（S3） | 2026-10-19 | — |
 | 114 | 名單維護 E26（其他管理員正在調整名單，鎖逾時）是暫時性錯誤，目前照計畫歸「其他 409」關彈窗並重載，使用者已打的原因會消失；可改成只 toast、彈窗留著讓使用者稍後再按。計畫與 PRD 現寫「E21／E22／E26 toast＋重載」，改要先改規格。第 89 項階段 4 code-reviewer 提出（S4）。**階段 5 審查 S3 同類、損失更大**：角色權限設定頁 E26 歸「其他 409」→ 關彈窗＋重載，整份勾選草稿與原因一起洗掉，使用者要重勾全部格子；E26 只是另一位管理員剛好在存、重試就會成功。建議 E26 改成只 toast、彈窗與草稿都留著，兩頁一起改並改 PRD 與計畫 | 2026-10-19 | — |

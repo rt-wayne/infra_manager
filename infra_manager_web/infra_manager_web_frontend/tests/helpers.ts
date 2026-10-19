@@ -15,6 +15,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 5：假路由加 /admin/role-perms
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 6：假路由加 /admin/executors
 // ============================================================
 import { AxiosError, AxiosHeaders } from 'axios'
 import type { AxiosResponse } from 'axios'
@@ -43,6 +46,7 @@ export async function makeRouter(path = '/'): Promise<Router> {
       '/emergency/new',
       '/admin/roles',
       '/admin/role-perms',
+      '/admin/executors',
       '/no-access'
     ].map(p => ({ path: p, component: Stub }))
   })

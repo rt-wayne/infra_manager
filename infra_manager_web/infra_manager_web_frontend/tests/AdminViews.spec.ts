@@ -30,6 +30,12 @@
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 5 審查 M1：登出、導向登入頁、切換身分後、失去 SYS_ROLE 時離開守衛直接放行；仍存得了才問
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 6 回合 1：執行人對照頁——頁首說明、每類別一卡（不開放新增的加註）、停用者加註、缺欄保底、
+//           空清單與查詢失敗；指派（下拉排除已在名單者）／移除打執行人 API、成功 toast＋重載；E23 常駐、其他 409 關＋重載；
+//           F7 提示與不提示；改到自己重載 /me（失去 SYS_EXECUTOR 導無權限頁、/me 失敗 toast 留下）；
+//           切換中與重載中按鈕停用；API 路徑與編碼
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -38,11 +44,30 @@ import type { Router } from 'vue-router'
 import http from '../src/api/http'
 import RoleAdminView from '../src/views/RoleAdminView.vue'
 import RolePermAdminView from '../src/views/RolePermAdminView.vue'
-import { getRolePerms, grantRole, listAdminRoles, listAdminUsers, revokeRole, saveRolePerms } from '../src/api/admin'
+import ExecutorAdminView from '../src/views/ExecutorAdminView.vue'
+import {
+  getRolePerms,
+  grantExecutor,
+  grantRole,
+  listAdminRoles,
+  listAdminUsers,
+  listExecutors,
+  revokeExecutor,
+  revokeRole,
+  saveRolePerms
+} from '../src/api/admin'
 import { getMe } from '../src/api/auth'
 import { clearToken, setToken } from '../src/api/tokenStore'
 import { resetSession, useSession } from '../src/composables/useSession'
-import type { AdminMember, AdminPermModule, AdminRole, AdminRolePerms, AdminUser, RolePermMatrix } from '../src/types/admin'
+import type {
+  AdminExecCatg,
+  AdminMember,
+  AdminPermModule,
+  AdminRole,
+  AdminRolePerms,
+  AdminUser,
+  RolePermMatrix
+} from '../src/types/admin'
 import { groupPerms } from '../src/utils/permGroups'
 import { charLen } from '../src/utils/text'
 import { GENERAL_PERMS, httpError, lastToast, makeMe, makeRouter } from './helpers'
@@ -53,7 +78,10 @@ vi.mock('../src/api/admin', () => ({
   grantRole: vi.fn(),
   revokeRole: vi.fn(),
   getRolePerms: vi.fn(),
-  saveRolePerms: vi.fn()
+  saveRolePerms: vi.fn(),
+  listExecutors: vi.fn(),
+  grantExecutor: vi.fn(),
+  revokeExecutor: vi.fn()
 }))
 vi.mock('../src/api/auth', () => ({
   login: vi.fn(),
@@ -78,6 +106,9 @@ const usersMock = vi.mocked(listAdminUsers)
 const grantMock = vi.mocked(grantRole)
 const revokeMock = vi.mocked(revokeRole)
 const meMock = vi.mocked(getMe)
+const execsMock = vi.mocked(listExecutors)
+const execGrantMock = vi.mocked(grantExecutor)
+const execRevokeMock = vi.mocked(revokeExecutor)
 
 const ADMIN_PERMS = [...GENERAL_PERMS, 'SYS_ROLE']
 const E23_MSG = '移除後沒有人能處理下列在途案件，請先加入接替人員：AR20261007-011（關卡 5）'
@@ -949,6 +980,263 @@ describe('角色權限設定頁：編輯與存檔', () => {
   })
 })
 
+/** 執行人對照的假類別：HOST 開放（Hank 啟用、Gary 停用）、SVC 不開放且沒有執行人 */
+function catg(over: Partial<AdminExecCatg> = {}): AdminExecCatg {
+  return {
+    catgId: 'HOST', catgName: '主機帳號', enabled: true, sortSeq: 1,
+    members: [member(), member({ userId: '0000285', userName: 'Gary (許永成)', userActive: false, grantDate: '2026-10-15T10:45:19' })],
+    ...over
+  }
+}
+
+describe('執行人對照頁', () => {
+  const EXEC_PERMS = [...GENERAL_PERMS, 'SYS_EXECUTOR']
+  const USERS: AdminUser[] = [
+    { userId: '2410303', userName: 'Hank (何嘉浤)', deptName: '資訊處' },
+    { userId: '0000351', userName: 'Terry (邱健唐)', deptName: '資訊處' },
+    { userId: '0000001', userName: 'Kevin (李凱鈞)', deptName: null }
+  ]
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    localStorage.clear()
+    resetSession()
+    setToken('tok')
+    useSession().me.value = makeMe({ permissions: EXEC_PERMS })
+    execsMock.mockReset().mockResolvedValue([
+      catg(),
+      catg({ catgId: 'SVC', catgName: '服務帳號', enabled: false, sortSeq: 4, members: [] })
+    ])
+    usersMock.mockReset().mockResolvedValue(USERS)
+    execGrantMock.mockReset().mockResolvedValue({ roleId: null, catgId: 'HOST', userId: '0000351', result: 'GRANTED' })
+    execRevokeMock.mockReset().mockResolvedValue({ roleId: null, catgId: 'HOST', userId: '2410303', result: 'REVOKED' })
+    meMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.runAllTimers()
+    vi.useRealTimers()
+  })
+
+  async function mountView(): Promise<{ w: VueWrapper; router: Router }> {
+    const router = await makeRouter('/admin/executors')
+    const w = mount(ExecutorAdminView, { global: { plugins: [router] } })
+    await flushPromises()
+    return { w, router }
+  }
+
+  it('頁首說明關卡 6；依後端順序每類別一卡；不開放新增的類別加註、沒有執行人顯示提示', async () => {
+    const { w } = await mountView()
+    expect(execsMock).toHaveBeenCalledTimes(1)
+    expect(w.find('.page-note').text()).toContain('執行人負責關卡 6')
+    const cards = w.findAll('.catg-card')
+    expect(cards.map(c => c.attributes('data-catg'))).toEqual(['HOST', 'SVC'])
+    expect(cards[0].find('.catg-name').text()).toBe('主機帳號（HOST）')
+    expect(cards[0].find('.closed').exists()).toBe(false)
+    expect(cards[0].find('.head-right .tag').text()).toBe('2 位執行人')
+    expect(cards[1].find('.closed').text()).toBe('不開放新增申請')
+    expect(cards[1].find('.closed-note').text()).toContain('仍可能有在途案件')
+    expect(cards[1].find('.no-member').text()).toBe('目前沒有執行人')
+    expect(cards[1].find('.members').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('執行人：姓名、工號、指派日只取日期；停用者加「（已停用）」；缺欄保底（members 缺當空、enabled 缺當開放、姓名空用工號）', async () => {
+    const { w } = await mountView()
+    const ms = w.findAll('.catg-card')[0].findAll('.member')
+    expect(ms[0].find('.m-name').text()).toBe('Hank (何嘉浤)')
+    expect(ms[0].find('.m-date').text()).toBe('指派於 2026-10-07')
+    expect(ms[1].find('.m-off').text()).toBe('（已停用）')
+    expect(ms[1].classes()).toContain('inactive')
+    w.unmount()
+
+    execsMock.mockResolvedValue([
+      { catgId: 'X', catgName: '某類', sortSeq: null } as unknown as AdminExecCatg,
+      catg({ members: [member({ userName: null, grantDate: null })] })
+    ])
+    const { w: w2 } = await mountView()
+    const cards = w2.findAll('.catg-card')
+    expect(cards[0].find('.no-member').exists()).toBe(true)
+    expect(cards[0].find('.closed').exists()).toBe(false)
+    expect(cards[1].find('.m-name').text()).toBe('2410303')
+    expect(cards[1].find('.m-date').exists()).toBe(false)
+    w2.unmount()
+  })
+
+  it('清單為空與查詢失敗：空清單提示；403 toast 後端訊息、不顯示空清單', async () => {
+    execsMock.mockResolvedValue([])
+    const { w } = await mountView()
+    expect(w.find('.empty').text()).toBe('目前沒有帳號類別')
+    w.unmount()
+
+    execsMock.mockRejectedValue(httpError(403, { message: '您沒有此功能的權限' }))
+    const { w: w2 } = await mountView()
+    expect(lastToast(w2)).toContain('您沒有此功能的權限')
+    expect(w2.find('.empty').exists()).toBe(false)
+    w2.unmount()
+  })
+
+  it('指派：下拉排除已在名單者，打執行人指派 API；成功 toast、關彈窗、重載，改別人不重載 /me', async () => {
+    const { w } = await mountView()
+    await w.find('.grant-btn').trigger('click')
+    await flushPromises()
+    expect(w.find('.modal h3').text()).toBe('指派 — 主機帳號')
+    expect(w.findAll('#member-user option').map(o => o.text())).toEqual([
+      '請選擇人員', 'Terry (邱健唐)（0000351）· 資訊處', 'Kevin (李凱鈞)（0000001）'
+    ])
+    await w.find('#member-user').setValue('0000351')
+    await w.find('#member-reason').setValue(' 新進 ')
+    await w.find('.confirm-member').trigger('click')
+    await flushPromises()
+    expect(execGrantMock).toHaveBeenCalledWith('HOST', { userId: '0000351', reason: '新進' })
+    expect(grantMock).not.toHaveBeenCalled()
+    expect(lastToast(w)).toBe('已將 Terry (邱健唐) 指派為「主機帳號」的執行人')
+    expect(w.find('.modal').exists()).toBe(false)
+    expect(execsMock).toHaveBeenCalledTimes(2)
+    expect(meMock).not.toHaveBeenCalled()
+    w.unmount()
+  })
+
+  it('移除：打執行人移除 API；成功 toast、重載', async () => {
+    const { w } = await mountView()
+    await w.findAll('.revoke-btn')[1].trigger('click')
+    expect(w.find('.modal h3').text()).toBe('移除 — 主機帳號')
+    await w.find('#member-reason').setValue('離職')
+    await w.find('.confirm-member').trigger('click')
+    await flushPromises()
+    expect(execRevokeMock).toHaveBeenCalledWith('HOST', '0000285', '離職')
+    expect(lastToast(w)).toBe('已將 Gary (許永成) 移出「主機帳號」的執行人')
+    expect(execsMock).toHaveBeenCalledTimes(2)
+    w.unmount()
+  })
+
+  it('E23 常駐彈窗內、不重載；其他 409 toast、關彈窗、重載', async () => {
+    const e23 = '移除後沒有人能處理下列在途案件，請先加入接替人員：AR20261007-011（關卡 6）'
+    execRevokeMock.mockRejectedValueOnce(httpError(409, { message: e23 }))
+    const { w } = await mountView()
+    await w.findAll('.revoke-btn')[0].trigger('click')
+    await w.find('#member-reason').setValue('調職')
+    await w.find('.confirm-member').trigger('click')
+    await flushPromises()
+    expect(w.find('.modal .blocked').text()).toBe(e23)
+    expect(execsMock).toHaveBeenCalledTimes(1)
+    await w.find('.modal .actions .btn:not(.confirm-member)').trigger('click')
+
+    execGrantMock.mockRejectedValueOnce(httpError(409, { message: '此人已在名單中，請重新整理' }))
+    await w.find('.grant-btn').trigger('click')
+    await flushPromises()
+    await w.find('#member-user').setValue('0000351')
+    await w.find('#member-reason').setValue('新進')
+    await w.find('.confirm-member').trigger('click')
+    await flushPromises()
+    expect(lastToast(w)).toBe('此人已在名單中，請重新整理')
+    expect(w.find('.modal').exists()).toBe(false)
+    expect(execsMock).toHaveBeenCalledTimes(2)
+    w.unmount()
+  })
+
+  it('F7：移除唯一的啟用中執行人時黃色提示、不阻擋；移除停用者、還有其他啟用中執行人、指派模式都不提示', async () => {
+    execsMock.mockResolvedValue([
+      catg(),
+      catg({ catgId: 'DB', catgName: '資料庫帳號', members: [member(), member({ userId: '0000351', userName: 'Terry (邱健唐)' })] })
+    ])
+    const { w } = await mountView()
+    const cards = w.findAll('.catg-card')
+    await cards[0].findAll('.revoke-btn')[0].trigger('click')
+    expect(w.find('.modal .last-warning').text()).toBe(
+      '⚠️ 移除後「主機帳號」沒有執行人，之後這個類別的申請到關卡 6（執行）將無人能處理。'
+    )
+    await w.find('.modal .actions .btn:not(.confirm-member)').trigger('click')
+
+    await cards[0].findAll('.revoke-btn')[1].trigger('click')
+    expect(w.find('.modal .last-warning').exists()).toBe(false)
+    await w.find('.modal .actions .btn:not(.confirm-member)').trigger('click')
+
+    await cards[1].findAll('.revoke-btn')[0].trigger('click')
+    expect(w.find('.modal .last-warning').exists()).toBe(false)
+    await w.find('.modal .actions .btn:not(.confirm-member)').trigger('click')
+
+    await cards[0].find('.grant-btn').trigger('click')
+    await flushPromises()
+    expect(w.find('.modal .last-warning').exists()).toBe(false)
+    await w.find('.modal .actions .btn:not(.confirm-member)').trigger('click')
+
+    await cards[0].findAll('.revoke-btn')[0].trigger('click')
+    await w.find('#member-reason').setValue('調職')
+    await w.find('.confirm-member').trigger('click')
+    await flushPromises()
+    expect(execRevokeMock).toHaveBeenCalledWith('HOST', '2410303', '調職')
+    w.unmount()
+  })
+
+  it('移除自己且失去 SYS_EXECUTOR：重載 /me 後導向無權限頁、不再重載清單', async () => {
+    execsMock.mockResolvedValue([catg({ members: [member({ userId: '0000001', userName: 'Kevin (李凱鈞)' })] })])
+    meMock.mockResolvedValue(makeMe())
+    const { w, router } = await mountView()
+    await w.find('.revoke-btn').trigger('click')
+    await w.find('#member-reason').setValue('交接')
+    await w.find('.confirm-member').trigger('click')
+    await flushPromises()
+    expect(meMock).toHaveBeenCalledTimes(1)
+    expect(router.currentRoute.value.path).toBe('/no-access')
+    expect(execsMock).toHaveBeenCalledTimes(1)
+    w.unmount()
+  })
+
+  it('指派自己且仍有 SYS_EXECUTOR：留在本頁並重載；/me 重載失敗 toast 並留在本頁', async () => {
+    meMock.mockResolvedValue(makeMe({ permissions: EXEC_PERMS, execCatgIds: ['HOST'] }))
+    const { w, router } = await mountView()
+    await w.find('.grant-btn').trigger('click')
+    await flushPromises()
+    await w.find('#member-user').setValue('0000001')
+    await w.find('#member-reason').setValue('兼任')
+    await w.find('.confirm-member').trigger('click')
+    await flushPromises()
+    expect(meMock).toHaveBeenCalledTimes(1)
+    expect(useSession().me.value?.execCatgIds).toEqual(['HOST'])
+    expect(router.currentRoute.value.path).toBe('/admin/executors')
+    expect(execsMock).toHaveBeenCalledTimes(2)
+
+    meMock.mockRejectedValueOnce(httpError(500, {}))
+    await w.findAll('.grant-btn')[1].trigger('click')
+    await flushPromises()
+    await w.find('#member-user').setValue('0000001')
+    await w.find('#member-reason').setValue('兼任')
+    await w.find('.confirm-member').trigger('click')
+    await flushPromises()
+    expect(lastToast(w)).toBe('查詢失敗，請稍後再試')
+    expect(router.currentRoute.value.path).toBe('/admin/executors')
+    expect(execsMock).toHaveBeenCalledTimes(3)
+    w.unmount()
+  })
+
+  it('切換身分中：提示先切回，指派與移除鈕停用', async () => {
+    useSession().me.value = makeMe({ permissions: EXEC_PERMS, impersonating: true, realUserId: '2410303' })
+    const { w } = await mountView()
+    expect(w.find('.imp-note').text()).toBe('切換身分中不能調整執行人，請先切回。')
+    expect(w.findAll('.grant-btn').every(b => b.attributes('disabled') !== undefined)).toBe(true)
+    expect(w.findAll('.revoke-btn').every(b => b.attributes('disabled') !== undefined)).toBe(true)
+    w.unmount()
+  })
+
+  it('重載中：指派與移除鈕停用，重載完成後恢復', async () => {
+    const { w } = await mountView()
+    let release: (v: AdminExecCatg[]) => void = () => {}
+    execsMock.mockReturnValueOnce(new Promise(r => { release = r }))
+    await w.findAll('.revoke-btn')[1].trigger('click')
+    await w.find('#member-reason').setValue('離職')
+    await w.find('.confirm-member').trigger('click')
+    await flushPromises()
+    expect(w.findAll('.grant-btn').every(b => b.attributes('disabled') !== undefined)).toBe(true)
+    expect(w.findAll('.revoke-btn').every(b => b.attributes('disabled') !== undefined)).toBe(true)
+    release([catg({ members: [member()] })])
+    await flushPromises()
+    expect(w.find('.grant-btn').attributes('disabled')).toBeUndefined()
+    expect(w.findAll('.revoke-btn')).toHaveLength(1)
+    w.unmount()
+  })
+})
+
 describe('權限碼分組函式', () => {
   it('不認得的模組排在最後、組名用代碼；空模組不列；null 回空陣列', () => {
     const gs = groupPerms([
@@ -993,5 +1281,17 @@ describe('系統管理 API', () => {
     const payload = { added: ['A'], removed: [], reason: '調整' }
     await expect(api.saveRolePerms('R/1', payload)).resolves.toMatchObject({ result: 'SAVED' })
     expect(post).toHaveBeenLastCalledWith('/admin/roles/R%2F1/perms', payload)
+  })
+
+  it('執行人對照：GET 路徑；指派與移除的類別代碼與工號經編碼、本文帶原因', async () => {
+    const api = await vi.importActual<typeof import('../src/api/admin')>('../src/api/admin')
+    const get = vi.spyOn(http, 'get').mockResolvedValue({ data: [] })
+    await expect(api.listExecutors()).resolves.toEqual([])
+    expect(get).toHaveBeenLastCalledWith('/admin/executors')
+    const post = vi.spyOn(http, 'post').mockResolvedValue({ data: { roleId: null, catgId: 'C/1', userId: 'U?1', result: 'GRANTED' } })
+    await expect(api.grantExecutor('C/1', { userId: 'U?1', reason: '新進' })).resolves.toMatchObject({ result: 'GRANTED' })
+    expect(post).toHaveBeenLastCalledWith('/admin/executors/C%2F1/members', { userId: 'U?1', reason: '新進' })
+    await api.revokeExecutor('C/1', 'U?1', '離職')
+    expect(post).toHaveBeenLastCalledWith('/admin/executors/C%2F1/members/U%3F1/revoke', { reason: '離職' })
   })
 })

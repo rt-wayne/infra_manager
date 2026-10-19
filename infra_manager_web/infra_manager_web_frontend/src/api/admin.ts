@@ -6,9 +6,13 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 5：角色權限設定的查詢與存檔
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 6：執行人對照的查詢、指派、移除（需 SYS_EXECUTOR）
 // ============================================================
 import http from './http'
 import type {
+  AdminExecCatg,
   AdminRole,
   AdminUser,
   MemberChangeResult,
@@ -41,6 +45,27 @@ export function grantRole(roleId: string, payload: MemberPayload): Promise<Membe
 export function revokeRole(roleId: string, userId: string, reason: string): Promise<MemberChangeResult> {
   return http
     .post<MemberChangeResult>(`${roleBase(roleId)}/members/${encodeURIComponent(userId)}/revoke`, { reason })
+    .then(r => r.data)
+}
+
+function execBase(catgId: string): string {
+  return `/admin/executors/${encodeURIComponent(catgId)}`
+}
+
+/** 帳號類別與執行人：GET /admin/executors（需 SYS_EXECUTOR） */
+export function listExecutors(): Promise<AdminExecCatg[]> {
+  return http.get<AdminExecCatg[]>('/admin/executors').then(r => r.data)
+}
+
+/** 把人員加入某類別的執行人：POST /admin/executors/{catgId}/members */
+export function grantExecutor(catgId: string, payload: MemberPayload): Promise<MemberChangeResult> {
+  return http.post<MemberChangeResult>(`${execBase(catgId)}/members`, payload).then(r => r.data)
+}
+
+/** 把人員移出某類別的執行人：POST /admin/executors/{catgId}/members/{userId}/revoke */
+export function revokeExecutor(catgId: string, userId: string, reason: string): Promise<MemberChangeResult> {
+  return http
+    .post<MemberChangeResult>(`${execBase(catgId)}/members/${encodeURIComponent(userId)}/revoke`, { reason })
     .then(r => r.data)
 }
 
