@@ -12,6 +12,9 @@
 //           E23 常駐彈窗內且不重載；其他 409 toast＋關彈窗＋重載；400 toast 彈窗留著；
 //           改到自己重載 /me（失去 SYS_ROLE 導無權限頁、仍有則留下）；改別人不重載 /me；切換中按鈕停用；
 //           字數函式按碼點並去頭尾空白
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 4 審查 M1（計畫 F7）：移除唯一啟用中成員的黃色提示與不提示的三種情況
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -370,6 +373,46 @@ describe('角色指派頁：指派與移除', () => {
     expect(w.find('.imp-note').text()).toBe('切換身分中不能調整角色，請先切回。')
     expect(w.find('.grant-btn').attributes('disabled')).toBeDefined()
     expect(w.findAll('.revoke-btn').every(b => b.attributes('disabled') !== undefined)).toBe(true)
+    w.unmount()
+  })
+
+  it('F7：移除唯一的啟用中成員時黃色提示（含權限名），提示不阻擋送出', async () => {
+    const { w } = await mountView()
+    // 假資料：Hank 啟用中、Gary 已停用 → Hank 是唯一啟用中成員
+    await w.findAll('.revoke-btn')[0].trigger('click')
+    expect(w.find('.modal .last-warning').text()).toBe(
+      '⚠️ 移除後「系統管理員」沒有成員；此角色的權限（角色指派、切換身分）若沒有其他角色持有，之後相關的申請將無人能處理。'
+    )
+    await w.find('#member-reason').setValue('調職')
+    await w.find('.confirm-member').trigger('click')
+    await flushPromises()
+    expect(revokeMock).toHaveBeenCalledWith('SYS_ADMIN', '2410303', '調職')
+    w.unmount()
+  })
+
+  it('F7：移除停用者、或還有其他啟用中成員時不提示；指派模式不提示；角色沒有權限時只寫沒有成員', async () => {
+    rolesMock.mockResolvedValue([
+      role(),
+      role({ roleId: 'DC_ADMIN', roleName: '機房管理員', members: [member(), member({ userId: '0000351', userName: 'Terry (邱健唐)' })] }),
+      role({ roleId: 'EMPTY', roleName: '測試角色', permNames: [], members: [member()] })
+    ])
+    const { w } = await mountView()
+    const cards = w.findAll('.role-card')
+    await cards[0].findAll('.revoke-btn')[1].trigger('click')
+    expect(w.find('.modal .last-warning').exists()).toBe(false)
+    await w.find('.modal .actions .btn:not(.confirm-member)').trigger('click')
+
+    await cards[1].findAll('.revoke-btn')[0].trigger('click')
+    expect(w.find('.modal .last-warning').exists()).toBe(false)
+    await w.find('.modal .actions .btn:not(.confirm-member)').trigger('click')
+
+    await cards[2].find('.revoke-btn').trigger('click')
+    expect(w.find('.modal .last-warning').text()).toBe('⚠️ 移除後「測試角色」沒有成員。')
+    await w.find('.modal .actions .btn:not(.confirm-member)').trigger('click')
+
+    await cards[2].find('.grant-btn').trigger('click')
+    await flushPromises()
+    expect(w.find('.modal .last-warning').exists()).toBe(false)
     w.unmount()
   })
 

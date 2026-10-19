@@ -8,6 +8,10 @@
             其他 409（E21 已在名單、E22 已不在名單、E24 最後一位角色指派者、E25 切換中、E26 鎖逾時）→ toast＋emit stale（呼叫端關彈窗並重載）；
             其餘錯誤（400、403、404、連不上）→ toast，彈窗留著
             後端錯誤本文只有 message 沒有代碼，E23 只能以文案開頭辨識（後端 AcctMsg.E23_PREFIX），兩邊要一起改
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-19
+  變更說明: BACKLOG 第 89 項階段 4 審查 M1（計畫 F7，使用者裁示 A）：加 warning 屬性，移除模式顯示黃色提示（不阻擋送出）；
+            文案與顯示條件由呼叫端決定（角色頁與執行人頁的受詞不同）
 -->
 <template>
   <BaseModal :title="title" :sub="subText" close-text="取消" @close="close">
@@ -25,6 +29,7 @@
       <div class="k">移除對象</div>
       <div class="v target">{{ memberText }}</div>
     </div>
+    <div v-if="mode === 'revoke' && warning" class="note-box warn last-warning">⚠️ {{ warning }}</div>
 
     <div class="field">
       <label for="member-reason">原因<span class="req-mark" title="必填">*</span>（{{ REASON_MAX }} 字內）</label>
@@ -69,8 +74,10 @@ const props = withDefaults(
     excludeIds?: string[]
     /** 實際送出；成功 resolve、失敗 reject 後端錯誤 */
     submit: (userId: string, reason: string) => Promise<unknown>
+    /** 移除模式的黃色提示（不阻擋），例：移除後名單沒有啟用中成員；空字串不顯示 */
+    warning?: string
   }>(),
-  { member: null, excludeIds: () => [] }
+  { member: null, excludeIds: () => [], warning: '' }
 )
 /** done：成功（帶對象工號與顯示名）；stale：名單狀態與畫面不一致等 409，呼叫端應關彈窗並重載 */
 const emit = defineEmits<{ close: []; done: [userId: string, userName: string]; stale: [] }>()
@@ -173,4 +180,5 @@ onMounted(() => {
 <style scoped>
 .field select { width: 100%; }
 .blocked { margin-top: 10px; white-space: pre-wrap; }
+.last-warning { margin-bottom: 12px; }
 </style>

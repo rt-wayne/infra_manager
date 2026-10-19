@@ -10,6 +10,10 @@
             成功 toast＋關彈窗＋重載；名單已變（409，E23 除外）關彈窗並重載；
             改到自己（對象＝目前身分）後重載 /me 與徽章，失去 SYS_ROLE 時導向無權限頁；
             切換身分中按鈕停用並提示先切回（後端同樣以 E25 拒絕）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-19
+  變更說明: BACKLOG 第 89 項階段 4 審查 M1（計畫 F7，使用者裁示 A）：移除啟用中且唯一的啟用中成員時，
+            彈窗黃色提示「移除後「{角色名}」沒有成員；此角色的權限（…）若沒有其他角色持有，之後相關的申請將無人能處理。」
 -->
 <template>
   <main>
@@ -59,6 +63,7 @@
       :member="editing.member"
       :exclude-ids="editing.role.members.map(m => m.userId)"
       :submit="submitChange"
+      :warning="lastMemberWarning"
       @close="editing = null"
       @done="onDone"
       @stale="onStale"
@@ -68,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import MemberChangeModal from '../components/MemberChangeModal.vue'
 import ToastHost from '../components/ToastHost.vue'
@@ -88,6 +93,21 @@ const loaded = ref(false)
 const loading = ref(false)
 /** 開著的指派／移除彈窗 */
 const editing = ref<{ mode: 'grant' | 'revoke'; role: AdminRole; member: AdminMember | null } | null>(null)
+
+/**
+ * 計畫 F7（不阻擋）：要移除的人啟用中、且是該角色唯一的啟用中成員 → 黃色提示。
+ * 本頁看不到其他角色是否持有同樣權限，所以寫「若沒有其他角色持有」，不判斷關卡名
+ */
+const lastMemberWarning = computed(() => {
+  const x = editing.value
+  if (!x || x.mode !== 'revoke' || !x.member?.userActive) return ''
+  const others = x.role.members.filter(m => m.userActive && m.userId !== x.member?.userId)
+  if (others.length > 0) return ''
+  const head = `移除後「${x.role.roleName}」沒有成員`
+  return x.role.permNames.length > 0
+    ? `${head}；此角色的權限（${x.role.permNames.join('、')}）若沒有其他角色持有，之後相關的申請將無人能處理。`
+    : `${head}。`
+})
 
 function openGrant(role: AdminRole): void {
   editing.value = { mode: 'grant', role, member: null }
