@@ -27,6 +27,9 @@
 //           黃字警示三種與沒有差異時不顯示；存檔彈窗摘要、原因檢查、送出的差異內容、成功 toast＋重載＋未存消失；
 //           E23 依碼分組常駐、E24 常駐、E27 toast＋關＋重載、403 留著；改到自己所屬角色重載 /me（失去 SYS_ROLE 導無權限頁、
 //           /me 失敗 toast 留在本頁、不含此角色不重載）；切換身分中全部停用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 5 審查 M1：登出、導向登入頁、切換身分後、失去 SYS_ROLE 時離開守衛直接放行；仍存得了才問
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -37,7 +40,7 @@ import RoleAdminView from '../src/views/RoleAdminView.vue'
 import RolePermAdminView from '../src/views/RolePermAdminView.vue'
 import { getRolePerms, grantRole, listAdminRoles, listAdminUsers, revokeRole, saveRolePerms } from '../src/api/admin'
 import { getMe } from '../src/api/auth'
-import { setToken } from '../src/api/tokenStore'
+import { clearToken, setToken } from '../src/api/tokenStore'
 import { resetSession, useSession } from '../src/composables/useSession'
 import type { AdminMember, AdminPermModule, AdminRole, AdminRolePerms, AdminUser, RolePermMatrix } from '../src/types/admin'
 import { groupPerms } from '../src/utils/permGroups'
@@ -612,6 +615,9 @@ describe('角色權限設定頁：編輯與存檔', () => {
 
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    // 離開守衛只在仍有 token 時才問（M1），每案先給一個
+    localStorage.clear()
+    setToken('tok')
     resetSession()
     useSession().me.value = makeMe({ permissions: ADMIN_PERMS, roleIds: ['SYS_ADMIN'] })
     matrixMock.mockReset().mockResolvedValue(matrix())
@@ -703,6 +709,55 @@ describe('角色權限設定頁：編輯與存檔', () => {
     w.unmount()
     await router.push('/admin/role-perms')
     expect(router.currentRoute.value.path).toBe('/admin/role-perms')
+  })
+
+  it('M1：登出（token 已清）、導向登入頁、切換身分後、已失去 SYS_ROLE 時離開不問、直接放行', async () => {
+    // 登出：版面先 clearToken＋resetSession 才導向登入頁
+    const a = await mountView()
+    setToken('tok')
+    await tick(a.w, 'ACC_APPLY')
+    clearToken()
+    await a.router.push('/login')
+    expect(a.w.find('.modal').exists()).toBe(false)
+    expect(a.router.currentRoute.value.path).toBe('/login')
+    a.w.unmount()
+
+    // 切換身分後：impersonating 為 true → 不可編輯 → 放行
+    resetSession()
+    useSession().me.value = makeMe({ permissions: ADMIN_PERMS, roleIds: ['SYS_ADMIN'] })
+    const b = await mountView()
+    setToken('tok')
+    await tick(b.w, 'ACC_APPLY')
+    useSession().me.value = makeMe({ permissions: ADMIN_PERMS, impersonating: true, realUserId: '2410303' })
+    await b.router.push('/')
+    expect(b.w.find('.modal').exists()).toBe(false)
+    expect(b.router.currentRoute.value.path).toBe('/')
+    b.w.unmount()
+
+    // 已失去 SYS_ROLE（例如 /me 重載後）→ 放行；仍有 token、仍可編輯且有差異 → 照常問
+    resetSession()
+    useSession().me.value = makeMe({ permissions: ADMIN_PERMS, roleIds: ['SYS_ADMIN'] })
+    const c = await mountView()
+    setToken('tok')
+    await tick(c.w, 'ACC_APPLY')
+    useSession().me.value = makeMe()
+    await c.router.push('/')
+    expect(c.w.find('.modal').exists()).toBe(false)
+    expect(c.router.currentRoute.value.path).toBe('/')
+    c.w.unmount()
+
+    resetSession()
+    useSession().me.value = makeMe({ permissions: ADMIN_PERMS, roleIds: ['SYS_ADMIN'] })
+    const d = await mountView()
+    setToken('tok')
+    await tick(d.w, 'ACC_APPLY')
+    const nav = d.router.push('/')
+    await flushPromises()
+    expect(d.w.find('.modal h3').text()).toBe('放棄未存的變更？')
+    await d.w.find('.discard-ok').trigger('click')
+    await nav
+    expect(d.router.currentRoute.value.path).toBe('/')
+    d.w.unmount()
   })
 
   it('關分頁（beforeunload）：有差異才攔', async () => {

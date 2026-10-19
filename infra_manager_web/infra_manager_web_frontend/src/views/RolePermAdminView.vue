@@ -14,6 +14,10 @@
             黃字警示三種（拿掉後沒有任何角色持有、加入系統管理碼將有 N 人取得、INSP_CREATE 無 INSP_VIEW／ACC_EXPORT 無 ACC_LIST_FULL），
             只在有差異時顯示、不阻擋；「存檔…」開 RolePermSaveModal，成功 toast＋先套用草稿再重載、
             /me 的 roleIds 含此角色時重載 /me（失敗 toast U09），失去 SYS_ROLE 導向無權限頁；現況已變（409）關彈窗並重載
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-10-19
+  變更說明: BACKLOG 第 89 項階段 5 審查 M1（使用者裁示 A）：離開守衛只在草稿還存得了時才問；
+            登出／401（token 已清或目的地是登入頁）、切換身分後、已失去 SYS_ROLE 時直接放行，未存勾選直接丟
 -->
 <template>
   <main>
@@ -107,6 +111,7 @@ import RolePermSaveModal from '../components/RolePermSaveModal.vue'
 import ToastHost from '../components/ToastHost.vue'
 import { getRolePerms, saveRolePerms } from '../api/admin'
 import { errorMessage } from '../api/errors'
+import { getToken } from '../api/tokenStore'
 import { useSession } from '../composables/useSession'
 import { useToast } from '../composables/useToast'
 import type { AdminRolePerms } from '../types/admin'
@@ -285,8 +290,13 @@ let stopLeaveGuard: (() => void) | null = null
 onMounted(() => {
   void load()
   window.addEventListener('beforeunload', onBeforeUnload)
-  // 本元件只在本路由存在，任何導航都是離開；有未存變更先問
-  stopLeaveGuard = router.beforeEach(async () => (dirty.value ? await askDiscard() : true))
+  // 本元件只在本路由存在，任何導航都是離開；有未存變更、而且草稿還存得了才問——
+  // 登出與 401（token 已清、目的地是登入頁）、切換身分後（canEdit 為 false）或已失去 SYS_ROLE 時直接放行，
+  // 否則選「繼續編輯」會留在一個存不了檔、再操作又跳框的頁面（階段 5 審查 M1，使用者裁示 A）
+  stopLeaveGuard = router.beforeEach(async to => {
+    const savable = dirty.value && canEdit.value && can('SYS_ROLE') && getToken() !== '' && !to.meta.public
+    return savable ? await askDiscard() : true
+  })
 })
 
 onBeforeUnmount(() => {
