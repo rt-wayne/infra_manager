@@ -599,10 +599,9 @@ describe('角色權限設定頁（唯讀）', () => {
     w.unmount()
   })
 
-  it('隱藏碼註記：hiddenGrantedCount > 0 才顯示 N', async () => {
+  it('隱藏碼：hiddenGrantedCount > 0 也不顯示任何提示（階段 6 使用者裁示）', async () => {
     const w = await mountView()
-    expect(w.find('.hidden-note').text()).toBe('另有 1 個尚未上線的權限碼未顯示，存檔不會變動')
-    await w.findAll('.role-item')[2].trigger('click')
+    expect(w.find('.perm-panel').text()).not.toContain('尚未上線')
     expect(w.find('.hidden-note').exists()).toBe(false)
     w.unmount()
   })
@@ -616,7 +615,6 @@ describe('角色權限設定頁（唯讀）', () => {
     expect(w.find('.perm-panel').attributes('data-role')).toBe('GENERAL')
     expect(checked(w)).toEqual([])
     expect(w.find('.member-count').text()).toBe('全體啟用中使用者 0 人')
-    expect(w.find('.hidden-note').exists()).toBe(false)
     w.unmount()
 
     matrixMock.mockResolvedValueOnce({ modules: [], roles: [] })

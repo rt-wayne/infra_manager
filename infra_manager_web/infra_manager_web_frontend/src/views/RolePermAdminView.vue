@@ -18,6 +18,10 @@
   修改日期: 2026-10-19
   變更說明: BACKLOG 第 89 項階段 5 審查 M1（使用者裁示 A）：離開守衛只在草稿還存得了時才問；
             登出／401（token 已清或目的地是登入頁）、切換身分後、已失去 SYS_ROLE 時直接放行，未存勾選直接丟
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-19
+  變更說明: BACKLOG 第 89 項階段 6（使用者裁示）：拿掉「另有 N 個尚未上線的權限碼未顯示」提示——
+            新功能上線、碼加進後端可見清單後自然出現可勾選；隱藏碼的既有授予存檔照樣不變（後端保證）
 -->
 <template>
   <main>
@@ -61,10 +65,6 @@
             </div>
           </div>
           <p v-if="groups.length === 0" class="hint no-perm">目前沒有可在畫面設定的權限碼</p>
-
-          <p v-if="selected.hiddenGrantedCount > 0" class="hint hidden-note">
-            另有 {{ selected.hiddenGrantedCount }} 個尚未上線的權限碼未顯示，存檔不會變動
-          </p>
 
           <div v-if="warnings.length > 0" class="note-box warn warnings">
             <div v-for="w in warnings" :key="w">⚠️ {{ w }}</div>
@@ -328,7 +328,6 @@ onBeforeUnmount(() => {
 .perm-check { display: inline-flex; align-items: center; gap: 6px; min-width: 0; cursor: pointer; }
 .perm-check input { width: 20px; height: 20px; flex-shrink: 0; }
 .perm-check input:disabled { cursor: not-allowed; }
-.hidden-note { margin-top: 12px; }
 .warnings { margin-top: 12px; }
 .warnings > div + div { margin-top: 4px; }
 @media (max-width: 900px) {

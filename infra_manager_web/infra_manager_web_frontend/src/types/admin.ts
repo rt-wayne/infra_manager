@@ -89,7 +89,7 @@ export interface AdminRolePerms {
   memberCount: number
   /** 已授予的可見碼 */
   grantedPermIds: string[]
-  /** 已授予但畫面不顯示的碼數（尚未上線的碼），存檔不會變動 */
+  /** 已授予但畫面不顯示的碼數（尚未上線的碼），存檔不會變動；畫面不顯示此數（階段 6 使用者裁示） */
   hiddenGrantedCount: number
 }
 
