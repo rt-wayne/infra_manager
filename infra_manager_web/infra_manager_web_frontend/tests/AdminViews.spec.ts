@@ -34,7 +34,7 @@
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 6 回合 1：執行人對照頁——頁首說明、每類別一卡（不開放新增的加註）、停用者加註、缺欄保底、
 //           空清單與查詢失敗；指派（下拉排除已在名單者）／移除打執行人 API、成功 toast＋重載；E23 常駐、其他 409 關＋重載；
-//           F7 提示與不提示；改到自己重載 /me（失去 SYS_EXECUTOR 導無權限頁、/me 失敗 toast 留下）；
+//           F7 提示與不提示；改到自己重載 /me（重載後已無 SYS_EXECUTOR〔他人同時調整角色〕導無權限頁、/me 失敗 toast 留下）；
 //           切換中與重載中按鈕停用；API 路徑與編碼
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -1167,7 +1167,7 @@ describe('執行人對照頁', () => {
     w.unmount()
   })
 
-  it('移除自己且失去 SYS_EXECUTOR：重載 /me 後導向無權限頁、不再重載清單', async () => {
+  it('移除自己後重載的 /me 已無 SYS_EXECUTOR（他人同時調整角色）：導向無權限頁、不再重載清單', async () => {
     execsMock.mockResolvedValue([catg({ members: [member({ userId: '0000001', userName: 'Kevin (李凱鈞)' })] })])
     meMock.mockResolvedValue(makeMe())
     const { w, router } = await mountView()

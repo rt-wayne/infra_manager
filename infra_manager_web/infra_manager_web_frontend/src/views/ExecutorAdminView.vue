@@ -6,7 +6,8 @@
             「＋ 指派」與執行人「移除」重用 MemberChangeModal（指派／移除 API 由本頁傳入）；
             移除唯一的啟用中執行人時黃色提示（計畫 F7，不阻擋）；
             成功 toast＋重載；名單已變（409，E23 除外）關彈窗並重載；
-            改到自己（對象＝目前身分）後重載 /me 與徽章（待辦數會變），重載失敗 toast U09；失去 SYS_EXECUTOR 時導向無權限頁；
+            改到自己（對象＝目前身分）後重載 /me 與徽章（執行人類別與待辦數會變），重載失敗 toast U09；
+            執行人名單不影響權限碼（SYS_EXECUTOR 只來自角色），重載後已無 SYS_EXECUTOR 只會是他人同時調整了角色，此時導向無權限頁（防禦）；
             切換身分中與重載中按鈕停用（重載中停用是比照角色指派頁審查第 112 項，本頁一開始就做）
 -->
 <template>
@@ -126,7 +127,8 @@ async function onDone(userId: string, userName: string): Promise<void> {
       'teal'
     )
   }
-  // 改到目前身分（切換中後端以 E25 拒絕，到這裡必是本人）：重載 /me 與徽章，待辦簽核數會隨執行人身分改變
+  // 改到目前身分（切換中後端以 E25 拒絕，到這裡必是本人）：重載 /me 與徽章，執行人類別與待辦簽核數會隨之改變。
+  // 執行人名單不給權限碼，下方「已無 SYS_EXECUTOR」只在他人同時拿掉你的角色權限時成立（防禦）
   if (me.value && userId === me.value.userId) {
     await loadMe()
     void refreshBadges()
