@@ -54,6 +54,10 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 1：掃描清單加 RoleAdminDao；名單維護 SQL 斷言——全域鎖 FOR UPDATE WAIT 5、持有人數排除參數以 NVL 哨兵、
+//           在途申請單依關卡 PERM_ID、緊急存取沿用 UNDECIDED_COND／RETURNED_COND、名單列狀態轉移帶 oldStatus；AdminLogDao.INSERT 的 REASON 改綁參數
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -93,7 +97,7 @@ class SqlConstantScanTest {
 
 	static final List<Class<?>> DAOS = List.of(AcctDao.class, AcctHistDao.class, AcctReqDao.class, AdminLogDao.class,
 			AttachDao.class, CodeDao.class, DocSeqDao.class, EmgDao.class, HomeDao.class, InspDao.class, JobRunDao.class,
-			LoginTokenDao.class, NotifyLogDao.class, PermDao.class, UserDao.class);
+			LoginTokenDao.class, NotifyLogDao.class, PermDao.class, RoleAdminDao.class, UserDao.class);
 
 	static final List<Class<?>> CONTROLLERS = List.of(AccountController.class, AttachmentController.class, AuthController.class,
 			EmergencyController.class, HomeController.class, InspectionController.class, JobController.class,
@@ -246,6 +250,29 @@ class SqlConstantScanTest {
 				.contains("REVIEW_FLAG_SOURCE_CODE = NULL").contains("REVIEW_FLAG_DATE = NULL")
 				.contains("REVIEW_FLAG_BY = NULL").contains("AND IS_REVIEW_FLAG = 1")
 				.contains("AND REVIEW_FLAG_DATE <= :execDate").doesNotContain("SYSDATE");
+	}
+
+	/** 第 89 項名單維護：全域鎖、持有人數（排除以哨兵處理 null）、在途查詢、名單列狀態轉移、軌跡 REASON 綁參數 */
+	@Test
+	void 名單維護_全域鎖_持有人數排除哨兵_在途查詢_狀態轉移帶現況() {
+		assertThat(RoleAdminDao.LOCK_GLOBAL).contains("FROM IM_ACCT_ROLE").contains("ROLE_ID = :generalRoleId")
+				.contains("FOR UPDATE WAIT " + AcctConst.ADMIN_LOCK_WAIT_SECONDS).doesNotContain("NOWAIT");
+		assertThat(RoleAdminDao.COUNT_HOLDERS).contains("U.STATUS = 1").contains("RP.PERM_ID = :permId")
+				.contains("NOT (RP.ROLE_ID = NVL(:exclRoleId, '-') AND RP.PERM_ID = NVL(:exclPermId, '-'))")
+				.contains("NOT (RU.ROLE_ID = NVL(:exclRoleId, '-') AND RU.USER_ID = NVL(:exclUserId, '-'))")
+				.contains("RP.ROLE_ID = :generalRoleId").contains(PermDao.ACTIVE_ROLE_PERM);
+		assertThat(RoleAdminDao.FIND_PERM_IDS_OF_ROLE).contains(PermDao.ACTIVE_ROLE_PERM).contains("RP.ROLE_ID = :roleId");
+		assertThat(RoleAdminDao.FIND_IN_FLIGHT_BY_STAGE_PERM).contains("R.REQ_STATE_CODE IN ('REVIEW', 'VERIFY')")
+				.contains("S.PERM_ID = :permId").contains("JOIN IM_ACCT_APPR_STAGE S ON S.STAGE_ID = R.CURR_STAGE_ID");
+		assertThat(RoleAdminDao.FIND_IN_FLIGHT_EMG).contains(EmgDao.UNDECIDED_COND).contains(EmgDao.RETURNED_COND)
+				.doesNotContain(":now");
+		assertThat(RoleAdminDao.UPDATE_ROLE_MEMBER_STATUS).contains("STATUS = :newStatus").contains("AND STATUS = :oldStatus")
+				.contains("UPDATE_DATE = :now, UPDATE_BY = :userId").doesNotContain("CREATE_");
+		assertThat(RoleAdminDao.INSERT_ROLE_MEMBER).contains("STATUS, CREATE_DATE, CREATE_BY").doesNotContain("UPDATE_");
+		assertThat(RoleAdminDao.FIND_ROLE_MEMBERS).contains("NVL(RU.UPDATE_DATE, RU.CREATE_DATE) AS GRANT_DATE")
+				.contains("LEFT JOIN IM_ACCT_USER U ON U.USER_ID = RU.USER_ID").contains("RU.STATUS = 1");
+		assertThat(RoleAdminDao.FIND_ROLES).contains("ROLE_ID <> :generalRoleId").contains("STATUS = 1");
+		assertThat(AdminLogDao.INSERT).contains(":reason").doesNotContain("NULL,");
 	}
 
 	@Test

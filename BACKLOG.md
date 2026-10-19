@@ -17,9 +17,9 @@
 | 89 | 角色權限維護介面：角色指派、執行人對照兩頁（取代改 DB），另加第三頁設定角色可做哪些事／看到哪些頁面（角色 × 權限碼）；每次異動寫系統管理軌跡、原因必填，移除會卡住在途單或最後一位系統管理員時拒絕 | [backlog/89-角色權限維護介面.md](backlog/89-角色權限維護介面.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：計畫已完整（6 階段 12 回合），等使用者回「可以開始」後開階段 1 回合 1（共用基礎：AcctConst、AcctMsg E21～E27、AdminLogDao REASON 參數化、RoleAdminDao、HolderGuard、軌跡組裝器）；開工時把 HEAD 記進「本階段起點：」
-- 已改動（未 commit）：無
-- 本階段起點：
+- 下一步：階段 1 回合 2——`service\RoleAdminService.java`（角色清單、候選人、指派、移除：驗證順序、交易內取鎖、HolderGuard、SUCCESS 同交易、DENY 交易外、CannotAcquireLockException → E26）、後端 `controller\AdminController.java`（GET /admin/roles、GET /admin/users、POST /admin/roles/{roleId}/members、POST …/members/{userId}/revoke）、回應 model、`RoleAdminServiceTest`（TestFixture 加 RoleAdminDao mock）、SqlConstantScanTest 的 CONTROLLERS 與 API 數 39 → 43；回合結束派 code-reviewer＋test-runner（階段 1 結束）
+- 已改動（未 commit）：無（回合 1 已 commit）
+- 本階段起點：0da1622（階段 1，2026-10-19）
 - 卡住／待確認：實機測試對象（Alex 測在途擋下、2410305 測指派移除，見第 90 項）實機測試對象（Alex 測在途擋下、2410305 測指派移除，見第 90 項）
 
 ## 僅記錄未拍板

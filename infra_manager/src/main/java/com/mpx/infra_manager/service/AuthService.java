@@ -18,6 +18,9 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 1：AdminLogDao.insert 多一個 reason 參數，三處切換身分軌跡傳 null（行為不變）
 // ============================================================
 
 import java.time.Clock;
@@ -187,7 +190,7 @@ public class AuthService {
 		LocalDateTime now = LocalDateTime.now(clock);
 		if (!permissionService.realCan(id, AcctConst.PERM_SYS_IMPERSONATE)) {
 			adminLogDao.insert(now, id.getRealUserId(), id.getRealUserName(), AcctConst.ADM_IMPERSONATE,
-					target != null && target.length() <= USER_ID_MAX ? target : null, null, AcctConst.ADM_DENY);
+					target != null && target.length() <= USER_ID_MAX ? target : null, null, null, AcctConst.ADM_DENY);
 			log.info("切換身分被拒（無權限）userId={}", id.getRealUserId());
 			throw AcctMsg.forbidden();
 		}
@@ -207,7 +210,7 @@ public class AuthService {
 				throw AcctMsg.unauthorized();
 			}
 			adminLogDao.insert(now, id.getRealUserId(), id.getRealUserName(), AcctConst.ADM_IMPERSONATE, target,
-					contentJson(targetName), AcctConst.ADM_SUCCESS);
+					contentJson(targetName), null, AcctConst.ADM_SUCCESS);
 		});
 		log.info("切換身分 userId={} target={}", id.getRealUserId(), target);
 		AcctUser real = userDao.findById(id.getRealUserId());
@@ -226,7 +229,7 @@ public class AuthService {
 				throw AcctMsg.unauthorized();
 			}
 			adminLogDao.insert(now, id.getRealUserId(), id.getRealUserName(), AcctConst.ADM_IMPERSONATE_END, prev,
-					contentJson(prevName), AcctConst.ADM_SUCCESS);
+					contentJson(prevName), null, AcctConst.ADM_SUCCESS);
 		});
 		log.info("切回 userId={} from={}", id.getRealUserId(), prev);
 		AcctUser real = userDao.findById(id.getRealUserId());

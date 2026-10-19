@@ -56,6 +56,11 @@ package com.mpx.infra_manager.common;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 1（角色權限維護介面）：權限碼 SYS_ROLE／SYS_EXECUTOR；管理軌跡動作 ROLE_GRANT／ROLE_REVOKE／
+//           EXEC_GRANT／EXEC_REVOKE（DDL 第 619 行預留值）；DENY 代碼 NO_PERM／LAST_SYS_ROLE／IN_FLIGHT；
+//           名單維護常數（原因欄寬、全域鎖等待秒數、被擋單號在訊息與軌跡的上限、CONTENT_JSON 位元組上限）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -194,8 +199,27 @@ public final class AcctConst {
 	// 管理軌跡 IM_ACCT_ADMIN_LOG
 	public static final String ADM_IMPERSONATE = "IMPERSONATE";
 	public static final String ADM_IMPERSONATE_END = "IMPERSONATE_END";
+	/** 角色指派／移除、執行人對照指派／移除（BACKLOG 第 89 項；值為 DDL 第 619 行預留） */
+	public static final String ADM_ROLE_GRANT = "ROLE_GRANT";
+	public static final String ADM_ROLE_REVOKE = "ROLE_REVOKE";
+	public static final String ADM_EXEC_GRANT = "EXEC_GRANT";
+	public static final String ADM_EXEC_REVOKE = "EXEC_REVOKE";
 	public static final String ADM_SUCCESS = "SUCCESS";
 	public static final String ADM_DENY = "DENY";
+	/** DENY 軌跡 CONTENT_JSON.denyCode：無權限、移除後角色指派權限（SYS_ROLE）無人持有、移除後在途案件無人能處理 */
+	public static final String DENY_NO_PERM = "NO_PERM";
+	public static final String DENY_LAST_SYS_ROLE = "LAST_SYS_ROLE";
+	public static final String DENY_IN_FLIGHT = "IN_FLIGHT";
+	/** 名單維護的原因欄寬（IM_ACCT_ADMIN_LOG.REASON VARCHAR2(500 CHAR)） */
+	public static final int ADMIN_REASON_MAX = 500;
+	/** 名單維護全域互斥鎖（IM_ACCT_ROLE 的 GENERAL 列 FOR UPDATE WAIT n）的等待秒數；逾時 ORA-30006 → E26 */
+	public static final int ADMIN_LOCK_WAIT_SECONDS = 5;
+	/** 在途擋下訊息（E23）最多列幾筆單號，其餘以「等共 N 件」帶過 */
+	public static final int ADMIN_BLOCKED_MSG_MAX = 20;
+	/** DENY 軌跡 CONTENT_JSON 最多列幾筆被擋單號 */
+	public static final int ADMIN_BLOCKED_LOG_MAX = 50;
+	/** CONTENT_JSON 寫入前的 UTF-8 位元組上限：欄位宣告 VARCHAR2(2000 CHAR) 仍受單欄 4000 bytes 限制（BACKLOG 第 11 項），超過就逐筆丟單號 */
+	public static final int ADMIN_CONTENT_MAX_BYTES = 3900;
 
 	/** 所有啟用中使用者自動擁有、不存 IM_ACCT_ROLE_USER 的角色（Table 6.1）；只用來展開權限，不判斷角色名稱 */
 	public static final String ROLE_GENERAL = "GENERAL";
@@ -214,6 +238,9 @@ public final class AcctConst {
 	public static final String PERM_INSP_RESOLVE = "INSP_RESOLVE";
 	public static final String PERM_SYS_IMPERSONATE = "SYS_IMPERSONATE";
 	public static final String PERM_SYS_JOB_RUN = "SYS_JOB_RUN";
+	/** 角色指派維護、執行人對照維護（BACKLOG 第 89 項） */
+	public static final String PERM_SYS_ROLE = "SYS_ROLE";
+	public static final String PERM_SYS_EXECUTOR = "SYS_EXECUTOR";
 	public static final String PERM_EMG_APPLY = "EMG_APPLY";
 	public static final String PERM_EMG_VIEW_ALL = "EMG_VIEW_ALL";
 	public static final String PERM_EMG_DECIDE = "EMG_DECIDE";

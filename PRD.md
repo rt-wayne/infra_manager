@@ -669,8 +669,8 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 |---|---|
 | common | `AppConfig`（Clock、TransactionTemplate、啟用排程、載入業務設定）、`Identity`／`IdentityProvider`／`IdentityArgumentResolver`（取身分單一介面，Controller 宣告 Identity 參數即注入）、`TokenCodec`、`PasswordHasher`、`AcctConst`（代碼、時效、通知收件角色）、`AcctMsg`（錯誤文案）、`ApiException`、`GlobalExceptionHandler`（例外轉 `{message}`；multipart 超限轉 413 E15；其他 500 不外洩）、`NoStoreInterceptor`（context 內 `/api/**` 回應 no-store，由 `WebConfig` 註冊）、`DocSeqService`（取號）、`Texts`（顯示名、trim、LIKE 跳脫、欄寬檢查） |
 | controller | `AuthController`、`HomeController`、`AccountController`、`RequestController`、`AttachmentController`、`InspectionController`、`JobController`；只轉呼叫 service，不寫權限邏輯 |
-| service | `AuthService`（登入、鎖定、登出、`/me`、切換身分）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`SmtpMailSender`（SMTP 寄出）／`LogMailSender`（SMTP 未設定時只寫 log）、`MailAllowList`（寄送名單）、`JobService`、`HomeService`、`InspectionService`、`CodeService` |
-| dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
+| service | `AuthService`（登入、鎖定、登出、`/me`、切換身分）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`SmtpMailSender`（SMTP 寄出）／`LogMailSender`（SMTP 未設定時只寫 log）、`MailAllowList`（寄送名單）、`JobService`、`HomeService`、`InspectionService`、`CodeService`、`HolderGuard`（名單維護的「最後一位持有人」檢查）、`AdminLogWriter`（名單維護軌跡與 CONTENT_JSON 組裝；兩者尚無 API 呼叫——角色權限維護介面分批施工中，進度見 BACKLOG 第 89 項） |
+| dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`RoleAdminDao`（角色指派名單、全域互斥鎖、持有人數、在途案件；尚無 API 呼叫，見 BACKLOG 第 89 項）、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
 | tools | `PwdHashTool`：從主控台讀密碼（不回顯、不收命令列參數）輸出 PWD_HASH 字串 |
 
 **前端主要程式**（`infra_manager_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/infra_manager_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage，key `infra_manager_web.token`、`infra_manager_web.identityChanged`；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\accountExport.ts`（帳號列表匯出與共用儲存格文字）、`utils\perms.ts`、`utils\codes.ts`。
@@ -755,7 +755,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | ACT_DATE | DATE | ✓ | 發生時間 |
 | ACT_BY | VARCHAR2(30) | ✓ | 實際操作人 |
 | ACT_BY_NAME | VARCHAR2(100 CHAR) | ✓ | 顯示名快照 |
-| ACTION_CODE | VARCHAR2(30) | ✓ | IMPERSONATE、IMPERSONATE_END；ROLE_GRANT、ROLE_REVOKE、EXEC_GRANT、EXEC_REVOKE 為預留值，程式不寫入 |
+| ACTION_CODE | VARCHAR2(30) | ✓ | IMPERSONATE、IMPERSONATE_END；ROLE_GRANT、ROLE_REVOKE、EXEC_GRANT、EXEC_REVOKE 為預留值，目前沒有 API 寫入（角色權限維護介面分批施工中，進度見 BACKLOG 第 89 項） |
 | TARGET_USER_ID | VARCHAR2(30) | | 對象使用者 |
 | CONTENT_JSON | VARCHAR2(2000 CHAR) | | 切換時記 `{"targetUserName":"…"}` |
 | REASON | VARCHAR2(500 CHAR) | | 原因（切換身分可空） |

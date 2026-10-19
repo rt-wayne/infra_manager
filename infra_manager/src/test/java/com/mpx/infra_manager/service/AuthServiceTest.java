@@ -18,6 +18,9 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 1：AdminLogDao.insert 多 reason 參數，切換身分軌跡斷言補 null
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -203,7 +206,7 @@ class AuthServiceTest {
 		verify(tokenDao).touch(hash, NOW);
 		verify(tokenDao).setActAs(hash, null, HANK, NOW);
 		assertThat(back.isImpersonating()).isFalse();
-		verify(adminLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any());
+		verify(adminLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any());
 
 		t.setActAsStatus(1);
 		Identity as = provider.resolve("Bearer tok");
@@ -221,7 +224,7 @@ class AuthServiceTest {
 	void 切換身分_無權限403並寫DENY() {
 		ImpersonateForm f = target(GARY);
 		assertStatus(() -> auth.impersonate(id(KEVIN), f), HttpStatus.FORBIDDEN, AcctMsg.P01);
-		verify(adminLogDao).insert(NOW, KEVIN, "Kevin (李凱鈞)", AcctConst.ADM_IMPERSONATE, GARY, null, AcctConst.ADM_DENY);
+		verify(adminLogDao).insert(NOW, KEVIN, "Kevin (李凱鈞)", AcctConst.ADM_IMPERSONATE, GARY, null, null, AcctConst.ADM_DENY);
 		verify(tokenDao, never()).setActAs(any(), any(), any(), any());
 	}
 
@@ -231,7 +234,7 @@ class AuthServiceTest {
 		MeInfo me = auth.impersonate(id(HANK), target(GARY));
 		verify(tokenDao).setActAs("hash-" + HANK, GARY, HANK, NOW);
 		verify(adminLogDao).insert(eq(NOW), eq(HANK), eq("Hank (黃志翰)"), eq(AcctConst.ADM_IMPERSONATE), eq(GARY),
-				eq("{\"targetUserName\":\"Gary (許永成)\"}"), eq(AcctConst.ADM_SUCCESS));
+				eq("{\"targetUserName\":\"Gary (許永成)\"}"), isNull(), eq(AcctConst.ADM_SUCCESS));
 		assertThat(fx.txm.commits).isEqualTo(1);
 		assertThat(me.getUserId()).isEqualTo(GARY);
 		assertThat(me.getRealUserId()).isEqualTo(HANK);
@@ -256,7 +259,7 @@ class AuthServiceTest {
 		assertStatus(() -> auth.endImpersonate(id(HANK)), HttpStatus.CONFLICT, AcctMsg.E20);
 		MeInfo me = auth.endImpersonate(impersonate(HANK, GARY));
 		verify(tokenDao).setActAs(eq("hash-" + HANK), isNull(), eq(HANK), eq(NOW));
-		verify(adminLogDao).insert(eq(NOW), eq(HANK), any(), eq(AcctConst.ADM_IMPERSONATE_END), eq(GARY), any(),
+		verify(adminLogDao).insert(eq(NOW), eq(HANK), any(), eq(AcctConst.ADM_IMPERSONATE_END), eq(GARY), any(), isNull(),
 				eq(AcctConst.ADM_SUCCESS));
 		assertThat(me.getUserId()).isEqualTo(HANK);
 		assertThat(me.getCanImpersonate()).isTrue();

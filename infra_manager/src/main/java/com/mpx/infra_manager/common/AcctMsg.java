@@ -20,6 +20,10 @@ package com.mpx.infra_manager.common;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-19
+// 變更說明: BACKLOG 第 89 項階段 1（角色權限維護介面）：名單維護錯誤訊息 E21～E27 與 inFlight()（E23 由呼叫端帶單號明細）；
+//           E02／badCode 的受詞「對象」「角色」「帳號類別」
 // ============================================================
 
 import java.util.List;
@@ -49,6 +53,15 @@ public final class AcctMsg {
 	public static final String E18 = "巡檢項目不完整，請重新整理後再填寫";
 	public static final String E19 = "此項目已處理或不是異常項目";
 	public static final String E20 = "目前未切換身分";
+	// 名單維護（BACKLOG 第 89 項；E21～E26 為 409）
+	public static final String E21 = "此人已在名單中，請重新整理";
+	public static final String E22 = "此人已不在名單中，請重新整理";
+	/** E23 後面接「單號（關卡名）、…」，由 HolderGuard.describe 組 */
+	public static final String E23_PREFIX = "移除後沒有人能處理下列在途案件，請先加入接替人員：";
+	public static final String E24 = "不能移除最後一位具角色指派權限的人員";
+	public static final String E25 = "切換身分中不能調整角色或執行人，請先切回";
+	public static final String E26 = "其他管理員正在調整名單，請稍後再試";
+	public static final String E27 = "權限設定已被他人調整，請重新整理";
 	public static final String A01 = "帳號或密碼錯誤";
 	public static final String A02 = "此帳號已鎖定，請聯絡系統管理員";
 	public static final String A03 = "登入已逾時，請重新登入";
@@ -74,6 +87,10 @@ public final class AcctMsg {
 	// 緊急存取異常結案欄位（BACKLOG 第 46 項 S6）
 	public static final String WHAT_EMG_CLOSE_RESULT = "結案發現";
 	public static final String WHAT_EMG_CLOSE_DESCR = "結案說明";
+	// 名單維護（BACKLOG 第 89 項）：E02 的受詞「對象」；badCode 的受詞「角色」「帳號類別」
+	public static final String WHAT_TARGET = "對象";
+	public static final String WHAT_ROLE = "角色";
+	public static final String WHAT_CATG = "帳號類別";
 
 	// 文件未定文案、由 developer 補的（400 類）
 	public static final String BAD_CODE_PREFIX = "欄位內容不正確：";
@@ -116,6 +133,11 @@ public final class AcctMsg {
 
 	public static ApiException concurrent() {
 		return ApiException.conflict(E08);
+	}
+
+	/** E23：移除後在途案件無人能處理；detail 為「單號（關卡名）、…」 */
+	public static ApiException inFlight(String detail) {
+		return ApiException.conflict(E23_PREFIX + detail);
 	}
 
 	public static ApiException unauthorized() {
