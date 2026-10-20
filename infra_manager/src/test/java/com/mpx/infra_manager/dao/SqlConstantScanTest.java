@@ -65,6 +65,11 @@ package com.mpx.infra_manager.dao;
 // 變更說明: 階段 3 回合 1：ADMIN_VISIBLE_PERMS 常數測試——每個 PERM_* 常數與關卡碼都在清單內、恰 20 碼不重複、隱藏 8 碼不在內
 //           （裁示 ⑮A：新功能上線時加常數的同一 commit 要放進清單）；角色權限列 SQL 斷言（含 GENERAL 的角色清單、
 //           可見碼 IN 綁參數、成員數只算啟用中使用者、權限列現況不過濾 STATUS、狀態轉移帶 oldStatus、INSERT 不寫 UPDATE_*）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 2 回合 2：同步表片段 EmpSql 併入前三項掃描（不得 RD_USER. 前綴等）；
+//           所有 DAO 常數與片段不得 INNER JOIN PX_SYNC_EMP；片段口徑斷言（E2 只認 STATUS＝1、D2A 查無回工號、
+//           ⑪ 主管優先其次 DEPT_ID 最小且 'NULL' 字串當空、D9B 資格只看主要部門、E3 有效使用者）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -120,6 +125,26 @@ class SqlConstantScanTest {
 			"\\b(ORIG_REQ_ID|ORIG_ACCT_ID|NEW_ACCT_ID|IMPORT_ID|DISABLE_TYPE_CODE|REVIEW_BASIS_CODE|IS_DIRECT|IS_SHOW|APPLY_TEL_NO|APPLY_EMAIL|EXCPT_CNT\\s*,\\s*INSP_STATE_CODE)\\b");
 	/** END 後面直接接英文字母（END_DATE 之類有底線的欄名不算） */
 	static final Pattern GLUED_END = Pattern.compile("\\bEND[A-Z]");
+	/** 對同步人員檔做 LEFT JOIN 以外的 JOIN（PX_SYNC_EMP_MGR 不算；同步表查無的人會整列消失） */
+	static final Pattern INNER_JOIN_SYNC_EMP = Pattern.compile("(?<!LEFT )(?<!OUTER )\\bJOIN\\s+PX_SYNC_EMP\\b");
+
+	/** EmpSql 片段是方法（要帶別名），以範例別名展開後與 DAO 常數一起掃 */
+	static Map<String, String> empSqlSamples() {
+		Map<String, String> m = new LinkedHashMap<>();
+		m.put("EmpSql.joinEmp", EmpSql.joinEmp("E1", "U.USER_ID"));
+		m.put("EmpSql.nameExpr", EmpSql.nameExpr("E1", "U.USER_ID"));
+		m.put("EmpSql.inSyncCond", EmpSql.inSyncCond("U.USER_ID"));
+		m.put("EmpSql.activeUserCond", EmpSql.activeUserCond("U"));
+		m.put("EmpSql.primaryDeptExpr", EmpSql.primaryDeptExpr("U.USER_ID"));
+		m.put("EmpSql.qualifiedCond", EmpSql.qualifiedCond("U.USER_ID"));
+		return m;
+	}
+
+	static Map<String, String> daoSqlsWithEmpSql() throws IllegalAccessException {
+		Map<String, String> m = constants(DAOS);
+		m.putAll(empSqlSamples());
+		return m;
+	}
 
 	static Map<String, String> constants(List<Class<?>> classes) throws IllegalAccessException {
 		Map<String, String> m = new LinkedHashMap<>();
@@ -136,7 +161,7 @@ class SqlConstantScanTest {
 
 	@Test
 	void DAO_SQL常數_不引用既有模組使用者表_不用SYSDATE_無已廢除代碼與欄位() throws Exception {
-		Map<String, String> sqls = constants(DAOS);
+		Map<String, String> sqls = daoSqlsWithEmpSql();
 		assertThat(sqls).hasSizeGreaterThan(60);
 		List<String> bad = new ArrayList<>();
 		for (Map.Entry<String, String> e : sqls.entrySet()) {
@@ -175,12 +200,50 @@ class SqlConstantScanTest {
 	@Test
 	void DAO_SQL常數_END不與下一個字黏在一起() throws Exception {
 		List<String> bad = new ArrayList<>();
-		for (Map.Entry<String, String> e : constants(DAOS).entrySet()) {
+		for (Map.Entry<String, String> e : daoSqlsWithEmpSql().entrySet()) {
 			if (GLUED_END.matcher(e.getValue()).find()) {
 				bad.add(e.getKey());
 			}
 		}
 		assertThat(bad).isEmpty();
+	}
+
+	/** 第 124 項：本系統人員列不得 INNER JOIN 同步人員檔（同步表查無的人要照樣列出、人名退回工號） */
+	@Test
+	void DAO_SQL常數與同步表片段_不INNER_JOIN同步人員檔() throws Exception {
+		assertThat(INNER_JOIN_SYNC_EMP.matcher("JOIN PX_SYNC_EMP E ON").find()).isTrue();
+		assertThat(INNER_JOIN_SYNC_EMP.matcher("INNER JOIN PX_SYNC_EMP E ON").find()).isTrue();
+		assertThat(INNER_JOIN_SYNC_EMP.matcher("LEFT JOIN PX_SYNC_EMP E ON").find()).isFalse();
+		assertThat(INNER_JOIN_SYNC_EMP.matcher("LEFT OUTER JOIN PX_SYNC_EMP E ON").find()).isFalse();
+		assertThat(INNER_JOIN_SYNC_EMP.matcher("JOIN PX_SYNC_EMP_MGR M ON").find()).isFalse();
+		List<String> bad = new ArrayList<>();
+		for (Map.Entry<String, String> e : daoSqlsWithEmpSql().entrySet()) {
+			if (INNER_JOIN_SYNC_EMP.matcher(e.getValue()).find()) {
+				bad.add(e.getKey());
+			}
+		}
+		assertThat(bad).isEmpty();
+	}
+
+	/** 第 124 項同步表片段口徑：E2 只認 STATUS＝1、D2A 查無回工號、⑪ 主要部門、D9B 資格、E3 有效使用者 */
+	@Test
+	void 同步表片段_只認STATUS1_查無回工號_主要部門與資格與有效使用者口徑() {
+		assertThat(EmpSql.joinEmp("E1", "R.APPLY_BY"))
+				.isEqualTo("LEFT JOIN PX_SYNC_EMP E1 ON E1.EMP_ID = R.APPLY_BY AND E1.STATUS = 1");
+		assertThat(EmpSql.nameExpr("E1", "R.APPLY_BY")).isEqualTo("NVL(TRIM(E1.EMP_NAME), R.APPLY_BY)");
+		assertThat(EmpSql.inSyncCond("U.USER_ID"))
+				.isEqualTo("EXISTS (SELECT 1 FROM PX_SYNC_EMP PXE WHERE PXE.EMP_ID = U.USER_ID AND PXE.STATUS = 1)");
+		assertThat(EmpSql.activeUserCond("U")).isEqualTo("U.STATUS = 1 AND " + EmpSql.inSyncCond("U.USER_ID"));
+		assertThat(EmpSql.primaryDeptExpr(":userId"))
+				// ⑪：主管的部門優先、其次 DEPT_ID 最小；全名為字串 'NULL' 當空、退回部門名
+				.contains("KEEP (DENSE_RANK FIRST ORDER BY PXDE.IS_MGR DESC, PXDE.DEPT_ID)")
+				.contains("NVL(NULLIF(TRIM(PXD.DEPT_FULL_NAME), 'NULL'), PXD.DEPT_NAME)")
+				// E2：部門列與部門都只認 STATUS＝1
+				.contains("PXD.STATUS = 1").contains("PXDE.STATUS = 1").contains("PXDE.EMP_ID = :userId");
+		// D9B：資格只看主要部門（不是任一部門）；D8A：關鍵字寫在 Java 常數
+		assertThat(EmpSql.QUALIFIED_DEPT_KEYWORD).isEqualTo("資訊部");
+		assertThat(EmpSql.qualifiedCond(":userId")).isEqualTo(EmpSql.inSyncCond(":userId") + " AND "
+				+ EmpSql.primaryDeptExpr(":userId") + " LIKE '%資訊部%'");
 	}
 
 	@Test
