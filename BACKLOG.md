@@ -17,9 +17,9 @@
 | 124 | 登入改用 WPX VerifySecure 外部驗證 API（本系統不再存密碼、鎖定交給 WPX、驗證成功但本系統無此人則自動建立，暫限資訊部），人員姓名／Email／部門改由全系統直接讀同步表 `PX_SYNC_EMP`；英文名一併拿掉（原第 67 項併入）、申請人分機改自填；裁示 ①～⑭、D0～D12、E1～E8 與 9 個階段施工計畫見詳情檔；正式環境尚未上線。使用者 2026-10-19～20 交代 | [backlog/124-登入改用外部驗證API.md](backlog/124-登入改用外部驗證API.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：第 124 項階段 2 收尾——同一則訊息平行派 code-reviewer（範圍 29713c5..HEAD）與 test-runner（後端全部單元測試）；全過即階段 2 結束，接階段 3 回合 1（登入身分與 token 檢查改讀同步表）
+- 下一步：第 124 項階段 3 回合 1（先做 `EmpSql` 參數守門與包括號＝第 128 項 S2、S3，再改登入身分與 token 檢查讀同步表）；動工前等使用者裁示 Q1（主要部門片段能否用於角色指派／執行人的候選人下拉，影響階段 3 回合 2 `FIND_CANDIDATES`）；階段 2 已結束
 - 已改動（未 commit）：無（本機 `host.properties` 補 `wpx.*`、`environment.properties` 補 `infra.manager.wpx.*`，兩檔不進版控）
-- 本階段起點：29713c5
+- 本階段起點：（階段 3 開工時記當下 HEAD）
 - 卡住／待確認：無卡階段 2 的項目
 
 ## 已拍板待實作
@@ -116,6 +116,7 @@
 | 125 | 登入端點（`POST /auth/login`）沒有頻率限制：第 124 項改用 WPX 驗證後，它成為不必登入即可呼叫的公司帳密驗證入口，殼 jar 不轉傳使用者 IP（第 124 項裁示 ip 留空），WPX 分不出來源；有人對同一工號反覆送錯誤密碼會觸發 WPX 鎖住該員工的公司帳號（-3～-5），範圍是全公司而非只有資訊部。可在後端或殼 jar 依工號／來源 IP 限次。第 124 項 architect 分析時提出 | 2026-10-20 | — |
 | 126 | 使用者 2026-10-20 提供的 UAT 共用 `host.properties` 截圖中，Infra Manager 段仍是 `im.acct.insp.path=/im_acct_insp/api/v1`，後端已於第 68 項改名為 `/infra_manager/api/v1`；若 UAT 已部署改名後的版本，殼 jar 依共用目錄同名 key 優先的規則會轉送到舊路徑。要對照 UAT 目前部署版本與 SETUP 第 8 節改名部署步驟確認是否已處理。第 124 項查證時順帶發現，未深查 | 2026-10-20 | — |
 | 127 | `WpxAuthClient`（第 124 項階段 1 的 WPX 呼叫元件）建議改善 8 項：(S1) `publicKey` 整個方法 `synchronized`（`WpxAuthClient.java:239`），快取到期又遇 WPX 掛住時所有登入排隊、第 N 人約等 N×20 秒——快取有效時不拿鎖、重取時進鎖後再檢查，或重取失敗沿用舊公鑰；(S2) 私鑰在外呼公鑰之後才讀（`:206-208`），私鑰設錯仍先打 WPX，且測試檔開頭說明「私鑰讀不到不發請求」與 `:375-382` 實際不符——把 `privateKey()` 移到前面或改說明；(S3) `verify` 註解說不丟例外，實際只 catch `WpxException`（`:165`、`:180`）——多 catch `RuntimeException` 只記類別名；(S4) `timeout-seconds` 空字串啟動失敗、0 或負數可能啟動失敗或每次都服務異常（推論未實測）——≤0 改回 10 並 WARN，或 PRD 註明須為正整數；(S5) 測試解密與驗章直接引用正式程式的 `OAEP`／`SIGN_ALG` 常數（`WpxAuthClientTest.java:160,169`），常數改錯測試照過——測試端寫字面值或 `OAEPParameterSpec`；(S6) -23 測試兩次給同一把公鑰與 kid（`:283-298`），沒驗到重送用新 kid——第二次回 kid-2 與另一組金鑰；(S7) 工號＋密碼 JSON 跳脫後超過約 131 bytes 加密失敗、歸服務異常並留 WARN——階段 7 在登入入口限制工號格式與密碼長度（超過直接回帳密錯誤、不外呼），可順便擋工號含換行偽造 log；(S8) 細節：`WpxAuthClientLiveTest.java:36` 沒設私鑰環境變數時訊息講設定檔 key、`WpxAuthClient.java:274` 註解語意不通、詳情檔「下一步」仍寫回合 2。第 124 項階段 1 code-reviewer 提出 | 2026-10-20 | — |
+| 128 | 第 124 項階段 2（腳本 S1、同步表片段 `EmpSql`）建議改善 6 項：(S1) 腳本 `db/infra_manager_124_1_prep.sql:13` 與 `SETUP.md` 第 6 節寫「有未結束的交易會等它結束再改」不正確——Oracle `DDL_LOCK_TIMEOUT` 預設 0，拿不到鎖會立刻報 ORA-00054 並因遇錯即停結束，改寫成「會報 ORA-00054 並結束，稍後重跑即可」；(S2) 片段子查詢固定別名 PXE／PXDE／PXD 若與呼叫端撞名（例 `inSyncCond("PXE.EMP_ID")`），條件變恆真，`qualifiedCond` 等於人人有首次登入資格（授權繞過、不報錯、測試測不出）——在 `EmpSql` 加參數守門（`idExpr` 只收「別名.欄位」或綁定參數名、別名只收大寫英數底線、禁止 PX 開頭，不符丟 `IllegalArgumentException`），階段 3 接上呼叫端前做；`qualifiedCond(":userId")` 的參數出現兩次，換成 `?` 位置參數會少綁，說明補一句；(S3) `activeUserCond`、`qualifiedCond` 回傳的 `A AND B` 沒包括號，接在 `NOT` 後或與 `OR` 混用會算錯（E3 名單「停用」容易寫成取反）——兩者回傳包一層括號並改測試斷言；(S4) `SqlConstantScanTest` 防 INNER JOIN 的 regex 漏 `RIGHT OUTER JOIN`、逗號 JOIN、以同步表為主表再 JOIN 本系統表、inline view、小寫——至少加不分大小寫並排除 RIGHT；(S5) 主要部門 `ORDER BY PXDE.DEPT_ID` 受連線 `NLS_SORT` 影響，程式與 SQL Developer 可能挑到不同部門（未實查本系統連線的 NLS_SORT）——改 `NLSSORT(PXDE.DEPT_ID, 'NLS_SORT=BINARY')` 或註明以 BINARY 為準；(S6) ⑬B 前提「資訊部無同名」是最早一次口徑的 113 人，未以 `qualifiedCond` 口徑重查，且驗證 SQL 未進 repo——重查同名並把查核 SQL 存進 `db\`。第 124 項階段 2 code-reviewer 提出；S2、S3 已依使用者 2026-10-20 裁示 A 排入第 124 項階段 3 回合 1，做完從本項刪除 | 2026-10-20 | — |
 | 79 | UAT 的附件根目錄（`infra.manager.attach.dir` 的值）目前設在哪、要不要隨改名搬到新目錄名；DB 的 `IM_ACCT_ATTACH.FILE_PATH` 存相對路徑，搬檔＋改設定值即可、不用動資料。改名部署時 SETUP 第 8 節寫「值可以維持原路徑」，不搬也能運作。第 68 項計畫待確認 2，結案時移入 | 2026-10-15 | — |
 
 ## 已拍板不做
