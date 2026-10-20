@@ -17,9 +17,9 @@
 | 124 | 登入改用 WPX VerifySecure 外部驗證 API（本系統不再存密碼、鎖定交給 WPX、驗證成功但本系統無此人則自動建立，暫限資訊部），人員姓名／Email／部門改由全系統直接讀同步表 `PX_SYNC_EMP`；英文名一併拿掉（原第 67 項併入）、申請人分機改自填；裁示 ①～⑭、D0～D12、E1～E8 與 9 個階段施工計畫見詳情檔；正式環境尚未上線。使用者 2026-10-19～20 交代 | [backlog/124-登入改用外部驗證API.md](backlog/124-登入改用外部驗證API.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：第 124 項階段 2 回合 1（腳本 S1 `db/infra_manager_124_1_prep.sql`：只把 `USER_EN_NAME` 改可空），等使用者同意開工；階段 1 已結束；待確認 2 已回答（UAT 也連 `itflow_uat`，腳本只跑一次）
+- 下一步：第 124 項階段 2 回合 1 收尾——使用者以 RD_USER 在 `itflow_uat` 跑 `db/infra_manager_124_1_prep.sql` 兩次、登入 UAT 確認照常；之後以 AP_USER 實查 `USER_EN_NAME` NULLABLE＝Y，接回合 2（`EmpSql.java` 同步表 SQL 片段）
 - 已改動（未 commit）：無（本機 `host.properties` 補 `wpx.*`、`environment.properties` 補 `infra.manager.wpx.*`，兩檔不進版控）
-- 本階段起點：（階段 2 開工時記當下 HEAD）
+- 本階段起點：29713c5
 - 卡住／待確認：無卡階段 2 的項目
 
 ## 已拍板待實作

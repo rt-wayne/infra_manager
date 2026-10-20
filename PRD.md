@@ -730,7 +730,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | 欄 | 型別 | 必 | 說明 |
 |---|---|---|---|
 | USER_ID（PK） | VARCHAR2(30) | ✓ | 工號＝登入帳號，數字字串最多 7 碼 |
-| USER_EN_NAME | VARCHAR2(50) | ✓ | 英文顯示名 |
+| USER_EN_NAME | VARCHAR2(50) |  | 英文顯示名。已升級的 DB（`db\infra_manager_124_1_prep.sql`）可空；建表檔暫仍 NOT NULL，第 124 項完成時連同本欄一起刪除（見 `BACKLOG.md` 第 124 項） |
 | USER_NAME | VARCHAR2(30 CHAR) | | 中文姓名 |
 | DEPT_NAME | VARCHAR2(50 CHAR) | | 部門 |
 | EMAIL | VARCHAR2(100) | | 空＝不收信（通知記 SKIP） |
