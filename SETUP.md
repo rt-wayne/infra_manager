@@ -20,7 +20,7 @@
 | 目錄 | 檔案 | 必填重點 |
 |---|---|---|
 | `infra_manager\src\main\resources\` | `application.properties` | `spring.application.name=infra_manager`；`server.port`；`server.servlet.context-path=/infra_manager`（少了這行，殼 jar 轉送會回 404）；要實際寄信填 `spring.mail.host=mail.pxmart.com.tw` |
-| `infra_manager\src\main\resources\` | `config\host.properties` | DB 連線資訊 API 的三個 key；四個 key 都要保留（值可空） |
+| `infra_manager\src\main\resources\` | `config\host.properties` | DB 連線資訊 API 的三個 key；四個 key 都要保留（值可空）。WPX 登入的 `wpx.*` 四個 key 同樣規則，見下方「WPX 登入」 |
 | `infra_manager\src\main\resources\` | `config\database.properties` | 取消 `itflow.db.alias` 的註解並填入 DB 別名 |
 | `infra_manager\src\main\resources\` | `config\environment.properties` | `infra.manager.attach.dir` 填附件根目錄絕對路徑；寄信的寄件人與寄送名單見下方 |
 | `infra_manager_web\infra_manager_web\src\main\resources\` | `application.properties` | `spring.application.name=infra_manager_web`；`server.port`；`server.servlet.context-path=/infra_manager_web`；`spring.servlet.multipart.enabled` 保持關閉 |
@@ -36,6 +36,17 @@
   - 正式環境才設 `infra.manager.mail.send-to-all=true`，寄給所有收件人。
   - `infra.manager.mail.site-url` 填使用者在瀏覽器開的前端網址（含 context），信末才會有「前往系統」連結，例 `http://主機:8787/infra_manager_web/`。直接從瀏覽器網址列複製也可以（`#` 之後、結尾的 `index.html` 會自動去掉）。留空＝不放連結；不是 `http://` 或 `https://` 開頭、沒有主機名稱，或網址含空白、雙引號等不合法字元，也視同留空，啟動 log 會有 WARN。
   - 改完要重啟後端。啟動 log 會有一行「寄信：SMTP 實際寄出；寄送名單 N 人」或「寄信：SMTP 未設定…只寫 log」，可據此確認。若出現 WARN「SMTP 已啟用但寄送名單是空的…」，代表名單空又沒開 `send-to-all`，所有通知都不會寄出。
+- WPX 登入（BACKLOG 第 124 項施工中，目前登入仍用本系統密碼；以下設定先備好，未設定不影響啟動）：
+  - `config\host.properties` 加 `wpx.domain`（協定＋主機）、`wpx.api.port`（例 `:8777`）、`wpx.api.path`（留空）、`wpx.api.domain.path=${wpx.domain}${wpx.api.port}${wpx.api.path}`，四個都要保留。位址向 WPX 窗口或 UAT 負責人取得（UAT 上 PX Track 的 `host.properties` 已有同一組值）。
+  - `config\environment.properties` 加 `infra.manager.wpx.app-id`（測試環境填 `Test`）、`infra.manager.wpx.dbalias=APX`、`infra.manager.wpx.private-key`（私鑰檔絕對路徑，Windows 用 `/`）、`infra.manager.wpx.timeout-seconds=10`。
+  - 私鑰檔是 PKCS#8 PEM（開頭 `-----BEGIN PRIVATE KEY-----`）。**不要放在 `src\main\resources\` 底下**（會被打包進 jar），也不要放進 repo；放在主機上只有執行帳號讀得到的目錄。測試環境與 PX Track 共用同一把測試私鑰：UAT 指向 PX Track 已放好的那個檔案即可；開發機用 WPX 交付包的 `pxgo.private.pkcs8.pem`（向專案負責人取得）。
+  - 確認開發機連得上 WPX 測試環境（不用任何真實帳號，送一個假工號，期望回「查無使用者」）：在 `infra_manager\` 目錄開 cmd 視窗執行
+    ```
+    set WPX_LIVE_BASE_URL=<wpx.api.domain.path 的值>
+    set WPX_LIVE_PRIVATE_KEY=<私鑰檔絕對路徑>
+    mvnw.cmd -Dtest=WpxAuthClientLiveTest test
+    ```
+    `Tests run: 1, Failures: 0` 即通過。沒設 `WPX_LIVE_BASE_URL` 時這支測試一律略過，平常建置不會連 WPX。appId 不是 `Test` 時另設 `WPX_LIVE_APP_ID`。
 
 ## 3. 後端建置與啟動
 

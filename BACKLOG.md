@@ -17,10 +17,10 @@
 | 124 | 登入改用 WPX VerifySecure 外部驗證 API（本系統不再存密碼、鎖定交給 WPX、驗證成功但本系統無此人則自動建立，暫限資訊部），人員姓名／Email／部門改由全系統直接讀同步表 `PX_SYNC_EMP`；英文名一併拿掉（原第 67 項併入）、申請人分機改自填；裁示 ①～⑭、D0～D12、E1～E8 與 9 個階段施工計畫見詳情檔；正式環境尚未上線。使用者 2026-10-19～20 交代 | [backlog/124-登入改用外部驗證API.md](backlog/124-登入改用外部驗證API.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：第 124 項階段 1 回合 2——有設環境變數才跑的 WPX 實連測試（私鑰路徑由環境變數給、假工號回 -1）；本機 `host.properties` 補 `wpx.*` 位址 key、`environment.properties` 補 `infra.manager.wpx.*`（兩檔不進版控）；PRD「環境設定」表補 key、SETUP 第 2 節補私鑰放置說明
-- 已改動（未 commit）：無
+- 下一步：第 124 項階段 1 收尾——code-reviewer（範圍 e0d1002..HEAD）＋test-runner（後端全部單元測試＋`WpxAuthClientLiveTest` 實連，環境變數見 SETUP 第 2 節「WPX 登入」）；必須修正修完、測試全過後階段 1 結束，接階段 2 回合 1
+- 已改動（未 commit）：無（本機 `host.properties` 補 `wpx.*`、`environment.properties` 補 `infra.manager.wpx.*`，兩檔不進版控）
 - 本階段起點：e0d1002
-- 卡住／待確認：詳情檔待確認 2（UAT 是否也連測試 DB `itflow_uat`）卡階段 2 回合 1；回合 1 的 `WpxAuthClientTest` 只編譯過、尚未執行（依流程留到階段 1 結束由 test-runner 跑）
+- 卡住／待確認：詳情檔待確認 2（UAT 是否也連測試 DB `itflow_uat`）卡階段 2 回合 1；回合 1、2 的測試只編譯過、尚未執行（留到階段 1 收尾）
 
 ## 已拍板待實作
 
