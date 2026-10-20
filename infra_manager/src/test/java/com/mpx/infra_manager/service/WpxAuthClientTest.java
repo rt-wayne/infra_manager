@@ -8,6 +8,9 @@ package com.mpx.infra_manager.service;
 //           模擬端以 WPX 私鑰解 cipher、以本系統公鑰驗 sig，確認加密、簽章、九欄順序與內外層 ts／nonce 一致
 //           涵蓋：Code 三分類、公鑰快取一天與 -23 重取重送（只重送一次）、HTTP 非 2xx／連不上／逾時／非 JSON／缺 Code、
 //           設定不全與私鑰檔讀不到不發請求、nonce 格式與不重複、log 不含密碼
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-20
+// 變更說明: 階段 1 審查 M1：Code 0 但 Success 不是 boolean true（false、缺欄、字串 "true"）一律歸服務異常、附 Code 0，並記「回應不一致」
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -251,6 +254,21 @@ class WpxAuthClientTest {
 
 		assertThat(client.verify(USER, PWD)).isEqualTo(new Result(Outcome.ACCOUNT_UNUSABLE, -4));
 		server.verify();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {
+			"{\"Success\":false,\"Message\":\"x\",\"Code\":0}",
+			"{\"Message\":\"x\",\"Code\":0}",
+			"{\"Success\":\"true\",\"Message\":\"x\",\"Code\":0}" })
+	void codeZeroWithoutSuccessTrue_isNotSuccess(String body) {
+		expectPublicKey(once());
+		server.expect(once(), requestTo(BASE + WpxAuthClient.SIGN_IN_PATH))
+				.andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+		assertThat(client.verify(USER, PWD)).isEqualTo(new Result(Outcome.SERVICE_ERROR, 0));
+		server.verify();
+		assertThat(logLines()).singleElement().asString().contains("回應不一致", USER).doesNotContain(PWD);
 	}
 
 	@Test

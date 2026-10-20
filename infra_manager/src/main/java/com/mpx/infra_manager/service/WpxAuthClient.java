@@ -13,6 +13,11 @@ package com.mpx.infra_manager.service;
 //           安全：密碼、cipher、sig、WPX 回應本文與 WPX 發的 Token 一律不寫 log、不保存；log 只記工號與 Code
 //           RestTemplate 比照 DbConnectApiClient 在類別內自建、不註冊成 bean，非 2xx 不丟夾帶本文的例外
 //           私鑰在第一次呼叫時才讀（尚未接上登入流程，缺設定不影響啟動；啟動時檢查留給階段 7）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-20
+// 變更說明: 階段 1 審查 M1：成功須 Success 為 boolean true 且 Code 為 0；Code 0 但 Success 不是 true（WPX 漏設 Code 時
+//           .NET 整數預設為 0）歸服務異常並記 WARN「回應不一致」（使用者裁示 ①A），避免驗證失敗卻放行。
+//           已查證 WPX 回 -23 時為 HTTP 200（2026-10-20），重取公鑰流程維持只看 2xx 本文
 // ============================================================
 
 import java.io.IOException;
@@ -112,6 +117,10 @@ public class WpxAuthClient {
 	private record CachedKey(String kid, PublicKey key, Instant fetchedAt) {
 	}
 
+	/** 登入回應中本元件會看的兩欄；success 只在 Success 是 boolean true 時為 true */
+	private record Reply(int code, boolean success) {
+	}
+
 	private final RestTemplate restTemplate;
 	private final String baseUrl;
 	private final String appId;
@@ -167,14 +176,20 @@ public class WpxAuthClient {
 	 */
 	public Result verify(String userId, String pwd) {
 		try {
-			Integer code = signIn(userId, pwd, false);
-			if (code != null && code == CODE_KID_NOT_FOUND) {
+			Reply reply = signIn(userId, pwd, false);
+			if (reply.code() == CODE_KID_NOT_FOUND) {
 				// WPX 換鑰：重取公鑰、整包重產（新的 ts、nonce、cipher、sig）再送一次
-				code = signIn(userId, pwd, true);
+				reply = signIn(userId, pwd, true);
 			}
-			Result result = new Result(classify(code), code);
+			Outcome outcome = classify(reply.code());
+			if (outcome == Outcome.SUCCESS && !reply.success()) {
+				// Code 0 但 Success 不是 true：不當成功（裁示 ①A 歸服務異常）
+				log.warn("WPX 回應不一致（Code 0 但 Success 不是 true）userId={}", userId);
+				return new Result(Outcome.SERVICE_ERROR, reply.code());
+			}
+			Result result = new Result(outcome, reply.code());
 			if (!result.success()) {
-				log.info("WPX 登入驗證未通過 userId={} code={} 分類={}", userId, code, result.outcome());
+				log.info("WPX 登入驗證未通過 userId={} code={} 分類={}", userId, reply.code(), result.outcome());
 			}
 			return result;
 		} catch (WpxException e) {
@@ -201,8 +216,8 @@ public class WpxAuthClient {
 		return Outcome.SERVICE_ERROR;
 	}
 
-	/** 組一整包請求並送出，回傳 WPX 的 Code */
-	private Integer signIn(String userId, String pwd, boolean refreshKey) throws WpxException {
+	/** 組一整包請求並送出，回傳 WPX 的 Code 與 Success */
+	private Reply signIn(String userId, String pwd, boolean refreshKey) throws WpxException {
 		requireConfig();
 		CachedKey wpxKey = publicKey(refreshKey);
 		PrivateKey mine = privateKey();
@@ -232,7 +247,8 @@ public class WpxAuthClient {
 		if (code == null || !code.isIntegralNumber()) {
 			throw new WpxException("登入回應缺少 Code");
 		}
-		return code.intValue();
+		JsonNode success = resp.get("Success");
+		return new Reply(code.intValue(), success != null && success.isBoolean() && success.booleanValue());
 	}
 
 	/** 取 WPX 公鑰；快取一天，refresh 為 true 時強制重取 */
