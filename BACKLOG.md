@@ -25,7 +25,7 @@
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 124 | 登入改用 WPX VerifySecure 外部驗證 API（本系統不再存密碼、鎖定交給 WPX、驗證成功但本系統無此人則自動建立，暫限資訊部），人員姓名／Email／部門改由全系統直接讀 `RD_USER.PX_SYNC_EMP`；英文名一併拿掉（原第 67 項併入，人名只顯示中文名、舊快照改寫）、申請人分機改自填；裁示 ①～⑭ 與 API、同步表實查結果見詳情檔，開工前要先補「待確認」1～6（含 WPX 測試帳號）。使用者 2026-10-19～20 交代 | 下一個 | [backlog/124-登入改用外部驗證API.md](backlog/124-登入改用外部驗證API.md) |
+| 124 | 登入改用 WPX VerifySecure 外部驗證 API（本系統不再存密碼、鎖定交給 WPX、驗證成功但本系統無此人則自動建立，暫限資訊部），人員姓名／Email／部門改由全系統直接讀 `RD_USER.PX_SYNC_EMP`；英文名一併拿掉（原第 67 項併入，人名只顯示中文名、舊快照改寫）、申請人分機改自填；裁示 ①～⑭、D0～D12（⑦B 落地：token 檢查也讀同步表、不用的欄上線即 DROP、不留最後已知姓名、同步異常不防）、不換 HTTPS、測試環境與 PX Track 共用 appId 已拍板，階段 0 查證完成（2026-10-20）；下一步依 D 裁示修訂階段計畫草案再開工，WPX 測試帳號未取得（卡登入實測）。使用者 2026-10-19～20 交代 | 下一個 | [backlog/124-登入改用外部驗證API.md](backlog/124-登入改用外部驗證API.md) |
 
 ## 僅記錄未拍板
 
@@ -84,7 +84,7 @@
 | 87 | 必填星號 `<span class="req-mark" title="必填">*</span>` 的 `title` 多半不會被螢幕報讀器讀出，`app.css` 註解「供報讀必填」不精確；可改星號加 `aria-hidden="true"`＋視覺隱藏的「必填」文字，或在輸入框加 `aria-required`。內部系統，優先度低。第 80 項 code-reviewer 提出 | 2026-10-16 | — |
 | 88 | 「* 為必填欄位」圖例位置不一致：緊急存取表單（`EmergencyFormView.vue:25`）放在區塊內 `<h3>` 下方，申請表單、巡檢表單放在整頁最上方；PRD 寫「三張表單上方」。第 80 項 code-reviewer 提出 | 2026-10-16 | — |
 | 90 | 測試帳號角色紀錄互相矛盾：BACKLOG 第 23 項寫測試帳號 2410305 已加 8 個角色與 8 類執行人（使用者裁示不移除），但 PRD 測試使用者表（約第 1007 行）寫 Wayne、Brian 的 8 個角色指派都是 STATUS＝0；要以測試 DB 實查為準更正其一。影響第 89 項（角色權限維護介面）實機測試要拿誰試。第 89 項 architect 規劃時發現 | 2026-10-16 | — |
-| 91 | 程式連線帳號 AP_USER 對系統管理軌跡表 IM_ACCT_ADMIN_LOG 有 UPDATE、DELETE 權限（使用者 2026-10-19 實查測試 DB），軌跡設計為只增不改，但程式帳號可竄改或刪除稽核紀錄；可收回這兩項權限（需 DBA，正式環境也要查）。第 89 項 F8 查證時發現 | 2026-10-19 | — |
+| 91 | 程式連線帳號 AP_USER 對系統管理軌跡表 IM_ACCT_ADMIN_LOG 有 UPDATE、DELETE 權限（使用者 2026-10-19 實查測試 DB），軌跡設計為只增不改，但程式帳號可竄改或刪除稽核紀錄；可收回這兩項權限（需 DBA，正式環境也要查）。第 89 項 F8 查證時發現。同類（第 124 項階段 0，2026-10-20 實查測試 DB）：AP_USER 對別的同事負責的人員同步表 `PX_SYNC_EMP`、`PX_SYNC_DEPT_EMP`、`PX_SYNC_DEPT` 也有 INSERT／UPDATE／DELETE，本系統只需 SELECT（PUBLIC 已有 SELECT） | 2026-10-19 | — |
 | 92 | 名單維護 DENY 軌跡的被擋單號是「每個權限碼各取 50 筆」再合併（`HolderGuard.java:98-99`、`blockedDocIds`），一個角色有多個卡單碼時會超過 50 筆，最後靠 3900 bytes 逐筆丟棄兜住；`AcctConst` 註解、PRD 軌跡表、計畫檔都寫「最多 50 筆」。改法：`blockedDocIds` 合併時截在 50 筆（第三頁另有「每碼 20 筆」規格，口徑分開較不混）；`AdminLogWriterTest` 補多碼案例。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
 | 93 | 全域鎖 `RoleAdminDao.lockGlobal()` 丟掉查詢結果不檢查筆數；GENERAL 列若被誤刪或改名，`FOR UPDATE` 鎖不到任何列也不報錯，互斥保護悄悄失效。改法：查無列時丟 IllegalStateException（寧可 500 也不放行）。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
 | 94 | 名單維護兩支 GET（/admin/roles、/admin/users）被拒時既不寫 DENY 軌跡（合理，沒有查詢類動作碼）也沒有應用 log，`GlobalExceptionHandler.handleApi` 只對 5xx 記 log，違反 security.md A09「權限拒絕必須記錄 log」。改法：比照 `RoleAdminService.requirePermOrDeny` 補 `log.info`。範圍外：全系統 `perm.require`／`requireAny` 被拒都有同一缺口，可在 `PermissionService.require` 統一補一行。第 89 項階段 1 code-reviewer 提出 | 2026-10-19 | — |
@@ -113,6 +113,8 @@
 | 121 | `PRD.md` 約 160 KB、約 4 萬 tokens（÷4 換算），超過健康線 3 萬，每次開工載入成本高；可委派 doc-writer 依「PRD 健檢與重整」段做一次瘦身（例如把 API 規格或資料字典拆到附檔）。既有體積、非第 89 項造成。第 89 項階段 6 回合 2 doc-writer 量測時提出 | 2026-10-19 | — |
 | 122 | `db/infra_manager_89_role_admin.sql` 第 13 行「全新環境不必跑」只寫建表檔 COMMENT 同句，沒提到 `infra_manager_init_data.sql` 的 SYS_ADMIN 說明已是新字；SETUP 寫「建表檔與初始資料檔建完不必跑（兩檔已同步）」，兩處說法差半句。結論仍正確（新環境 UPDATE 影響 0 筆），使用者看不到差別，這是內部品質問題。第 89 項階段 6 code-reviewer 提出（S3） | 2026-10-19 | — |
 | 123 | SETUP 第 6c 段（DB 直接調整一般人員權限）只提醒「拿掉」簽核碼的後果，沒點名：授予 SYS_IMPERSONATE、SYS_ROLE、SYS_EXECUTOR、ACC_LIST_FULL 給 GENERAL＝全體啟用中使用者取得；拿掉 GENERAL 的 SYS_ROLE 前要確認還有其他角色授予且有啟用中成員，否則沒人能進角色指派畫面。畫面上前者有「將有 N 人取得」黃字、後者有 E24 擋，DB 都沒有。現況 GENERAL 沒有這些碼。補一句即可。第 89 項階段 6 code-reviewer 提出（S4） | 2026-10-19 | — |
+| 125 | 登入端點（`POST /auth/login`）沒有頻率限制：第 124 項改用 WPX 驗證後，它成為不必登入即可呼叫的公司帳密驗證入口，殼 jar 不轉傳使用者 IP（第 124 項裁示 ip 留空），WPX 分不出來源；有人對同一工號反覆送錯誤密碼會觸發 WPX 鎖住該員工的公司帳號（-3～-5），範圍是全公司而非只有資訊部。可在後端或殼 jar 依工號／來源 IP 限次。第 124 項 architect 分析時提出 | 2026-10-20 | — |
+| 126 | 使用者 2026-10-20 提供的 UAT 共用 `host.properties` 截圖中，Infra Manager 段仍是 `im.acct.insp.path=/im_acct_insp/api/v1`，後端已於第 68 項改名為 `/infra_manager/api/v1`；若 UAT 已部署改名後的版本，殼 jar 依共用目錄同名 key 優先的規則會轉送到舊路徑。要對照 UAT 目前部署版本與 SETUP 第 8 節改名部署步驟確認是否已處理。第 124 項查證時順帶發現，未深查 | 2026-10-20 | — |
 | 79 | UAT 的附件根目錄（`infra.manager.attach.dir` 的值）目前設在哪、要不要隨改名搬到新目錄名；DB 的 `IM_ACCT_ATTACH.FILE_PATH` 存相對路徑，搬檔＋改設定值即可、不用動資料。改名部署時 SETUP 第 8 節寫「值可以維持原路徑」，不搬也能運作。第 68 項計畫待確認 2，結案時移入 | 2026-10-15 | — |
 
 ## 已拍板不做
