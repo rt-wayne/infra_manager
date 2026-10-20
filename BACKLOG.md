@@ -25,7 +25,7 @@
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 124 | 登入改用 WPX VerifySecure 外部驗證 API（本系統不再存密碼、鎖定交給 WPX、驗證成功但本系統無此人則自動建立，暫限資訊部），人員姓名／Email／部門改由全系統直接讀 `RD_USER.PX_SYNC_EMP`；裁示 ①～⑪ 與 API、同步表實查結果見詳情檔，開工前要先補「待確認」1～6（含 WPX 測試帳號）。使用者 2026-10-19～20 交代 | 下一個 | [backlog/124-登入改用外部驗證API.md](backlog/124-登入改用外部驗證API.md) |
+| 124 | 登入改用 WPX VerifySecure 外部驗證 API（本系統不再存密碼、鎖定交給 WPX、驗證成功但本系統無此人則自動建立，暫限資訊部），人員姓名／Email／部門改由全系統直接讀 `RD_USER.PX_SYNC_EMP`；英文名一併拿掉（原第 67 項併入，人名只顯示中文名、舊快照改寫）、申請人分機改自填；裁示 ①～⑭ 與 API、同步表實查結果見詳情檔，開工前要先補「待確認」1～6（含 WPX 測試帳號）。使用者 2026-10-19～20 交代 | 下一個 | [backlog/124-登入改用外部驗證API.md](backlog/124-登入改用外部驗證API.md) |
 
 ## 僅記錄未拍板
 
@@ -70,7 +70,6 @@
 | 63 | UAT 的 Apache 有 `ProxyPass /infra_manager` 直通後端，等於後端 API 在 Apache 的 port 上對外可達：繞過殼 jar（前端連不到後端的設計、11 MB 上傳上限都失效），只剩後端自己的 token 檢查。要問 UAT 管理者該 port 是否只限內網；正式環境上線前要確認是否沿用同一條規則。後端加網址前綴（2026-10-14）時 code-reviewer 發現，使用者裁示登記 | 2026-10-14 | — |
 | 64 | `SETUP.md` 第 26 行寫了郵件主機名稱，與檔頭「不記主機位址」的規則衝突；要移到 PRD 環境設定、改成「向負責人取得」或維持現狀未定。後端加網址前綴（2026-10-14）時 code-reviewer 發現 | 2026-10-14 | — |
 | 65 | `im_acct_insp_交接文件.md` 第 22、29 行仍寫後端根路徑 `/api/v1`，後端已加前綴改為 `/infra_manager/api/v1`；與第 21 項同一題：先決定這份初始交付文件是否持續隨程式維護。後端加網址前綴（2026-10-14）時 code-reviewer 發現 | 2026-10-14 | — |
-| 67 | 未來不再有英文名（IM_ACCT_USER.USER_EN_NAME）：顯示名目前都是「英文名 (中文名)」，影響登入身分、切換身分、申請單／待辦／緊急存取／附件人名、Email 內文、三種稽核快照欄、DDL 的 NOT NULL、SETUP 的 SQL 與約 14 個測試檔；先盤點、未定改法（刪欄位或不填、顯示改什麼、舊快照怎麼辦），可與第 13 項（顯示名兩種算法不一致）一起處理。使用者 2026-10-15 交代記錄 | 2026-10-15 | [backlog/67-移除英文名.md](backlog/67-移除英文名.md) |
 | 69 | 本專案完成後，把原有的 Infra_Manager 整併進本專案；Infra_Manager_Java（原 Infra_Manager 改寫到一半的版本，本專案寄信寫法與信件版面曾比照它）預計不再使用。整併完成後要清掉 DB 中沒有用到的 IM_ 開頭表（IM 即專案名縮寫；那些表是開發 Infra_Manager_Java 時建的，目前沒有任何系統在用；使用者 2026-10-15 裁示維持整併後再清、留作整併設計參考，DROP 前逐表列清單給使用者確認）。現況（2026-10-15 查看）：原 Infra_Manager＝「機房設備異動申請系統」，Node.js（Express＋EJS）、資料存 JSON 檔、port 3200 根路徑，正式機運作中，程式在 `D:\ai\Infra_Manager_OLD`；Infra_Manager_Java 未部署，程式在 `D:\ai\Infra_Manager_Java改寫`（repo `rt-wayne/Infra_Manager_Java`、Java 檔 217 個、套件 `com.mpx.infra_manager_java`、殼 jar 名 `infra_manager_web`，最後程式 commit 2026-10-13，2026-10-16 文件加註停止開發 `3986ec2`）。路線已裁示（使用者 2026-10-16）：①C 以本專案為底，舊 Node 系統（原 Infra_Manager）當需求與驗收依據，從 Infra_Manager_Java 搬業務層、DDL 與測試；②A Java 版 repo 已改名為 `rt-wayne/Infra_Manager_Java` 並封存（唯讀）；③A 舊系統取號漏洞維持現狀、不改正式機 Node 程式，等整併上線。整併範圍細節（詳情檔待確認 ④～⑩）、時程未定。使用者 2026-10-15 交代記錄 | 2026-10-15 | [backlog/69-整併原Infra_Manager.md](backlog/69-整併原Infra_Manager.md) |
 | 70 | `PRD.md` 第 11 行與第 660 行（DB 共用硬規則）把 IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等表寫成同 schema「既有『機房異動申請』模組」的表；實際上那些是開發 Infra_Manager_Java 時建的、沒有任何系統在用（原 Infra_Manager 資料存 JSON 檔，使用者 2026-10-15 說明）。「本模組不可建立、刪除、修改或引用」的規則目前無害，整併（第 69 項）開工時要改寫。第 69 項 architect 評估時發現 | 2026-10-15 | — |
 | 71 | `infra_manager\README.md` 第 10 節（業務程式概要）表格「排程」列只寫「J01、J02 的 cron」，漏了 J03（`infra.manager.job.j03.cron`）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
