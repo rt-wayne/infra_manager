@@ -13,6 +13,9 @@ package com.mpx.infra_manager.common;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1（裁示 ⑬B 只顯示中文名、第 67 項併入）：displayName 拿掉英文名參數，改為中文名、空白退回工號
 // ============================================================
 
 import java.nio.charset.StandardCharsets;
@@ -57,14 +60,10 @@ public final class Texts {
 		return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
 	}
 
-	/** 顯示名「英文名 (中文名)」，中文名空白時只顯示英文名；英文名也空白時退回中文名，再退回工號 */
-	public static String displayName(String enName, String zhName, String userId) {
-		String en = trimToNull(enName);
+	/** 顯示名：中文名（同步表 PX_SYNC_EMP.EMP_NAME），空白時退回工號（裁示 ⑬B、D2A） */
+	public static String displayName(String zhName, String userId) {
 		String zh = trimToNull(zhName);
-		if (en == null) {
-			return zh != null ? zh : userId;
-		}
-		return zh == null ? en : en + " (" + zh + ")";
+		return zh != null ? zh : userId;
 	}
 
 	/** n CHAR 欄位：字數（code point）超過 max 丟 E11 */

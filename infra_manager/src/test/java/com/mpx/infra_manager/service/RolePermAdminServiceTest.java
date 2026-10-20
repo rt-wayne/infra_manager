@@ -11,6 +11,9 @@ package com.mpx.infra_manager.service;
 //                 ⑧ added 已授予／removed 未授予 → E27 回滾 ⑨ SYS_ROLE 歸零 E24（換文案）＋DENY 回滾、E24 優先於 E23
 //                 ⑩ 多碼同時被擋全部列出（依碼分組、每碼最多 20 筆）＋DENY blocked 分組、名單未改
 //                 ⑪ removed UPDATE 1→0、added 現況 0 走 UPDATE 0→1、現況無列走 INSERT、主鍵衝突轉 E27、SUCCESS 一筆同交易、回應 SAVED
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1：期望顯示名改只有中文名（TestFixture.NAMES 改）
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -182,7 +185,7 @@ class RolePermAdminServiceTest {
 	void 存檔_無權限_403並寫DENY_只記roleId與碼數_對象空_不取鎖() {
 		assertStatus(() -> svc.save(id(KEVIN), "GOV", form(List.of("INSP_VIEW", "SYS_ROLE"), List.of("APPR_G5"), "想要")),
 				HttpStatus.FORBIDDEN, AcctMsg.P01);
-		verify(fx.adminLogDao).insert(eq(NOW), eq(KEVIN), eq("Kevin (李凱鈞)"), eq(AcctConst.ADM_ROLE_PERM_SET), isNull(),
+		verify(fx.adminLogDao).insert(eq(NOW), eq(KEVIN), eq("李凱鈞"), eq(AcctConst.ADM_ROLE_PERM_SET), isNull(),
 				eq("{\"roleId\":\"GOV\",\"addedCount\":2,\"removedCount\":1,\"denyCode\":\"NO_PERM\"}"), eq("想要"), eq(AcctConst.ADM_DENY));
 		verify(fx.roleAdminDao, never()).lockGlobal();
 		assertThat(fx.txm.begins).isZero();
@@ -279,7 +282,7 @@ class RolePermAdminServiceTest {
 		assertStatus(() -> svc.save(id(HANK), "GOV", form(List.of("INSP_VIEW"), List.of("SYS_ROLE", "APPR_G5"), "整理")),
 				HttpStatus.CONFLICT, AcctMsg.E24_PERM);
 		ArgumentCaptor<String> json = ArgumentCaptor.forClass(String.class);
-		verify(fx.adminLogDao).insert(eq(NOW), eq(HANK), eq("Hank (黃志翰)"), eq(AcctConst.ADM_ROLE_PERM_SET), isNull(), json.capture(),
+		verify(fx.adminLogDao).insert(eq(NOW), eq(HANK), eq("黃志翰"), eq(AcctConst.ADM_ROLE_PERM_SET), isNull(), json.capture(),
 				eq("整理"), eq(AcctConst.ADM_DENY));
 		assertThat(json.getValue()).isEqualTo("{\"roleId\":\"GOV\",\"roleName\":\"角色GOV\",\"memberCount\":3,"
 				+ "\"added\":[\"INSP_VIEW\"],\"removed\":[\"SYS_ROLE\",\"APPR_G5\"],\"denyCode\":\"LAST_SYS_ROLE\","
@@ -329,7 +332,7 @@ class RolePermAdminServiceTest {
 		verify(fx.roleAdminDao).updateRolePermStatus("GOV", "INSP_VIEW", 0, 1, NOW, HANK);
 		verify(fx.roleAdminDao).insertRolePerm("GOV", "SYS_IMPERSONATE", NOW, HANK);
 		verify(fx.roleAdminDao, never()).insertRolePerm(eq("GOV"), eq("INSP_VIEW"), any(), any());
-		verify(fx.adminLogDao).insert(eq(NOW), eq(HANK), eq("Hank (黃志翰)"), eq(AcctConst.ADM_ROLE_PERM_SET), isNull(),
+		verify(fx.adminLogDao).insert(eq(NOW), eq(HANK), eq("黃志翰"), eq(AcctConst.ADM_ROLE_PERM_SET), isNull(),
 				eq("{\"roleId\":\"GOV\",\"roleName\":\"角色GOV\",\"memberCount\":3,\"added\":[\"INSP_VIEW\",\"SYS_IMPERSONATE\"],\"removed\":[\"APPR_G5\"]}"),
 				eq("調整"), eq(AcctConst.ADM_SUCCESS));
 		assertThat(fx.txm.commits).isEqualTo(1);

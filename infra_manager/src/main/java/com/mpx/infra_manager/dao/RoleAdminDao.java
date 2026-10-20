@@ -24,6 +24,10 @@ package com.mpx.infra_manager.dao;
 //           （IM_ACCT_PERM 啟用中且在 :permIds 內，依 SORT_SEQ）、各角色啟用中成員數與啟用中使用者總數（GENERAL 的成員數）、
 //           某角色的全部權限列現況（含 STATUS＝0，存檔時逐格核對 E27 與決定 UPDATE／INSERT）、權限列狀態轉移與 INSERT
 //           （比照名單列：UPDATE 帶 oldStatus、保留 CREATE_*；影響 0 筆才 INSERT）。「排除某角色＋某碼」的持有人數沿用 COUNT_HOLDERS 的 :exclPermId
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1：FIND_ROLE_MEMBERS、FIND_EXEC_MEMBERS、FIND_CANDIDATES 拿掉 USER_EN_NAME（第 67 項併入）；
+//           姓名改讀同步表與 E3 口徑留到回合 2
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -96,7 +100,7 @@ public class RoleAdminDao {
 
 	/** 啟用中的角色成員（全部角色一次查）；對象停用仍列出（USER_STATUS＝0），使用者表查無列時 USER_STATUS 為空 */
 	public static final String FIND_ROLE_MEMBERS = """
-			SELECT RU.ROLE_ID AS GROUP_ID, RU.USER_ID, U.USER_EN_NAME, U.USER_NAME, U.STATUS AS USER_STATUS,
+			SELECT RU.ROLE_ID AS GROUP_ID, RU.USER_ID, U.USER_NAME, U.STATUS AS USER_STATUS,
 			       NVL(RU.UPDATE_DATE, RU.CREATE_DATE) AS GRANT_DATE, NVL(RU.UPDATE_BY, RU.CREATE_BY) AS GRANT_BY
 			  FROM IM_ACCT_ROLE_USER RU
 			  LEFT JOIN IM_ACCT_USER U ON U.USER_ID = RU.USER_ID
@@ -106,7 +110,7 @@ public class RoleAdminDao {
 
 	/** 指派候選人：啟用中使用者、含自己（既有 /users 需 SYS_IMPERSONATE 且排除自己，不沿用） */
 	public static final String FIND_CANDIDATES = """
-			SELECT USER_ID, USER_EN_NAME, USER_NAME, DEPT_NAME, STATUS
+			SELECT USER_ID, USER_NAME, DEPT_NAME, STATUS
 			  FROM IM_ACCT_USER
 			 WHERE STATUS = 1
 			 ORDER BY USER_ID
@@ -181,7 +185,7 @@ public class RoleAdminDao {
 
 	/** 啟用中的執行人對照（全部類別一次查）；欄位別名與 FIND_ROLE_MEMBERS 相同，共用 MemberRow */
 	public static final String FIND_EXEC_MEMBERS = """
-			SELECT M.CATG_ID AS GROUP_ID, M.USER_ID, U.USER_EN_NAME, U.USER_NAME, U.STATUS AS USER_STATUS,
+			SELECT M.CATG_ID AS GROUP_ID, M.USER_ID, U.USER_NAME, U.STATUS AS USER_STATUS,
 			       NVL(M.UPDATE_DATE, M.CREATE_DATE) AS GRANT_DATE, NVL(M.UPDATE_BY, M.CREATE_BY) AS GRANT_BY
 			  FROM IM_EXEC_MAP M
 			  LEFT JOIN IM_ACCT_USER U ON U.USER_ID = M.USER_ID

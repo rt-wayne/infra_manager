@@ -11,6 +11,9 @@ package com.mpx.infra_manager.common;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1：顯示名改兩參數（中文名、工號），空白退回工號
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,10 +57,11 @@ class CommonUtilTest {
 	}
 
 	@Test
-	void 顯示名格式_英文名括號中文名() {
-		assertThat(Texts.displayName("Hank", "黃志翰", "0000011")).isEqualTo("Hank (黃志翰)");
-		assertThat(Texts.displayName("Hank", " ", "0000011")).isEqualTo("Hank");
-		assertThat(Texts.displayName(null, null, "0000011")).isEqualTo("0000011");
+	void 顯示名_只有中文名_空白退回工號() {
+		assertThat(Texts.displayName("黃志翰", "0000011")).isEqualTo("黃志翰");
+		assertThat(Texts.displayName(" 黃志翰 ", "0000011")).isEqualTo("黃志翰");
+		assertThat(Texts.displayName(" ", "0000011")).isEqualTo("0000011");
+		assertThat(Texts.displayName(null, "0000011")).isEqualTo("0000011");
 	}
 
 	@Test

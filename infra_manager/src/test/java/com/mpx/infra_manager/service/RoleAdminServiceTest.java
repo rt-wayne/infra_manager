@@ -14,6 +14,9 @@ package com.mpx.infra_manager.service;
 // 變更說明: 階段 2 回合 1：執行人對照——清單需 SYS_EXECUTOR（8 類全列含關閉類別、成員分組）、只有 SYS_EXECUTOR 也能指派；
 //           指派：無權限 DENY 記 catgId、類別不存在／過長 400「帳號類別」、對象停用 404、關閉類別仍可指派、SUCCESS 記 catgId／catgName；
 //           移除：在途（關卡 6 同類別）E23＋DENY 的 blockedPerms 放類別代碼且不查權限持有人、通過才 UPDATE 1→0、不在名單 E22、切換中 E25
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1：MemberRow 刪英文名、期望顯示名改只有中文名（第 67 項併入）
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -140,7 +143,6 @@ class RoleAdminServiceTest {
 		MemberRow m1 = new MemberRow();
 		m1.setGroupId("GOV");
 		m1.setUserId(KEVIN);
-		m1.setUserEnName("Kevin");
 		m1.setUserName("李凱鈞");
 		m1.setUserStatus(1);
 		m1.setGrantDate(NOW);
@@ -157,7 +159,7 @@ class RoleAdminServiceTest {
 		assertThat(gov.getRoleId()).isEqualTo("GOV");
 		assertThat(gov.getPermNames()).containsExactly("關卡 4 核准", "關卡 7 複驗");
 		assertThat(gov.getMembers()).hasSize(2);
-		assertThat(gov.getMembers().get(0).getUserName()).isEqualTo("Kevin (李凱鈞)");
+		assertThat(gov.getMembers().get(0).getUserName()).isEqualTo("李凱鈞");
 		assertThat(gov.getMembers().get(0).getUserActive()).isTrue();
 		assertThat(gov.getMembers().get(0).getGrantDate()).isEqualTo(NOW);
 		assertThat(gov.getMembers().get(0).getGrantBy()).isEqualTo(HANK);
@@ -175,7 +177,7 @@ class RoleAdminServiceTest {
 		List<AdminUser> users = svc.users(id(HANK));
 		assertThat(users).hasSize(1);
 		assertThat(users.get(0).getUserId()).isEqualTo(HANK);
-		assertThat(users.get(0).getUserName()).isEqualTo("Hank (黃志翰)");
+		assertThat(users.get(0).getUserName()).isEqualTo("黃志翰");
 		assertThat(users.get(0).getDeptName()).isEqualTo("部門" + HANK);
 		assertThat(svc.users(TestFixture.idWith(GARY, java.util.Set.of("SYS_EXECUTOR"), List.of()))).hasSize(1);
 		assertStatus(() -> svc.users(id(KEVIN)), HttpStatus.FORBIDDEN, AcctMsg.P01);
@@ -188,7 +190,7 @@ class RoleAdminServiceTest {
 	@Test
 	void 指派_無權限_403並寫DENY_原因有存_不取鎖() {
 		assertStatus(() -> svc.grantRole(id(KEVIN), "GOV", grant(GARY, "接手")), HttpStatus.FORBIDDEN, AcctMsg.P01);
-		verify(fx.adminLogDao).insert(eq(NOW), eq(KEVIN), eq("Kevin (李凱鈞)"), eq(AcctConst.ADM_ROLE_GRANT), eq(GARY),
+		verify(fx.adminLogDao).insert(eq(NOW), eq(KEVIN), eq("李凱鈞"), eq(AcctConst.ADM_ROLE_GRANT), eq(GARY),
 				eq("{\"roleId\":\"GOV\",\"denyCode\":\"NO_PERM\"}"), eq("接手"), eq(AcctConst.ADM_DENY));
 		verify(fx.roleAdminDao, never()).lockGlobal();
 		assertThat(fx.txm.begins).isZero();
@@ -245,8 +247,8 @@ class RoleAdminServiceTest {
 		assertThat(r.getUserId()).isEqualTo(GARY);
 		verify(fx.roleAdminDao).updateRoleMemberStatus("GOV", GARY, 0, 1, NOW, HANK);
 		verify(fx.roleAdminDao, never()).insertRoleMember(any(), any(), any(), any());
-		verify(fx.adminLogDao).insert(eq(NOW), eq(HANK), eq("Hank (黃志翰)"), eq(AcctConst.ADM_ROLE_GRANT), eq(GARY),
-				eq("{\"roleId\":\"GOV\",\"roleName\":\"角色GOV\",\"targetUserName\":\"Gary (許永成)\",\"before\":{\"status\":0},\"after\":{\"status\":1}}"),
+		verify(fx.adminLogDao).insert(eq(NOW), eq(HANK), eq("黃志翰"), eq(AcctConst.ADM_ROLE_GRANT), eq(GARY),
+				eq("{\"roleId\":\"GOV\",\"roleName\":\"角色GOV\",\"targetUserName\":\"許永成\",\"before\":{\"status\":0},\"after\":{\"status\":1}}"),
 				eq("回鍋"), eq(AcctConst.ADM_SUCCESS));
 		assertThat(fx.txm.commits).isEqualTo(1);
 	}
@@ -338,7 +340,7 @@ class RoleAdminServiceTest {
 		assertThat(fx.txm.rollbacks).isEqualTo(1);
 		assertThat(fx.txm.commits).isZero();
 		verify(fx.adminLogDao).insert(eq(NOW), eq(HANK), any(), eq(AcctConst.ADM_ROLE_REVOKE), eq(HANK),
-				eq("{\"roleId\":\"SYS_ADMIN\",\"roleName\":\"角色SYS_ADMIN\",\"targetUserName\":\"Hank (黃志翰)\",\"denyCode\":\"LAST_SYS_ROLE\",\"blockedPerms\":[],\"blockedTotal\":0,\"blockedIds\":[]}"),
+				eq("{\"roleId\":\"SYS_ADMIN\",\"roleName\":\"角色SYS_ADMIN\",\"targetUserName\":\"黃志翰\",\"denyCode\":\"LAST_SYS_ROLE\",\"blockedPerms\":[],\"blockedTotal\":0,\"blockedIds\":[]}"),
 				eq("離職"), eq(AcctConst.ADM_DENY));
 	}
 
@@ -369,8 +371,8 @@ class RoleAdminServiceTest {
 		MemberChangeResult r = svc.revokeRole(id(HANK), "SYS_ADMIN", HANK, reason("交接完成"));
 		assertThat(r.getResult()).isEqualTo("REVOKED");
 		verify(fx.roleAdminDao).updateRoleMemberStatus("SYS_ADMIN", HANK, 1, 0, NOW, HANK);
-		verify(fx.adminLogDao).insert(eq(NOW), eq(HANK), eq("Hank (黃志翰)"), eq(AcctConst.ADM_ROLE_REVOKE), eq(HANK),
-				eq("{\"roleId\":\"SYS_ADMIN\",\"roleName\":\"角色SYS_ADMIN\",\"targetUserName\":\"Hank (黃志翰)\",\"before\":{\"status\":1},\"after\":{\"status\":0}}"),
+		verify(fx.adminLogDao).insert(eq(NOW), eq(HANK), eq("黃志翰"), eq(AcctConst.ADM_ROLE_REVOKE), eq(HANK),
+				eq("{\"roleId\":\"SYS_ADMIN\",\"roleName\":\"角色SYS_ADMIN\",\"targetUserName\":\"黃志翰\",\"before\":{\"status\":1},\"after\":{\"status\":0}}"),
 				eq("交接完成"), eq(AcctConst.ADM_SUCCESS));
 		assertThat(fx.txm.commits).isEqualTo(1);
 	}
@@ -411,7 +413,6 @@ class RoleAdminServiceTest {
 		MemberRow m = new MemberRow();
 		m.setGroupId("HOST");
 		m.setUserId(TestFixture.ALEX);
-		m.setUserEnName("Alex");
 		m.setUserName("陳儀仁");
 		m.setUserStatus(1);
 		m.setGrantDate(NOW);
@@ -424,7 +425,7 @@ class RoleAdminServiceTest {
 		assertThat(catgs.get(0).getCatgName()).isEqualTo("主機帳號");
 		assertThat(catgs.get(0).getEnabled()).isTrue();
 		assertThat(catgs.get(0).getMembers()).hasSize(1);
-		assertThat(catgs.get(0).getMembers().get(0).getUserName()).isEqualTo("Alex (陳儀仁)");
+		assertThat(catgs.get(0).getMembers().get(0).getUserName()).isEqualTo("陳儀仁");
 		// 關閉新申請的類別照樣列出、可維護
 		assertThat(catgs.get(2).getCatgId()).isEqualTo("APP");
 		assertThat(catgs.get(2).getEnabled()).isFalse();
@@ -461,8 +462,8 @@ class RoleAdminServiceTest {
 		assertThat(r.getResult()).isEqualTo("GRANTED");
 		verify(fx.roleAdminDao).insertExecMember("APP", KEVIN, NOW, GARY);
 		verify(fx.roleAdminDao, never()).insertRoleMember(any(), any(), any(), any());
-		verify(fx.adminLogDao).insert(eq(NOW), eq(GARY), eq("Gary (許永成)"), eq(AcctConst.ADM_EXEC_GRANT), eq(KEVIN),
-				eq("{\"catgId\":\"APP\",\"catgName\":\"應用系統帳號\",\"targetUserName\":\"Kevin (李凱鈞)\",\"before\":{\"status\":null},\"after\":{\"status\":1}}"),
+		verify(fx.adminLogDao).insert(eq(NOW), eq(GARY), eq("許永成"), eq(AcctConst.ADM_EXEC_GRANT), eq(KEVIN),
+				eq("{\"catgId\":\"APP\",\"catgName\":\"應用系統帳號\",\"targetUserName\":\"李凱鈞\",\"before\":{\"status\":null},\"after\":{\"status\":1}}"),
 				eq("支援"), eq(AcctConst.ADM_SUCCESS));
 		assertThat(fx.txm.commits).isEqualTo(1);
 	}
@@ -493,7 +494,7 @@ class RoleAdminServiceTest {
 		assertThat(r.getResult()).isEqualTo("REVOKED");
 		verify(fx.roleAdminDao).updateExecMemberStatus("DB", TestFixture.TERRY, 1, 0, NOW, GARY);
 		verify(fx.adminLogDao).insert(eq(NOW), eq(GARY), any(), eq(AcctConst.ADM_EXEC_REVOKE), eq(TestFixture.TERRY),
-				eq("{\"catgId\":\"DB\",\"catgName\":\"資料庫帳號\",\"targetUserName\":\"Terry (邱健唐)\",\"before\":{\"status\":1},\"after\":{\"status\":0}}"),
+				eq("{\"catgId\":\"DB\",\"catgName\":\"資料庫帳號\",\"targetUserName\":\"邱健唐\",\"before\":{\"status\":1},\"after\":{\"status\":0}}"),
 				eq("調職"), eq(AcctConst.ADM_SUCCESS));
 		assertThat(fx.txm.commits).isEqualTo(1);
 

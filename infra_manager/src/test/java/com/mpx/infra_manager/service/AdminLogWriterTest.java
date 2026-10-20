@@ -11,6 +11,9 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-10-19
 // 變更說明: 階段 3 回合 1：putBlockedByPerm 依碼分組、每碼最多 20 筆、每碼 ids 各自可裁剪；
 //           ROLE_PERM_SET 最壞情況（20 碼 added＋removed、30 字角色名、6 個卡單碼各 20 筆）不需裁剪且低於上限
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1：期望顯示名改只有中文名（TestFixture.NAMES 改）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,12 +58,12 @@ class AdminLogWriterTest {
 		Map<String, Object> c = AdminLogWriter.content();
 		c.put("roleId", "GOV");
 		c.put("roleName", "資訊治理");
-		c.put("targetUserName", "Kevin (李凱鈞)");
+		c.put("targetUserName", "李凱鈞");
 		c.put("before", Map.of("status", 0));
 		c.put("after", Map.of("status", 1));
 		writer.success(TestFixture.NOW, hank, AcctConst.ADM_ROLE_GRANT, TestFixture.KEVIN, c, "  接手關卡 4  ");
-		verify(dao).insert(TestFixture.NOW, TestFixture.HANK, "Hank (黃志翰)", AcctConst.ADM_ROLE_GRANT, TestFixture.KEVIN,
-				"{\"roleId\":\"GOV\",\"roleName\":\"資訊治理\",\"targetUserName\":\"Kevin (李凱鈞)\",\"before\":{\"status\":0},\"after\":{\"status\":1}}",
+		verify(dao).insert(TestFixture.NOW, TestFixture.HANK, "黃志翰", AcctConst.ADM_ROLE_GRANT, TestFixture.KEVIN,
+				"{\"roleId\":\"GOV\",\"roleName\":\"資訊治理\",\"targetUserName\":\"李凱鈞\",\"before\":{\"status\":0},\"after\":{\"status\":1}}",
 				"接手關卡 4", AcctConst.ADM_SUCCESS);
 	}
 

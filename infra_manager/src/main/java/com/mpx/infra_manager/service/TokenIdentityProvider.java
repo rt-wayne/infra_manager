@@ -17,12 +17,19 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1（裁示 D0B、E1、⑬B）：token 有效另須實際使用者在同步表 PX_SYNC_EMP 查得到（USER_IN_SYNC＝1），
+//           查無回 401 A03 並記一行專用 INFO log（D10A 不防同步異常，這是同步出錯那天唯一的診斷線索）；
+//           代理身分同步表查無比照停用自動切回；顯示名改只用中文名（AcctUser.userName 已由同步表帶出）
 // ============================================================
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.mpx.infra_manager.common.AcctConst;
@@ -38,6 +45,8 @@ import com.mpx.infra_manager.model.LoginToken;
 
 @Service
 public class TokenIdentityProvider implements IdentityProvider {
+
+	private static final Logger log = LoggerFactory.getLogger(TokenIdentityProvider.class);
 
 	private final LoginTokenDao tokenDao;
 	private final UserDao userDao;
@@ -63,12 +72,17 @@ public class TokenIdentityProvider implements IdentityProvider {
 		if (!isValid(t, now)) {
 			throw AcctMsg.unauthorized();
 		}
+		if (!inSync(t.getUserInSync())) {
+			// token 本身有效、本系統也啟用，只是同步表查無：D10A 下不防同步異常，這一行是出事那天唯一的線索
+			log.info("token 有效但同步表查無 userId={}", t.getUserId());
+			throw AcctMsg.unauthorized();
+		}
 		if (needTouch(t.getLastAccessDate(), now)) {
 			tokenDao.touch(hash, now);
 		}
 		String actAs = t.getActAsUserId();
-		if (actAs != null && !Integer.valueOf(1).equals(t.getActAsStatus())) {
-			// 代理身分已停用：自動切回，不寫軌跡（spec §2.5）
+		if (actAs != null && (!Integer.valueOf(1).equals(t.getActAsStatus()) || !inSync(t.getActAsInSync()))) {
+			// 代理身分已停用或同步表查無：自動切回，不寫軌跡（spec §2.5、裁示 E1）
 			tokenDao.setActAs(hash, null, t.getUserId(), now);
 			actAs = null;
 		}
@@ -93,10 +107,15 @@ public class TokenIdentityProvider implements IdentityProvider {
 	}
 
 	public static String displayName(AcctUser u) {
-		return Texts.displayName(u.getUserEnName(), u.getUserName(), u.getUserId());
+		return Texts.displayName(u.getUserName(), u.getUserId());
 	}
 
-	/** token 有效條件（spec §2.1） */
+	/** 同步表「查得到」旗標（SQL 的 CASE WHEN EXISTS … THEN 1 ELSE 0 END） */
+	static boolean inSync(Integer flag) {
+		return Integer.valueOf(1).equals(flag);
+	}
+
+	/** token 有效條件（spec §2.1）；同步表查得到另在 resolve 判斷（要記專用 log） */
 	static boolean isValid(LoginToken t, LocalDateTime now) {
 		if (t == null || t.getLogoutDate() != null || t.getExpireDate() == null || t.getLastAccessDate() == null) {
 			return false;

@@ -21,6 +21,10 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 1：AdminLogDao.insert 多一個 reason 參數，三處切換身分軌跡傳 null（行為不變）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1（裁示 D0B、E1、⑬B）：同步表 PX_SYNC_EMP 查無的人——登入比照停用回 A01（過渡行為，使用者裁示 A；
+//           階段 7 改走 WPX 後換成 D5A「帳號無法使用」）、切換身分對象比照停用回 404；顯示名改只用中文名（第 67 項併入）
 // ============================================================
 
 import java.time.Clock;
@@ -97,7 +101,9 @@ public class AuthService {
 		char[] pwd = form == null || form.getPassword() == null ? new char[0] : form.getPassword().toCharArray();
 		try {
 			AcctUser u = userId == null || userId.length() > USER_ID_MAX ? null : userDao.findById(userId);
-			if (u == null || !Integer.valueOf(1).equals(u.getStatus()) || u.getPwdHash() == null) {
+			// 同步表查無比照停用（否則登入成功、下一個請求就被 token 檢查踢回登入頁）
+			if (u == null || !Integer.valueOf(1).equals(u.getStatus()) || !TokenIdentityProvider.inSync(u.getInSync())
+					|| u.getPwdHash() == null) {
 				passwordHasher.dummyHash(pwd);
 				throw ApiException.unauthorized(AcctMsg.A01);
 			}
@@ -170,7 +176,7 @@ public class AuthService {
 			UserInfo u = users.computeIfAbsent(row.getUserId(), k -> {
 				UserInfo n = new UserInfo();
 				n.setUserId(row.getUserId());
-				n.setUserName(Texts.displayName(row.getUserEnName(), row.getUserName(), row.getUserId()));
+				n.setUserName(Texts.displayName(row.getUserName(), row.getUserId()));
 				n.setRoleIds(new ArrayList<>());
 				return n;
 			});
@@ -201,7 +207,8 @@ public class AuthService {
 			throw ApiException.badRequest(AcctMsg.IMPERSONATE_SELF);
 		}
 		AcctUser t = target.length() > USER_ID_MAX ? null : userDao.findById(target);
-		if (t == null || !Integer.valueOf(1).equals(t.getStatus())) {
+		// 對象須啟用且同步表查得到（查無的人切過去，下一個請求也會被自動切回）
+		if (t == null || !Integer.valueOf(1).equals(t.getStatus()) || !TokenIdentityProvider.inSync(t.getInSync())) {
 			throw AcctMsg.notFound();
 		}
 		String targetName = TokenIdentityProvider.displayName(t);

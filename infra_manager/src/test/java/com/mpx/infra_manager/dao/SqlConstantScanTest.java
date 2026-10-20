@@ -70,6 +70,10 @@ package com.mpx.infra_manager.dao;
 // 變更說明: BACKLOG 第 124 項階段 2 回合 2：同步表片段 EmpSql 併入前三項掃描（不得 RD_USER. 前綴等）；
 //           所有 DAO 常數與片段不得 INNER JOIN PX_SYNC_EMP；片段口徑斷言（E2 只認 STATUS＝1、D2A 查無回工號、
 //           ⑪ 主管優先其次 DEPT_ID 最小且 'NULL' 字串當空、D9B 資格只看主要部門、E3 有效使用者）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: 第 124 項階段 3 回合 1：組合條件片段改有括號；LoginTokenDao.FIND 兩個同步表旗標、UserDao.FIND_BY_ID 姓名與 Email 讀同步表
+//           且不再讀 IM_ACCT_USER 的 USER_NAME／USER_EN_NAME／EMAIL；四段名單 SQL 不含 USER_EN_NAME
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -233,7 +237,7 @@ class SqlConstantScanTest {
 		assertThat(EmpSql.nameExpr("E1", "R.APPLY_BY")).isEqualTo("NVL(TRIM(E1.EMP_NAME), R.APPLY_BY)");
 		assertThat(EmpSql.inSyncCond("U.USER_ID"))
 				.isEqualTo("EXISTS (SELECT 1 FROM PX_SYNC_EMP PXE WHERE PXE.EMP_ID = U.USER_ID AND PXE.STATUS = 1)");
-		assertThat(EmpSql.activeUserCond("U")).isEqualTo("U.STATUS = 1 AND " + EmpSql.inSyncCond("U.USER_ID"));
+		assertThat(EmpSql.activeUserCond("U")).isEqualTo("(U.STATUS = 1 AND " + EmpSql.inSyncCond("U.USER_ID") + ")");
 		assertThat(EmpSql.primaryDeptExpr(":userId"))
 				// ⑪：主管的部門優先、其次 DEPT_ID 最小；全名為字串 'NULL' 當空、退回部門名
 				.contains("KEEP (DENSE_RANK FIRST ORDER BY PXDE.IS_MGR DESC, PXDE.DEPT_ID)")
@@ -242,8 +246,25 @@ class SqlConstantScanTest {
 				.contains("PXD.STATUS = 1").contains("PXDE.STATUS = 1").contains("PXDE.EMP_ID = :userId");
 		// D9B：資格只看主要部門（不是任一部門）；D8A：關鍵字寫在 Java 常數
 		assertThat(EmpSql.QUALIFIED_DEPT_KEYWORD).isEqualTo("資訊部");
-		assertThat(EmpSql.qualifiedCond(":userId")).isEqualTo(EmpSql.inSyncCond(":userId") + " AND "
-				+ EmpSql.primaryDeptExpr(":userId") + " LIKE '%資訊部%'");
+		assertThat(EmpSql.qualifiedCond(":userId")).isEqualTo("(" + EmpSql.inSyncCond(":userId") + " AND "
+				+ EmpSql.primaryDeptExpr(":userId") + " LIKE '%資訊部%')");
+	}
+
+	/** 第 124 項階段 3 回合 1：token 檢查與單一使用者查詢改讀同步表（D0B、E1）；名單 SQL 不再讀 USER_EN_NAME（第 67 項併入） */
+	@Test
+	void 登入身分_token旗標與使用者查詢讀同步表_名單不含英文名() {
+		assertThat(LoginTokenDao.FIND).contains("JOIN IM_ACCT_USER U ON U.USER_ID = T.USER_ID")
+				.contains("CASE WHEN " + EmpSql.inSyncCond("T.USER_ID") + " THEN 1 ELSE 0 END AS USER_IN_SYNC")
+				.contains("CASE WHEN " + EmpSql.inSyncCond("T.ACT_AS_USER_ID") + " THEN 1 ELSE 0 END AS ACT_AS_IN_SYNC");
+		assertThat(UserDao.FIND_BY_ID).contains(EmpSql.joinEmp("E", "U.USER_ID"))
+				.contains(EmpSql.nameExpr("E", "U.USER_ID") + " AS USER_NAME").contains("E.EMAIL")
+				.contains("CASE WHEN E.EMP_ID IS NULL THEN 0 ELSE 1 END AS IN_SYNC")
+				// 上線時要刪的欄：姓名、英文名、Email 不再從 IM_ACCT_USER 讀（密碼、鎖定欄階段 7 拿掉；DEPT_NAME、TEL_NO 階段 5、6 改）
+				.doesNotContain("U.USER_NAME").doesNotContain("USER_EN_NAME").doesNotContain("U.EMAIL");
+		for (String sql : List.of(UserDao.FIND_ACTIVE_WITH_ROLES, PermDao.RCPT_SELECT, RoleAdminDao.FIND_ROLE_MEMBERS,
+				RoleAdminDao.FIND_EXEC_MEMBERS, RoleAdminDao.FIND_CANDIDATES)) {
+			assertThat(sql).doesNotContain("USER_EN_NAME");
+		}
 	}
 
 	@Test

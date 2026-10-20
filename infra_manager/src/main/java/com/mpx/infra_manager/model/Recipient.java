@@ -7,12 +7,14 @@ package com.mpx.infra_manager.model;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1：刪 userEnName（第 67 項併入，只顯示中文名）
 // ============================================================
 
 public class Recipient {
 
 	private String userId;
-	private String userEnName;
 	private String userName;
 	private String email;
 
@@ -22,14 +24,6 @@ public class Recipient {
 
 	public void setUserId(String userId) {
 		this.userId = userId;
-	}
-
-	public String getUserEnName() {
-		return userEnName;
-	}
-
-	public void setUserEnName(String userEnName) {
-		this.userEnName = userEnName;
 	}
 
 	public String getUserName() {

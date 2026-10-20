@@ -24,6 +24,9 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-10-19
 // 變更說明: 階段 2 實機修正：ORA-30006 實際被 Spring 包成 UncategorizedSQLException（SQLState 99999），原本只攔
 //           PessimisticLockingFailureException 會回 500；locked() 另攔 DataAccessException、例外鏈上錯誤碼 30006 才轉 E26，其餘原樣拋出
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1：顯示名改只用中文名（第 67 項併入）；指派對象與候選名單改 E3 口徑留到回合 2
 // ============================================================
 
 import java.sql.SQLException;
@@ -194,7 +197,7 @@ public class RoleAdminService {
 	static AdminMember member(MemberRow m) {
 		AdminMember a = new AdminMember();
 		a.setUserId(m.getUserId());
-		a.setUserName(Texts.displayName(m.getUserEnName(), m.getUserName(), m.getUserId()));
+		a.setUserName(Texts.displayName(m.getUserName(), m.getUserId()));
 		a.setUserActive(Integer.valueOf(1).equals(m.getUserStatus()));
 		a.setGrantDate(m.getGrantDate());
 		a.setGrantBy(m.getGrantBy());
@@ -228,7 +231,7 @@ public class RoleAdminService {
 		for (AcctUser u : roleAdminDao.findCandidates()) {
 			AdminUser a = new AdminUser();
 			a.setUserId(u.getUserId());
-			a.setUserName(Texts.displayName(u.getUserEnName(), u.getUserName(), u.getUserId()));
+			a.setUserName(Texts.displayName(u.getUserName(), u.getUserId()));
 			a.setDeptName(u.getDeptName());
 			out.add(a);
 		}
@@ -366,13 +369,13 @@ public class RoleAdminService {
 		if (target == null || !Integer.valueOf(1).equals(target.getStatus())) {
 			throw AcctMsg.notFound();
 		}
-		return Texts.displayName(target.getUserEnName(), target.getUserName(), targetId);
+		return Texts.displayName(target.getUserName(), targetId);
 	}
 
 	/** 移除對象：停用、或使用者表查無的列都允許移除；查得到才帶顯示名，否則退回工號 */
 	String targetNameOrId(String targetId) {
 		AcctUser target = targetId == null || targetId.length() > USER_ID_MAX ? null : userDao.findById(targetId);
-		return target == null ? targetId : Texts.displayName(target.getUserEnName(), target.getUserName(), targetId);
+		return target == null ? targetId : Texts.displayName(target.getUserName(), targetId);
 	}
 
 	// ------------------------------------------------------------

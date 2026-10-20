@@ -15,6 +15,9 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1：期望顯示名改只有中文名（TestFixture.NAMES 改）
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -80,7 +83,7 @@ class InspectionServiceTest {
 		InspForm f = form(r("A01", "EXCPT", "溫度偏高"), r("B01", "NORMAL", null));
 		f.setInspDate("2026-10-07 09:15:00");
 		assertThat(svc.create(id(KEVIN), f).getInspId()).isEqualTo("IN20261007-001");
-		verify(fx.inspDao).insertInsp("IN20261007-001", LocalDateTime.of(2026, 10, 7, 9, 15), KEVIN, "Kevin (李凱鈞)", null,
+		verify(fx.inspDao).insertInsp("IN20261007-001", LocalDateTime.of(2026, 10, 7, 9, 15), KEVIN, "李凱鈞", null,
 				null, NOW);
 		verify(fx.inspDao, times(2)).insertResult(eq("IN20261007-001"), any(), anyString(), any(), eq(NOW), eq(KEVIN));
 		assertThat(fx.txm.commits).isEqualTo(1);
@@ -89,7 +92,7 @@ class InspectionServiceTest {
 	@Test
 	void 送出_切換身分_INSP_BY為實際使用者_ACT_AS為代理身分() {
 		svc.create(impersonate(HANK, KEVIN), form(r("A01", "NORMAL", null), r("B01", "NORMAL", null)));
-		verify(fx.inspDao).insertInsp(anyString(), any(), eq(HANK), eq("Hank (黃志翰)"), eq(KEVIN), eq("Kevin (李凱鈞)"), eq(NOW));
+		verify(fx.inspDao).insertInsp(anyString(), any(), eq(HANK), eq("黃志翰"), eq(KEVIN), eq("李凱鈞"), eq(NOW));
 	}
 
 	@Test
@@ -131,7 +134,7 @@ class InspectionServiceTest {
 		when(fx.inspDao.fix(anyString(), anyString(), anyString(), anyString(), anyString(), any(), any(), any())).thenReturn(1);
 		assertThat(svc.fix(impersonate(HANK, KEVIN), "IN20261007-001", "A01", fix("已調整空調")).getInspId())
 				.isEqualTo("IN20261007-001");
-		verify(fx.inspDao).fix("IN20261007-001", "A01", "已調整空調", HANK, "Hank (黃志翰)", KEVIN, "Kevin (李凱鈞)", NOW);
+		verify(fx.inspDao).fix("IN20261007-001", "A01", "已調整空調", HANK, "黃志翰", KEVIN, "李凱鈞", NOW);
 	}
 
 	@Test

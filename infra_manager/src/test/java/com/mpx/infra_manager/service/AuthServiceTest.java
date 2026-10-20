@@ -21,6 +21,10 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 1：AdminLogDao.insert 多 reason 參數，切換身分軌跡斷言補 null
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1（裁示 D0B、E1）：同步表查無——登入比照停用 A01（使用者裁示 A）、token 401 A03 且不寫 LAST_ACCESS、
+//           代理身分查無自動切回、切換身分對象查無 404；顯示名只有中文名（期望字串「英文名 (中文名)」改中文名）
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -126,6 +130,18 @@ class AuthServiceTest {
 		verify(tokenDao, never()).insert(any(), any(), any(), any());
 	}
 
+	/** 第 124 項裁示 A（過渡行為）：同步表查無比照停用，不發 token、也不比對密碼 */
+	@Test
+	void 登入_同步表查無_比照停用A01() {
+		AcctUser gone = user(HANK, 1);
+		gone.setInSync(0);
+		when(userDao.findById(HANK)).thenReturn(gone);
+		assertStatus(() -> auth.login(login(HANK, "pw")), HttpStatus.UNAUTHORIZED, AcctMsg.A01);
+		verify(hasher).dummyHash(any());
+		verify(hasher, never()).verify(any(), any());
+		verify(tokenDao, never()).insert(any(), any(), any(), any());
+	}
+
 	@Test
 	void 登入_密碼錯累加失敗次數A01_已鎖定即使密碼正確也A02() {
 		when(hasher.verify(any(), any())).thenReturn(false);
@@ -216,6 +232,27 @@ class AuthServiceTest {
 		assertThat(as.getPermissions()).contains("APPR_G5").doesNotContain("SYS_IMPERSONATE");
 	}
 
+	/** 第 124 項裁示 E1：本人同步表查無 → 401（不寫 LAST_ACCESS）；代理身分查無 → 比照停用自動切回 */
+	@Test
+	void resolve_同步表查無_本人401_代理身分自動切回() {
+		String hash = TokenCodec.sha256Hex("tok");
+		LoginToken t = token(NOW.minusSeconds(90), NOW.plusHours(1), null, 1);
+		t.setUserId(HANK);
+		t.setUserInSync(0);
+		when(tokenDao.find(hash)).thenReturn(t);
+		assertStatus(() -> provider.resolve("Bearer tok"), HttpStatus.UNAUTHORIZED, AcctMsg.A03);
+		verify(tokenDao, never()).touch(any(), any());
+
+		t.setUserInSync(1);
+		t.setActAsUserId(GARY);
+		t.setActAsStatus(1);
+		t.setActAsInSync(0);
+		Identity back = provider.resolve("Bearer tok");
+		verify(tokenDao).setActAs(hash, null, HANK, NOW);
+		assertThat(back.isImpersonating()).isFalse();
+		assertThat(back.getUserId()).isEqualTo(HANK);
+	}
+
 	// ------------------------------------------------------------
 	// 切換身分
 	// ------------------------------------------------------------
@@ -224,7 +261,7 @@ class AuthServiceTest {
 	void 切換身分_無權限403並寫DENY() {
 		ImpersonateForm f = target(GARY);
 		assertStatus(() -> auth.impersonate(id(KEVIN), f), HttpStatus.FORBIDDEN, AcctMsg.P01);
-		verify(adminLogDao).insert(NOW, KEVIN, "Kevin (李凱鈞)", AcctConst.ADM_IMPERSONATE, GARY, null, null, AcctConst.ADM_DENY);
+		verify(adminLogDao).insert(NOW, KEVIN, "李凱鈞", AcctConst.ADM_IMPERSONATE, GARY, null, null, AcctConst.ADM_DENY);
 		verify(tokenDao, never()).setActAs(any(), any(), any(), any());
 	}
 
@@ -233,8 +270,8 @@ class AuthServiceTest {
 		assertStatus(() -> auth.impersonate(id(HANK), target(HANK)), HttpStatus.BAD_REQUEST, AcctMsg.IMPERSONATE_SELF);
 		MeInfo me = auth.impersonate(id(HANK), target(GARY));
 		verify(tokenDao).setActAs("hash-" + HANK, GARY, HANK, NOW);
-		verify(adminLogDao).insert(eq(NOW), eq(HANK), eq("Hank (黃志翰)"), eq(AcctConst.ADM_IMPERSONATE), eq(GARY),
-				eq("{\"targetUserName\":\"Gary (許永成)\"}"), isNull(), eq(AcctConst.ADM_SUCCESS));
+		verify(adminLogDao).insert(eq(NOW), eq(HANK), eq("黃志翰"), eq(AcctConst.ADM_IMPERSONATE), eq(GARY),
+				eq("{\"targetUserName\":\"許永成\"}"), isNull(), eq(AcctConst.ADM_SUCCESS));
 		assertThat(fx.txm.commits).isEqualTo(1);
 		assertThat(me.getUserId()).isEqualTo(GARY);
 		assertThat(me.getRealUserId()).isEqualTo(HANK);
@@ -243,6 +280,16 @@ class AuthServiceTest {
 		assertThat(me.getEmail()).isEqualTo(GARY + "@example.com");
 		assertThat(me.getTelNo()).isEqualTo("#" + GARY);
 		assertThat(me.getDeptName()).isEqualTo("部門" + GARY);
+	}
+
+	/** 第 124 項裁示 E1：切換對象同步表查無比照停用 404 */
+	@Test
+	void 切換身分_對象同步表查無_404() {
+		AcctUser gone = user(GARY, 1);
+		gone.setInSync(0);
+		when(userDao.findById(GARY)).thenReturn(gone);
+		assertStatus(() -> auth.impersonate(id(HANK), target(GARY)), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		verify(tokenDao, never()).setActAs(any(), any(), any(), any());
 	}
 
 	@Test
@@ -281,9 +328,8 @@ class AuthServiceTest {
 	static AcctUser user(String id, int status) {
 		AcctUser u = new AcctUser();
 		u.setUserId(id);
-		String full = TestFixture.NAMES.get(id);
-		u.setUserEnName(full.substring(0, full.indexOf(' ')));
-		u.setUserName(full.substring(full.indexOf('(') + 1, full.length() - 1));
+		u.setUserName(TestFixture.NAMES.get(id));
+		u.setInSync(1);
 		u.setEmail(id + "@example.com");
 		u.setTelNo("#" + id);
 		u.setDeptName("部門" + id);
@@ -299,6 +345,8 @@ class AuthServiceTest {
 		t.setExpireDate(expire);
 		t.setLogoutDate(logout);
 		t.setUserStatus(userStatus);
+		t.setUserInSync(1);
+		t.setActAsInSync(1);
 		return t;
 	}
 

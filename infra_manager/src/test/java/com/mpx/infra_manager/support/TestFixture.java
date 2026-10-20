@@ -43,6 +43,9 @@ package com.mpx.infra_manager.support;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 3：加 RolePermAdminService（真；共用 RoleAdminService 的取鎖與角色檢查）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1：NAMES 改只有中文名（第 67 項併入、裁示 ⑬B），各測試期望的「英文名 (中文名)」一併改
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -148,18 +151,18 @@ public class TestFixture {
 		ROLE_PERMS.put("INSP_STAFF", List.of("INSP_VIEW", "INSP_CREATE", "INSP_RESOLVE", "INSP_EXPORT"));
 		ROLE_PERMS.put("SYS_ADMIN", List.of("SYS_ROLE", "SYS_EXECUTOR", "SYS_IMPERSONATE", "SYS_AUDIT_VIEW", "SYS_JOB_RUN"));
 
-		user(KEVIN, "Kevin", "李凱鈞", "GOV", "INSP_STAFF");
-		user(MOLLY, "Molly", "林宜瑾", "GOV", "GOV_MGR", "ACCT_REGISTRY", "INSP_STAFF");
-		user(CATHY, "Cathy", "周佩欣", "GOV");
-		user(TERRY, "Terry", "邱健唐", "INFRA_MGR", "ACCT_REGISTRY", "INSP_STAFF");
-		user(WENSEN, "Wensen", "林文松", "INFRA_MGR", "INSP_STAFF");
-		user(ALEX, "Alex", "陳儀仁", "DC_ADMIN", "INSP_STAFF");
-		user(ALAN, "Alan", "王祖樑", "DC_ADMIN", "INSP_STAFF");
-		user(MICHAEL, "Michael", "許漢煒");
-		user(SAGE, "Sage", "秦一中");
-		user(GARY, "Gary", "許永成", "IT_HEAD", "ACCT_REGISTRY", "INSP_STAFF");
-		user(HANK, "Hank", "黃志翰", "SYS_ADMIN");
-		user(TESTER, "Tester", "一般測試員");
+		user(KEVIN, "李凱鈞", "GOV", "INSP_STAFF");
+		user(MOLLY, "林宜瑾", "GOV", "GOV_MGR", "ACCT_REGISTRY", "INSP_STAFF");
+		user(CATHY, "周佩欣", "GOV");
+		user(TERRY, "邱健唐", "INFRA_MGR", "ACCT_REGISTRY", "INSP_STAFF");
+		user(WENSEN, "林文松", "INFRA_MGR", "INSP_STAFF");
+		user(ALEX, "陳儀仁", "DC_ADMIN", "INSP_STAFF");
+		user(ALAN, "王祖樑", "DC_ADMIN", "INSP_STAFF");
+		user(MICHAEL, "許漢煒");
+		user(SAGE, "秦一中");
+		user(GARY, "許永成", "IT_HEAD", "ACCT_REGISTRY", "INSP_STAFF");
+		user(HANK, "黃志翰", "SYS_ADMIN");
+		user(TESTER, "一般測試員");
 
 		exec("HOST", ALEX);
 		exec("DB", TERRY, MICHAEL);
@@ -171,8 +174,9 @@ public class TestFixture {
 		exec("DOOR", ALEX, ALAN);
 	}
 
-	private static void user(String id, String en, String zh, String... roles) {
-		NAMES.put(id, en + " (" + zh + ")");
+	/** 顯示名只有中文名（同步表 PX_SYNC_EMP.EMP_NAME） */
+	private static void user(String id, String zh, String... roles) {
+		NAMES.put(id, zh);
 		USER_ROLES.put(id, List.of(roles));
 	}
 

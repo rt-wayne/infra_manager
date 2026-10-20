@@ -14,6 +14,11 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 1（裁示 ⑦B、D2A、E1、E2）：FIND_BY_ID 的姓名與 Email 改讀同步表 PX_SYNC_EMP（LEFT JOIN、只認 STATUS＝1；
+//           姓名查無退回工號），另回 IN_SYNC 旗標；不再讀 IM_ACCT_USER 的 USER_NAME、USER_EN_NAME、EMAIL（上線時要刪的欄）。
+//           密碼、鎖定欄仍讀（階段 7 拿掉）、DEPT_NAME／TEL_NO 仍讀（階段 5、6 改）。FIND_ACTIVE_WITH_ROLES 只先拿掉 USER_EN_NAME（回合 2 改 E3、E4）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -31,11 +36,14 @@ import com.mpx.infra_manager.model.UserRoleRow;
 @Repository
 public class UserDao {
 
+	/** 單一使用者：本系統列＋同步表姓名／Email；IN_SYNC＝同步表查得到（LEFT JOIN 已帶 STATUS＝1 條件，E 有列即查得到） */
 	public static final String FIND_BY_ID = """
-			SELECT USER_ID, USER_EN_NAME, USER_NAME, DEPT_NAME, EMAIL, TEL_NO, PWD_HASH, LOGIN_FAIL_CNT, LOCK_DATE,
-			       LAST_LOGIN_DATE, STATUS
-			  FROM IM_ACCT_USER
-			 WHERE USER_ID = :userId
+			SELECT U.USER_ID, U.DEPT_NAME, U.TEL_NO, U.PWD_HASH, U.LOGIN_FAIL_CNT, U.LOCK_DATE, U.LAST_LOGIN_DATE, U.STATUS,
+			       E.EMAIL, CASE WHEN E.EMP_ID IS NULL THEN 0 ELSE 1 END AS IN_SYNC,
+			""" + "       " + EmpSql.nameExpr("E", "U.USER_ID") + " AS USER_NAME\n" + """
+			  FROM IM_ACCT_USER U
+			""" + "  " + EmpSql.joinEmp("E", "U.USER_ID") + "\n" + """
+			 WHERE U.USER_ID = :userId
 			""";
 
 	public static final String UPDATE_LOGIN_FAIL = """
@@ -55,7 +63,7 @@ public class UserDao {
 			""";
 
 	public static final String FIND_ACTIVE_WITH_ROLES = """
-			SELECT U.USER_ID, U.USER_EN_NAME, U.USER_NAME, RU.ROLE_ID
+			SELECT U.USER_ID, U.USER_NAME, RU.ROLE_ID
 			  FROM IM_ACCT_USER U
 			  LEFT JOIN IM_ACCT_ROLE_USER RU
 			    ON RU.USER_ID = U.USER_ID
