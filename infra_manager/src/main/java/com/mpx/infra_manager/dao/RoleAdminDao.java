@@ -28,6 +28,10 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 1：FIND_ROLE_MEMBERS、FIND_EXEC_MEMBERS、FIND_CANDIDATES 拿掉 USER_EN_NAME（第 67 項併入）；
 //           姓名改讀同步表與 E3 口徑留到回合 2
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 2（裁示 E3、⑬-2）：FIND_ROLE_MEMBERS、FIND_EXEC_MEMBERS 保留 LEFT JOIN IM_ACCT_USER 取停用狀態、
+//           另 LEFT JOIN 同步表取姓名並回 USER_IN_SYNC 旗標；FIND_CANDIDATES 只取工號與同步表姓名、口徑改 E3（不再取 DEPT_NAME）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -98,22 +102,30 @@ public class RoleAdminDao {
 			 ORDER BY P.SORT_SEQ, P.PERM_ID
 			""";
 
-	/** 啟用中的角色成員（全部角色一次查）；對象停用仍列出（USER_STATUS＝0），使用者表查無列時 USER_STATUS 為空 */
+	/**
+	 * 啟用中的角色成員（全部角色一次查）；對象停用或同步表查無仍列出（USER_STATUS＝0 或 USER_IN_SYNC＝0），
+	 * 使用者表查無列時 USER_STATUS 為空；姓名讀同步表、查無退回工號
+	 */
 	public static final String FIND_ROLE_MEMBERS = """
-			SELECT RU.ROLE_ID AS GROUP_ID, RU.USER_ID, U.USER_NAME, U.STATUS AS USER_STATUS,
+			SELECT RU.ROLE_ID AS GROUP_ID, RU.USER_ID, U.STATUS AS USER_STATUS,
+			       CASE WHEN E.EMP_ID IS NULL THEN 0 ELSE 1 END AS USER_IN_SYNC,
+			""" + "       " + EmpSql.nameExpr("E", "RU.USER_ID") + " AS USER_NAME,\n" + """
 			       NVL(RU.UPDATE_DATE, RU.CREATE_DATE) AS GRANT_DATE, NVL(RU.UPDATE_BY, RU.CREATE_BY) AS GRANT_BY
 			  FROM IM_ACCT_ROLE_USER RU
 			  LEFT JOIN IM_ACCT_USER U ON U.USER_ID = RU.USER_ID
+			""" + "  " + EmpSql.joinEmp("E", "RU.USER_ID") + "\n" + """
 			 WHERE RU.STATUS = 1
 			 ORDER BY RU.ROLE_ID, RU.USER_ID
 			""";
 
-	/** 指派候選人：啟用中使用者、含自己（既有 /users 需 SYS_IMPERSONATE 且排除自己，不沿用） */
+	/** 指派候選人：有效使用者（E3）、含自己，只取工號與同步表姓名（裁示 ⑬-2 下拉只顯示名字；既有 /users 需 SYS_IMPERSONATE 且排除自己，不沿用） */
 	public static final String FIND_CANDIDATES = """
-			SELECT USER_ID, USER_NAME, DEPT_NAME, STATUS
-			  FROM IM_ACCT_USER
-			 WHERE STATUS = 1
-			 ORDER BY USER_ID
+			SELECT U.USER_ID,
+			""" + "       " + EmpSql.nameExpr("E", "U.USER_ID") + " AS USER_NAME\n" + """
+			  FROM IM_ACCT_USER U
+			""" + "  " + EmpSql.joinEmp("E", "U.USER_ID") + "\n"
+			+ " WHERE " + EmpSql.activeUserCond("U") + "\n" + """
+			 ORDER BY U.USER_ID
 			""";
 
 	/** 某組角色指派的現況：查無列、0、1 */
@@ -185,10 +197,13 @@ public class RoleAdminDao {
 
 	/** 啟用中的執行人對照（全部類別一次查）；欄位別名與 FIND_ROLE_MEMBERS 相同，共用 MemberRow */
 	public static final String FIND_EXEC_MEMBERS = """
-			SELECT M.CATG_ID AS GROUP_ID, M.USER_ID, U.USER_NAME, U.STATUS AS USER_STATUS,
+			SELECT M.CATG_ID AS GROUP_ID, M.USER_ID, U.STATUS AS USER_STATUS,
+			       CASE WHEN E.EMP_ID IS NULL THEN 0 ELSE 1 END AS USER_IN_SYNC,
+			""" + "       " + EmpSql.nameExpr("E", "M.USER_ID") + " AS USER_NAME,\n" + """
 			       NVL(M.UPDATE_DATE, M.CREATE_DATE) AS GRANT_DATE, NVL(M.UPDATE_BY, M.CREATE_BY) AS GRANT_BY
 			  FROM IM_EXEC_MAP M
 			  LEFT JOIN IM_ACCT_USER U ON U.USER_ID = M.USER_ID
+			""" + "  " + EmpSql.joinEmp("E", "M.USER_ID") + "\n" + """
 			 WHERE M.STATUS = 1
 			 ORDER BY M.CATG_ID, M.USER_ID
 			""";

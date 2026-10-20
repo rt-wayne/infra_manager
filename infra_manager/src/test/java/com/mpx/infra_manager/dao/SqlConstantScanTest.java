@@ -74,6 +74,10 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-10-20
 // 變更說明: 第 124 項階段 3 回合 1：組合條件片段改有括號；LoginTokenDao.FIND 兩個同步表旗標、UserDao.FIND_BY_ID 姓名與 Email 讀同步表
 //           且不再讀 IM_ACCT_USER 的 USER_NAME／USER_EN_NAME／EMAIL；四段名單 SQL 不含 USER_EN_NAME
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: 第 124 項階段 3 回合 2：切換身分下拉與候選名單 SQL 讀同步表姓名、WHERE 用 E3 有效使用者片段；
+//           角色成員與執行人 SQL 另 LEFT JOIN 同步表取名＋USER_IN_SYNC 旗標、不過濾對象；候選名單不帶 DEPT_NAME
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -265,6 +269,27 @@ class SqlConstantScanTest {
 				RoleAdminDao.FIND_EXEC_MEMBERS, RoleAdminDao.FIND_CANDIDATES)) {
 			assertThat(sql).doesNotContain("USER_EN_NAME");
 		}
+	}
+
+	/** 第 124 項階段 3 回合 2：名單 SQL 姓名讀同步表；有效使用者 E3（不看最後登入 E4）；候選名單只取工號與名字（⑬-2） */
+	@Test
+	void 名單SQL_姓名讀同步表_有效使用者E3_候選名單不帶部門() {
+		for (String sql : List.of(UserDao.FIND_ACTIVE_WITH_ROLES, RoleAdminDao.FIND_CANDIDATES)) {
+			assertThat(sql).contains(EmpSql.joinEmp("E", "U.USER_ID"))
+					.contains(EmpSql.nameExpr("E", "U.USER_ID") + " AS USER_NAME")
+					.contains("WHERE " + EmpSql.activeUserCond("U"))
+					.doesNotContain("U.USER_NAME").doesNotContain("LAST_LOGIN");
+		}
+		assertThat(RoleAdminDao.FIND_CANDIDATES).doesNotContain("DEPT_NAME");
+		// 名單成員：IM_ACCT_USER 仍 LEFT JOIN 取停用狀態（既有斷言），另 LEFT JOIN 同步表取名與查得到旗標；對象查無仍列出（不過濾）
+		assertThat(RoleAdminDao.FIND_ROLE_MEMBERS).contains(EmpSql.joinEmp("E", "RU.USER_ID"))
+				.contains(EmpSql.nameExpr("E", "RU.USER_ID") + " AS USER_NAME")
+				.contains("CASE WHEN E.EMP_ID IS NULL THEN 0 ELSE 1 END AS USER_IN_SYNC")
+				.contains("U.STATUS AS USER_STATUS").doesNotContain("U.USER_NAME").doesNotContain(EmpSql.activeUserCond("U"));
+		assertThat(RoleAdminDao.FIND_EXEC_MEMBERS).contains(EmpSql.joinEmp("E", "M.USER_ID"))
+				.contains(EmpSql.nameExpr("E", "M.USER_ID") + " AS USER_NAME")
+				.contains("CASE WHEN E.EMP_ID IS NULL THEN 0 ELSE 1 END AS USER_IN_SYNC")
+				.contains("U.STATUS AS USER_STATUS").doesNotContain("U.USER_NAME").doesNotContain(EmpSql.activeUserCond("U"));
 	}
 
 	@Test

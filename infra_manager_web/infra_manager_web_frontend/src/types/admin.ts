@@ -9,6 +9,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 6：執行人對照（GET /admin/executors）型別
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 2（裁示 ⑬-2）：AdminUser 刪 deptName（後端不再回部門）
 // ============================================================
 
 /** 角色或執行人類別的一位成員（只列啟用中的指派） */
@@ -44,11 +47,10 @@ export interface AdminExecCatg {
   members: AdminMember[]
 }
 
-/** GET /admin/users 一列：可被指派的啟用中使用者 */
+/** GET /admin/users 一列：可被指派的有效使用者（本系統啟用且同步表查得到），只有工號與名字 */
 export interface AdminUser {
   userId: string
   userName: string
-  deptName: string | null
 }
 
 /** 指派／移除的本文 */

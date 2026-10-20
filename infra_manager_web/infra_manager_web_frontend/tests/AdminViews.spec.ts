@@ -36,6 +36,9 @@
 //           空清單與查詢失敗；指派（下拉排除已在名單者）／移除打執行人 API、成功 toast＋重載；E23 常駐、其他 409 關＋重載；
 //           F7 提示與不提示；改到自己重載 /me（重載後已無 SYS_EXECUTOR〔他人同時調整角色〕導無權限頁、/me 失敗 toast 留下）；
 //           切換中與重載中按鈕停用；API 路徑與編碼
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 2（裁示 ⑬-2）：指派下拉只顯示名字、移除對象欄只有名字與「（已停用）」；假候選人不帶 deptName
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -230,9 +233,9 @@ describe('角色指派頁（唯讀）', () => {
 
 describe('角色指派頁：指派與移除', () => {
   const USERS: AdminUser[] = [
-    { userId: '2410303', userName: 'Hank (何嘉浤)', deptName: '資訊處' },
-    { userId: '0000351', userName: 'Terry (邱健唐)', deptName: '資訊處' },
-    { userId: '0000001', userName: 'Kevin (李凱鈞)', deptName: null }
+    { userId: '2410303', userName: 'Hank (何嘉浤)' },
+    { userId: '0000351', userName: 'Terry (邱健唐)' },
+    { userId: '0000001', userName: 'Kevin (李凱鈞)' }
   ]
 
   beforeEach(() => {
@@ -263,12 +266,12 @@ describe('角色指派頁：指派與移除', () => {
     await flushPromises()
   }
 
-  it('指派：人員下拉排除已在名單者（顯示姓名、工號、部門），送出帶去頭尾空白的原因；成功 toast、關彈窗、重載', async () => {
+  it('指派：人員下拉排除已在名單者（只顯示名字），送出帶去頭尾空白的原因；成功 toast、關彈窗、重載', async () => {
     const { w } = await mountView()
     await openGrant(w)
     expect(w.find('.modal h3').text()).toBe('指派 — 系統管理員')
     const opts = w.findAll('#member-user option').map(o => o.text())
-    expect(opts).toEqual(['請選擇人員', 'Terry (邱健唐)（0000351）· 資訊處', 'Kevin (李凱鈞)（0000001）'])
+    expect(opts).toEqual(['請選擇人員', 'Terry (邱健唐)', 'Kevin (李凱鈞)'])
     await w.find('#member-user').setValue('0000351')
     await w.find('#member-reason').setValue('  新進同仁  ')
     await w.find('.confirm-member').trigger('click')
@@ -281,13 +284,13 @@ describe('角色指派頁：指派與移除', () => {
     w.unmount()
   })
 
-  it('移除：彈窗顯示對象（停用者加註），送出打移除 API；成功 toast、重載', async () => {
+  it('移除：彈窗顯示對象（只有名字，停用者加註），送出打移除 API；成功 toast、重載', async () => {
     const { w } = await mountView()
     await w.findAll('.revoke-btn')[1].trigger('click')
     await flushPromises()
     expect(usersMock).not.toHaveBeenCalled()
     expect(w.find('.modal h3').text()).toBe('移除 — 系統管理員')
-    expect(w.find('.modal .target').text()).toBe('Gary (許永成)（0000285）（已停用）')
+    expect(w.find('.modal .target').text()).toBe('Gary (許永成)（已停用）')
     await w.find('#member-reason').setValue('離職')
     await w.find('.confirm-member').trigger('click')
     await flushPromises()
@@ -990,9 +993,9 @@ function catg(over: Partial<AdminExecCatg> = {}): AdminExecCatg {
 describe('執行人對照頁', () => {
   const EXEC_PERMS = [...GENERAL_PERMS, 'SYS_EXECUTOR']
   const USERS: AdminUser[] = [
-    { userId: '2410303', userName: 'Hank (何嘉浤)', deptName: '資訊處' },
-    { userId: '0000351', userName: 'Terry (邱健唐)', deptName: '資訊處' },
-    { userId: '0000001', userName: 'Kevin (李凱鈞)', deptName: null }
+    { userId: '2410303', userName: 'Hank (何嘉浤)' },
+    { userId: '0000351', userName: 'Terry (邱健唐)' },
+    { userId: '0000001', userName: 'Kevin (李凱鈞)' }
   ]
 
   beforeEach(() => {
@@ -1079,9 +1082,7 @@ describe('執行人對照頁', () => {
     await w.find('.grant-btn').trigger('click')
     await flushPromises()
     expect(w.find('.modal h3').text()).toBe('指派 — 主機帳號')
-    expect(w.findAll('#member-user option').map(o => o.text())).toEqual([
-      '請選擇人員', 'Terry (邱健唐)（0000351）· 資訊處', 'Kevin (李凱鈞)（0000001）'
-    ])
+    expect(w.findAll('#member-user option').map(o => o.text())).toEqual(['請選擇人員', 'Terry (邱健唐)', 'Kevin (李凱鈞)'])
     await w.find('#member-user').setValue('0000351')
     await w.find('#member-reason').setValue(' 新進 ')
     await w.find('.confirm-member').trigger('click')

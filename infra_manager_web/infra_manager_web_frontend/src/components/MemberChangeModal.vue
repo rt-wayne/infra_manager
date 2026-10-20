@@ -15,6 +15,9 @@
   AI版本  : Claude Fable 5.1 (claude-fable-5-1)
   修改日期: 2026-10-19
   變更說明: BACKLOG 第 89 項階段 5 回合 2：原因欄改用共用的 ReasonField（id、字數樣式不變）
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-10-20
+  變更說明: BACKLOG 第 124 項階段 3 回合 2（裁示 ⑬-2）：指派下拉只顯示名字（原「名字（工號）· 部門」）；移除對象欄拿掉工號、保留「（已停用）」
 -->
 <template>
   <BaseModal :title="title" :sub="subText" close-text="取消" @close="close">
@@ -105,14 +108,15 @@ const options = computed(() => {
 const memberText = computed(() => {
   const m = props.member
   if (!m) return ''
-  return `${m.userName || m.userId}（${m.userId}）${m.userActive ? '' : '（已停用）'}`
+  return `${m.userName || m.userId}${m.userActive ? '' : '（已停用）'}`
 })
 const reasonCount = computed(() => charLen(reason.value))
 /** 指派模式名單沒載好（載入中、失敗、全部已在名單）時不能送 */
 const canSubmit = computed(() => props.mode === 'revoke' || (!usersLoading.value && !usersFailed.value && options.value.length > 0))
 
+/** 下拉只顯示名字（後端姓名查無時已退回工號） */
 function userText(u: AdminUser): string {
-  return u.deptName ? `${u.userName}（${u.userId}）· ${u.deptName}` : `${u.userName}（${u.userId}）`
+  return u.userName || u.userId
 }
 
 async function loadUsers(): Promise<void> {

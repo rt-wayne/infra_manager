@@ -9,6 +9,9 @@ package com.mpx.infra_manager.model;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 1：刪 userEnName（第 67 項併入，只顯示中文名）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 2：加 userInSync（同步表 PX_SYNC_EMP 查得到＝1）；姓名改由同步表來、查無為工號
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -19,6 +22,7 @@ public class MemberRow {
 	private String userId;
 	private String userName;
 	private Integer userStatus;
+	private Integer userInSync;
 	private LocalDateTime grantDate;
 	private String grantBy;
 
@@ -52,6 +56,14 @@ public class MemberRow {
 
 	public void setUserStatus(Integer userStatus) {
 		this.userStatus = userStatus;
+	}
+
+	public Integer getUserInSync() {
+		return userInSync;
+	}
+
+	public void setUserInSync(Integer userInSync) {
+		this.userInSync = userInSync;
 	}
 
 	public LocalDateTime getGrantDate() {

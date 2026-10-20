@@ -27,6 +27,10 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 1：顯示名改只用中文名（第 67 項併入）；指派對象與候選名單改 E3 口徑留到回合 2
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 2（裁示 E3、⑬-2）：名單成員 userActive＝本系統啟用且同步表查得到；指派對象同步表查無也回 404；
+//           候選名單不再帶部門
 // ============================================================
 
 import java.sql.SQLException;
@@ -194,11 +198,12 @@ public class RoleAdminService {
 		return out;
 	}
 
+	/** 名單一列；停用＝本系統停用或同步表查無（E3），畫面都標「（已停用）」 */
 	static AdminMember member(MemberRow m) {
 		AdminMember a = new AdminMember();
 		a.setUserId(m.getUserId());
 		a.setUserName(Texts.displayName(m.getUserName(), m.getUserId()));
-		a.setUserActive(Integer.valueOf(1).equals(m.getUserStatus()));
+		a.setUserActive(Integer.valueOf(1).equals(m.getUserStatus()) && TokenIdentityProvider.inSync(m.getUserInSync()));
 		a.setGrantDate(m.getGrantDate());
 		a.setGrantBy(m.getGrantBy());
 		return a;
@@ -232,7 +237,6 @@ public class RoleAdminService {
 			AdminUser a = new AdminUser();
 			a.setUserId(u.getUserId());
 			a.setUserName(Texts.displayName(u.getUserName(), u.getUserId()));
-			a.setDeptName(u.getDeptName());
 			out.add(a);
 		}
 		return out;
@@ -363,10 +367,10 @@ public class RoleAdminService {
 		}
 	}
 
-	/** 指派對象必須存在且啟用中（404），回顯示名 */
+	/** 指派對象必須是有效使用者（E3：存在、啟用中、同步表查得到；否則 404），回顯示名 */
 	String requireActiveTarget(String targetId) {
 		AcctUser target = targetId.length() > USER_ID_MAX ? null : userDao.findById(targetId);
-		if (target == null || !Integer.valueOf(1).equals(target.getStatus())) {
+		if (target == null || !Integer.valueOf(1).equals(target.getStatus()) || !TokenIdentityProvider.inSync(target.getInSync())) {
 			throw AcctMsg.notFound();
 		}
 		return Texts.displayName(target.getUserName(), targetId);

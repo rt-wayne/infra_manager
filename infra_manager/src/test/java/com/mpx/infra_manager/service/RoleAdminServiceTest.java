@@ -17,6 +17,9 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 1：MemberRow 刪英文名、期望顯示名改只有中文名（第 67 項併入）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 2（E3、⑬-2）：成員本系統啟用但同步表查無 → userActive＝false；指派對象同步表查無 404；候選人不帶部門
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -145,20 +148,29 @@ class RoleAdminServiceTest {
 		m1.setUserId(KEVIN);
 		m1.setUserName("李凱鈞");
 		m1.setUserStatus(1);
+		m1.setUserInSync(1);
 		m1.setGrantDate(NOW);
 		m1.setGrantBy(HANK);
 		MemberRow m2 = new MemberRow();
 		m2.setGroupId("GOV");
 		m2.setUserId("GHOST");
 		m2.setUserStatus(null);
-		when(fx.roleAdminDao.findRoleMembers()).thenReturn(List.of(m1, m2));
+		m2.setUserInSync(0);
+		// 本系統啟用但同步表查無（離職）→ 視為停用（E3）
+		MemberRow m3 = new MemberRow();
+		m3.setGroupId("GOV");
+		m3.setUserId(GARY);
+		m3.setUserName("許永成");
+		m3.setUserStatus(1);
+		m3.setUserInSync(0);
+		when(fx.roleAdminDao.findRoleMembers()).thenReturn(List.of(m1, m2, m3));
 
 		List<AdminRole> roles = svc.roles(id(HANK));
 		assertThat(roles).hasSize(2);
 		AdminRole gov = roles.get(0);
 		assertThat(gov.getRoleId()).isEqualTo("GOV");
 		assertThat(gov.getPermNames()).containsExactly("關卡 4 核准", "關卡 7 複驗");
-		assertThat(gov.getMembers()).hasSize(2);
+		assertThat(gov.getMembers()).hasSize(3);
 		assertThat(gov.getMembers().get(0).getUserName()).isEqualTo("李凱鈞");
 		assertThat(gov.getMembers().get(0).getUserActive()).isTrue();
 		assertThat(gov.getMembers().get(0).getGrantDate()).isEqualTo(NOW);
@@ -166,6 +178,8 @@ class RoleAdminServiceTest {
 		// 使用者表查無 → 顯示工號、視為未啟用
 		assertThat(gov.getMembers().get(1).getUserName()).isEqualTo("GHOST");
 		assertThat(gov.getMembers().get(1).getUserActive()).isFalse();
+		assertThat(gov.getMembers().get(2).getUserName()).isEqualTo("許永成");
+		assertThat(gov.getMembers().get(2).getUserActive()).isFalse();
 		assertThat(roles.get(1).getPermNames()).isEmpty();
 		assertThat(roles.get(1).getMembers()).isEmpty();
 	}
@@ -178,7 +192,6 @@ class RoleAdminServiceTest {
 		assertThat(users).hasSize(1);
 		assertThat(users.get(0).getUserId()).isEqualTo(HANK);
 		assertThat(users.get(0).getUserName()).isEqualTo("黃志翰");
-		assertThat(users.get(0).getDeptName()).isEqualTo("部門" + HANK);
 		assertThat(svc.users(TestFixture.idWith(GARY, java.util.Set.of("SYS_EXECUTOR"), List.of()))).hasSize(1);
 		assertStatus(() -> svc.users(id(KEVIN)), HttpStatus.FORBIDDEN, AcctMsg.P01);
 	}
@@ -221,10 +234,15 @@ class RoleAdminServiceTest {
 	}
 
 	@Test
-	void 指派_對象不存在或停用_404() {
+	void 指派_對象不存在或停用或同步表查無_404() {
 		when(fx.userDao.findById(TESTER)).thenReturn(AuthServiceTest.user(TESTER, 0));
 		assertStatus(() -> svc.grantRole(id(HANK), "GOV", grant(TESTER, "原因")), HttpStatus.NOT_FOUND, AcctMsg.N01);
 		assertStatus(() -> svc.grantRole(id(HANK), "GOV", grant("9999999", "原因")), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		// 本系統啟用但同步表查無（E3）
+		AcctUser gone = AuthServiceTest.user(TESTER, 1);
+		gone.setInSync(0);
+		when(fx.userDao.findById(TESTER)).thenReturn(gone);
+		assertStatus(() -> svc.grantRole(id(HANK), "GOV", grant(TESTER, "原因")), HttpStatus.NOT_FOUND, AcctMsg.N01);
 		verify(fx.roleAdminDao, never()).lockGlobal();
 	}
 
@@ -415,6 +433,7 @@ class RoleAdminServiceTest {
 		m.setUserId(TestFixture.ALEX);
 		m.setUserName("陳儀仁");
 		m.setUserStatus(1);
+		m.setUserInSync(1);
 		m.setGrantDate(NOW);
 		m.setGrantBy(HANK);
 		when(fx.roleAdminDao.findExecMembers()).thenReturn(List.of(m));

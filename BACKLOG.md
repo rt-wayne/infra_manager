@@ -17,7 +17,7 @@
 | 124 | 登入改用 WPX VerifySecure 外部驗證 API（本系統不再存密碼、鎖定交給 WPX、驗證成功但本系統無此人則自動建立，暫限資訊部），人員姓名／Email／部門改由全系統直接讀同步表 `PX_SYNC_EMP`；英文名一併拿掉（原第 67 項併入）、申請人分機改自填；裁示 ①～⑭、D0～D12、E1～E8 與 9 個階段施工計畫見詳情檔；正式環境尚未上線。使用者 2026-10-19～20 交代 | [backlog/124-登入改用外部驗證API.md](backlog/124-登入改用外部驗證API.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：第 124 項階段 3 回合 2——`UserDao.FIND_ACTIVE_WITH_ROLES`（E3、E4）；`RoleAdminDao.FIND_ROLE_MEMBERS`／`FIND_EXEC_MEMBERS`（LEFT JOIN 同步表取名、停用＝本系統停用或同步表查無）、`FIND_CANDIDATES`（只取工號與名字，⑬-2）；`RoleAdminService.requireActiveTarget` 補同步表檢查；前端 `MemberChangeModal.vue` 指派下拉只顯示名字、移除對象欄拿掉工號、`AdminUser` 型別拿掉 `deptName`；改 `RoleAdminServiceTest`、`RolePermAdminServiceTest`、`AdminLogWriterTest` 與前端 spec。回合 1 已 commit
+- 下一步：第 124 項階段 3 收尾——同一則訊息平行派 `code-reviewer`（審查範圍 524b1b9..HEAD，後端＋前端）與 `test-runner`（後端 `./mvnw -o test`、前端 `npm test`）；必須修正等使用者點頭、建議改善登記第 128 項；完成條件中「開發機連測試 DB：右上角只顯示中文名、三個下拉只列有效使用者、token 換成同步表沒有的工號下一個請求 401」請使用者實測。回合 1、2 已 commit；階段 3 詳情見 `backlog/124-登入改用外部驗證API.md`
 - 已改動（未 commit）：無（本機 `host.properties` 補 `wpx.*`、`environment.properties` 補 `infra.manager.wpx.*`，兩檔不進版控）
 - 本階段起點：524b1b9
 - 卡住／待確認：無卡階段 2 的項目

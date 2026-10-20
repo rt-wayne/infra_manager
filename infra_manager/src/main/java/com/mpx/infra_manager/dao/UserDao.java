@@ -19,6 +19,9 @@ package com.mpx.infra_manager.dao;
 // 變更說明: BACKLOG 第 124 項階段 3 回合 1（裁示 ⑦B、D2A、E1、E2）：FIND_BY_ID 的姓名與 Email 改讀同步表 PX_SYNC_EMP（LEFT JOIN、只認 STATUS＝1；
 //           姓名查無退回工號），另回 IN_SYNC 旗標；不再讀 IM_ACCT_USER 的 USER_NAME、USER_EN_NAME、EMAIL（上線時要刪的欄）。
 //           密碼、鎖定欄仍讀（階段 7 拿掉）、DEPT_NAME／TEL_NO 仍讀（階段 5、6 改）。FIND_ACTIVE_WITH_ROLES 只先拿掉 USER_EN_NAME（回合 2 改 E3、E4）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-20
+// 變更說明: BACKLOG 第 124 項階段 3 回合 2（裁示 E3、E4）：FIND_ACTIVE_WITH_ROLES 姓名改讀同步表，只列「本系統啟用且同步表查得到」的使用者
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -62,14 +65,17 @@ public class UserDao {
 			   AND LOCK_DATE IS NULL
 			""";
 
+	/** 切換身分下拉：有效使用者（E3：本系統啟用且同步表查得到；E4：不看最後登入）＋啟用中角色，姓名讀同步表 */
 	public static final String FIND_ACTIVE_WITH_ROLES = """
-			SELECT U.USER_ID, U.USER_NAME, RU.ROLE_ID
+			SELECT U.USER_ID, RU.ROLE_ID,
+			""" + "       " + EmpSql.nameExpr("E", "U.USER_ID") + " AS USER_NAME\n" + """
 			  FROM IM_ACCT_USER U
+			""" + "  " + EmpSql.joinEmp("E", "U.USER_ID") + "\n" + """
 			  LEFT JOIN IM_ACCT_ROLE_USER RU
 			    ON RU.USER_ID = U.USER_ID
 			   AND RU.STATUS = 1
 			   AND EXISTS (SELECT 1 FROM IM_ACCT_ROLE R WHERE R.ROLE_ID = RU.ROLE_ID AND R.STATUS = 1)
-			 WHERE U.STATUS = 1
+			""" + " WHERE " + EmpSql.activeUserCond("U") + "\n" + """
 			   AND U.USER_ID <> :excludeUserId
 			 ORDER BY U.USER_ID, RU.ROLE_ID
 			""";
