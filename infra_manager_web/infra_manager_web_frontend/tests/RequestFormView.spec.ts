@@ -31,6 +31,10 @@
 // 修改日期: 2026-10-16
 // 變更說明: 必填欄位醒目提醒：新增、門禁卡新增、停用三種情境的紅色 * 位置與 missingFields 一致，到期日 * 隨有效期限類型出現、選回永久有效時消失；
 //           停用／刪除原因欄名比對含 *
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：申請人分機改自填——新增與重送都空白且可編輯（不從 /me 帶入）；
+//           「同申請人」聯絡方式改驗自填的分機；makeMe 不再帶 telNo
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -127,7 +131,7 @@ describe('RequestFormView', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     resetSession()
-    useSession().me.value = makeMe({ telNo: '5566', email: 'kevin@example.com' })
+    useSession().me.value = makeMe({ email: 'kevin@example.com' })
     codesMock.mockReset().mockResolvedValue(CODES)
     accountMock.mockReset()
     lookupDetailMock.mockReset()
@@ -273,16 +277,19 @@ describe('RequestFormView', () => {
     w2.unmount()
   })
 
-  it('新增：無申請單號欄；分機、申請單位、Email 自動帶入使用者資料且唯讀；欄位順序 申請人｜申請日期｜分機｜申請單位｜Email', async () => {
-    useSession().me.value = makeMe({ telNo: ' 5566 ', email: 'kevin@example.com', deptName: '資訊處' })
+  it('新增：無申請單號欄；分機空白可自填；申請單位、Email 自動帶入使用者資料且唯讀；欄位順序 申請人｜申請日期｜分機｜申請單位｜Email', async () => {
+    useSession().me.value = makeMe({ email: 'kevin@example.com', deptName: '資訊處' })
     const w = await mountForm()
     expect(w.find('#reqNo').exists()).toBe(false)
     expect(w.text()).not.toContain('申請單號')
     const input = (id: string): HTMLInputElement => w.find(`#${id}`).element as HTMLInputElement
+    expect(input('applyTelNo').value).toBe('')
+    expect(input('applyTelNo').disabled).toBe(false)
+    await w.find('#applyTelNo').setValue('5566')
     expect(input('applyTelNo').value).toBe('5566')
     expect(input('applyDept').value).toBe('資訊處')
     expect(input('applyEmail').value).toBe('kevin@example.com')
-    for (const id of ['applicant', 'applyDate', 'applyTelNo', 'applyDept', 'applyEmail']) {
+    for (const id of ['applicant', 'applyDate', 'applyDept', 'applyEmail']) {
       expect(input(id).disabled).toBe(true)
     }
     const basic = w.findAll('section.form-section')[0]
@@ -293,8 +300,8 @@ describe('RequestFormView', () => {
     w.unmount()
   })
 
-  it('新增：使用者資料無部門 → 申請單位空白可填；無分機與 Email → 唯讀空白', async () => {
-    useSession().me.value = makeMe({ telNo: null, email: null, deptName: '  ' })
+  it('新增：使用者資料無部門 → 申請單位空白可填；無 Email → 唯讀空白；分機一律空白', async () => {
+    useSession().me.value = makeMe({ email: null, deptName: '  ' })
     const w = await mountForm()
     const dept = w.find('#applyDept').element as HTMLInputElement
     expect(dept.value).toBe('')
@@ -306,9 +313,10 @@ describe('RequestFormView', () => {
     w.unmount()
   })
 
-  it('「同申請人」：使用人＝登入者、聯絡方式＝分機，所屬單位空白才帶申請單位；分機與 Email 不送出', async () => {
-    useSession().me.value = makeMe({ telNo: '5566', email: 'kevin@example.com', deptName: '資訊處' })
+  it('「同申請人」：使用人＝登入者、聯絡方式＝自填分機，所屬單位空白才帶申請單位；分機與 Email 不送出', async () => {
+    useSession().me.value = makeMe({ email: 'kevin@example.com', deptName: '資訊處' })
     const w = await mountForm()
+    await w.find('#applyTelNo').setValue(' 5566 ')
     await w.find('.same-as').trigger('click')
     expect((w.find('#holderName').element as HTMLInputElement).value).toBe('Kevin (李凱鈞)')
     expect((w.find('#holderCntct').element as HTMLInputElement).value).toBe('5566')
@@ -330,8 +338,8 @@ describe('RequestFormView', () => {
     w.unmount()
   })
 
-  it('「同申請人」：無分機時聯絡方式＝Email；門禁卡使用人 Email＝申請人 Email', async () => {
-    useSession().me.value = makeMe({ telNo: '', email: 'me@example.com' })
+  it('「同申請人」：未填分機時聯絡方式＝Email；門禁卡使用人 Email＝申請人 Email', async () => {
+    useSession().me.value = makeMe({ email: 'me@example.com' })
     const w = await mountForm()
     await w.find('.same-as').trigger('click')
     expect((w.find('#holderCntct').element as HTMLInputElement).value).toBe('me@example.com')
@@ -351,8 +359,8 @@ describe('RequestFormView', () => {
     w.unmount()
   })
 
-  it('「同申請人」：使用者資料分機／Email 全空白 → 不覆蓋已手填的聯絡方式與使用人 Email', async () => {
-    useSession().me.value = makeMe({ telNo: '  ', email: '  ' })
+  it('「同申請人」：未填分機且使用者資料 Email 空白 → 不覆蓋已手填的聯絡方式與使用人 Email', async () => {
+    useSession().me.value = makeMe({ email: '  ' })
     const w = await mountForm()
     await w.find('#holderCntct').setValue('#9999')
     await w.find('.same-as').trigger('click')
@@ -484,7 +492,7 @@ describe('RequestFormView', () => {
   })
 
   it('停用（使用者有部門）：申請單位帶入使用者部門並唯讀，送出帶該部門', async () => {
-    useSession().me.value = makeMe({ telNo: '5566', email: 'kevin@example.com', deptName: '資訊處' })
+    useSession().me.value = makeMe({ email: 'kevin@example.com', deptName: '資訊處' })
     lookupDetailMock.mockResolvedValue(ACCT)
     const w = await mountForm('/requests/new?reqType=DISABLE&acctId=AR20261001-001&acctName=sa')
     const dept = w.find('#applyDept').element as HTMLInputElement
@@ -572,13 +580,14 @@ describe('RequestFormView', () => {
 
   it('退件重送：帶入原內容、保留申請單位、顯示原申請日期，送出帶 versionNo', async () => {
     requestMock.mockResolvedValue(REJECTED_REQ)
-    // 使用者目前部門與原單不同：重送仍保留原單申請單位、唯讀；分機與 Email 照常帶入
-    useSession().me.value = makeMe({ telNo: '5566', email: 'kevin@example.com', deptName: '營運處' })
+    // 使用者目前部門與原單不同：重送仍保留原單申請單位、唯讀；Email 照常帶入；分機原單不存，空白待自填
+    useSession().me.value = makeMe({ email: 'kevin@example.com', deptName: '營運處' })
     const w = await mountForm('/requests/new?resubmit=AR20261005-002')
     expect((w.find('#acctName').element as HTMLInputElement).value).toBe('svc_a')
     expect((w.find('#applyDept').element as HTMLInputElement).value).toBe('資訊處')
     expect((w.find('#applyDept').element as HTMLInputElement).disabled).toBe(true)
-    expect((w.find('#applyTelNo').element as HTMLInputElement).value).toBe('5566')
+    expect((w.find('#applyTelNo').element as HTMLInputElement).value).toBe('')
+    expect((w.find('#applyTelNo').element as HTMLInputElement).disabled).toBe(false)
     expect((w.find('#applyEmail').element as HTMLInputElement).value).toBe('kevin@example.com')
     expect(w.text()).toContain('單號：AR20261005-002')
     expect((w.find('#applyDate').element as HTMLInputElement).value).toBe('2026-10-05')

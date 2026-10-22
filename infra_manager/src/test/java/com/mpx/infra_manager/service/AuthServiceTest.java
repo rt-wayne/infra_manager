@@ -28,6 +28,9 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 5 回合 2：/me 部門改由 UserDao.findPrimaryDept 當下查（切換中為代理身分；查無為 null）；AcctUser 夾具不再設部門
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：/me 不再回分機，拿掉 telNo 斷言與夾具的分機
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -282,7 +285,6 @@ class AuthServiceTest {
 		assertThat(me.getImpersonating()).isTrue();
 		assertThat(me.getCanImpersonate()).isFalse();
 		assertThat(me.getEmail()).isEqualTo(GARY + "@example.com");
-		assertThat(me.getTelNo()).isEqualTo("#" + GARY);
 		// 部門＝代理身分（有效身分）在同步表的主要部門，/me 當下查
 		assertThat(me.getDeptName()).isEqualTo("資訊部" + GARY);
 		verify(userDao, never()).findPrimaryDept(HANK);
@@ -346,7 +348,6 @@ class AuthServiceTest {
 		u.setUserName(TestFixture.NAMES.get(id));
 		u.setInSync(1);
 		u.setEmail(id + "@example.com");
-		u.setTelNo("#" + id);
 		u.setPwdHash("PBKDF2$h");
 		u.setStatus(status);
 		return u;

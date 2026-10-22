@@ -16,6 +16,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S8：HomeStats 加 emgUndecided、emgReturned（首頁緊急存取兩張卡）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：Me 拿掉 telNo（/me 不再回分機，申請人分機改自填）；deptName 註解改為同步表主要部門
 // ============================================================
 
 /** 後端錯誤回應本文：{ message } */
@@ -44,11 +47,9 @@ export interface Me {
   roleIds: string[]
   /** 有效身分是哪些帳號類別的執行人 */
   execCatgIds: string[]
-  /** 使用者資料的分機（「同申請人」最後的後備來源；/me 未回傳時為 undefined） */
-  telNo?: string | null
-  /** 使用者資料的 Email（門禁卡「同申請人」的後備來源；/me 未回傳時為 undefined） */
+  /** 使用者資料的 Email（新增申請帶入申請人 Email；/me 未回傳時為 undefined） */
   email?: string | null
-  /** 使用者資料的部門名稱（新增申請帶入申請單位；/me 未回傳時為 undefined） */
+  /** 有效身分在同步表的主要部門名稱（新增申請帶入申請單位；查無為 null；/me 未回傳時為 undefined） */
   deptName?: string | null
 }
 

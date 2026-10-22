@@ -29,6 +29,9 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 5 回合 2（裁示 ⑪）：/me 的 deptName 改為當下查同步表主要部門（UserDao.findPrimaryDept），
 //           不再讀 IM_ACCT_USER.DEPT_NAME；切換中為代理身分的部門
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：/me 不再回 telNo（申請人分機改由使用者在表單自填）
 // ============================================================
 
 import java.time.Clock;
@@ -164,7 +167,6 @@ public class AuthService {
 		me.setPermissions(id.getPermissions().stream().sorted().toList());
 		me.setRoleIds(id.getRoleIds());
 		me.setExecCatgIds(id.getExecCatgIds());
-		me.setTelNo(id.getTelNo());
 		me.setEmail(id.getEmail());
 		// 部門只有 /me 用：當下查有效身分在同步表的主要部門（⑪ 主管優先、其次 DEPT_ID 最小；查無為 null）
 		me.setDeptName(userDao.findPrimaryDept(id.getUserId()));

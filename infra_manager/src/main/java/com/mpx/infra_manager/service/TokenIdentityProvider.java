@@ -25,6 +25,9 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 5 回合 2：Identity 不再帶部門（改由 /me 當下查同步表）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：Identity 不再帶分機
 // ============================================================
 
 import java.time.Clock;
@@ -105,7 +108,7 @@ public class TokenIdentityProvider implements IdentityProvider {
 		boolean impersonating = !real.getUserId().equals(effective.getUserId());
 		PermissionService.Grants g = permissionService.load(effective.getUserId());
 		return new Identity(tokenHash, real.getUserId(), displayName(real), effective.getUserId(), displayName(effective),
-				impersonating, g.permissions(), g.roleIds(), g.execCatgIds(), effective.getEmail(), effective.getTelNo());
+				impersonating, g.permissions(), g.roleIds(), g.execCatgIds(), effective.getEmail());
 	}
 
 	public static String displayName(AcctUser u) {

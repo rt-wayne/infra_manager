@@ -46,6 +46,10 @@
   修改日期: 2026-10-16
   變更說明: 必填欄位醒目提醒：上方加「* 為必填欄位」；必填欄標籤後加紅色 *（.req-mark），條件與 missingFields 一致、
             隨申請類型／類別／有效期限類型即時出現或消失；唯讀或鎖定欄位不標；本人確認勾選也標
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-22
+  變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：申請人分機改由使用者自行填寫（拿掉唯讀、不再從 /me 帶入，/me 已不回分機；
+            重送也是空白，原單不存分機）；照舊不送出、不儲存，只當「同申請人」帶入聯絡方式的來源
 -->
 <template>
   <main>
@@ -59,7 +63,7 @@
         <div class="field"><label for="applyDate">申請日期</label><input id="applyDate" type="text" :value="applyDateText" disabled /></div>
         <div class="field">
           <label for="applyTelNo">申請人分機</label>
-          <input id="applyTelNo" v-model="form.applyTelNo" type="text" placeholder="例：1234" disabled />
+          <input id="applyTelNo" v-model="form.applyTelNo" type="text" placeholder="例：1234" />
         </div>
         <div class="field">
           <label for="applyDept">申請單位<span v-if="!deptLocked" class="req-mark" title="必填">*</span></label>
@@ -439,9 +443,8 @@ watch(
   }
 )
 
-/** 依有效身分的使用者資料帶入申請人分機、Email；新單另帶申請單位（重送保留原單的值） */
+/** 依有效身分的使用者資料帶入申請人 Email；新單另帶申請單位（重送保留原單的值）。分機由使用者自填（裁示 ⑫A），不帶入 */
 function fillApplicant(): void {
-  form.applyTelNo = (me.value?.telNo ?? '').trim()
   form.applyEmail = (me.value?.email ?? '').trim()
   // 重送保留原單值；原值空白（僅 DB 被手改時）開放手填，避免必填卡死
   if (!resubmitId) form.applyDept = (me.value?.deptName ?? '').trim()

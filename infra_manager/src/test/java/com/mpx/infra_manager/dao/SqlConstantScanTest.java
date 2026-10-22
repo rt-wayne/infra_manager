@@ -86,6 +86,9 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-10-22
 // 變更說明: 第 124 項階段 5 回合 1：申請單（含待辦）、附件、緊急存取（含影響帳號）共 13 個人名欄逐一斷言讀同步表片段，
 //           且這五段 SQL 不含 IM_ACCT_USER、USER_EN_NAME（原「人員姓名一律取IM_ACCT_USER或快照」改名）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: 第 124 項階段 6（裁示 ⑫A）：UserDao.FIND_BY_ID 不得含 TEL_NO
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -271,8 +274,9 @@ class SqlConstantScanTest {
 		assertThat(UserDao.FIND_BY_ID).contains(EmpSql.joinEmp("E", "U.USER_ID"))
 				.contains(EmpSql.nameExpr("E", "U.USER_ID") + " AS USER_NAME").contains("E.EMAIL")
 				.contains("CASE WHEN E.EMP_ID IS NULL THEN 0 ELSE 1 END AS IN_SYNC")
-				// 上線時要刪的欄：姓名、英文名、Email、部門不再從 IM_ACCT_USER 讀（密碼、鎖定欄階段 7 拿掉；TEL_NO 階段 6 改）
-				.doesNotContain("U.USER_NAME").doesNotContain("USER_EN_NAME").doesNotContain("U.EMAIL").doesNotContain("DEPT_NAME");
+				// 上線時要刪的欄：姓名、英文名、Email、部門、分機不再從 IM_ACCT_USER 讀（密碼、鎖定欄階段 7 拿掉）
+				.doesNotContain("U.USER_NAME").doesNotContain("USER_EN_NAME").doesNotContain("U.EMAIL").doesNotContain("DEPT_NAME")
+				.doesNotContain("TEL_NO");
 		// 第 124 項階段 5 回合 2：/me 部門＝同步表主要部門片段（⑪），逐人子查詢只用在單一使用者
 		assertThat(UserDao.FIND_PRIMARY_DEPT).isEqualTo("SELECT " + EmpSql.primaryDeptExpr(":userId") + " AS CODE FROM DUAL\n");
 		for (String sql : List.of(UserDao.FIND_ACTIVE_WITH_ROLES, PermDao.RCPT_SELECT, RoleAdminDao.FIND_ROLE_MEMBERS,

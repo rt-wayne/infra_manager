@@ -25,6 +25,9 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 5 回合 2（裁示 ⑪）：FIND_BY_ID 不再讀 DEPT_NAME；新增 FIND_PRIMARY_DEPT（同步表主要部門，只給 /me 用）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：FIND_BY_ID 不再讀 TEL_NO（申請人分機改自填）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -45,7 +48,7 @@ public class UserDao {
 
 	/** 單一使用者：本系統列＋同步表姓名／Email；IN_SYNC＝同步表查得到（LEFT JOIN 已帶 STATUS＝1 條件，E 有列即查得到） */
 	public static final String FIND_BY_ID = """
-			SELECT U.USER_ID, U.TEL_NO, U.PWD_HASH, U.LOGIN_FAIL_CNT, U.LOCK_DATE, U.LAST_LOGIN_DATE, U.STATUS,
+			SELECT U.USER_ID, U.PWD_HASH, U.LOGIN_FAIL_CNT, U.LOCK_DATE, U.LAST_LOGIN_DATE, U.STATUS,
 			       E.EMAIL, CASE WHEN E.EMP_ID IS NULL THEN 0 ELSE 1 END AS IN_SYNC,
 			""" + "       " + EmpSql.nameExpr("E", "U.USER_ID") + " AS USER_NAME\n" + """
 			  FROM IM_ACCT_USER U

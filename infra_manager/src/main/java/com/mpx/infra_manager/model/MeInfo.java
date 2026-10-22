@@ -17,7 +17,10 @@ package com.mpx.infra_manager.model;
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
-// 變更說明: BACKLOG 第 124 項階段 5 回合 2：deptName 改為有效身分在同步表 PX_SYNC_EMP 的主要部門（裁示 ⑪）；email 自階段 3 起讀同步表
+// 變更說明: BACKLOG 第 124 項階段 5 回合 2：deptName 改為有效身分在同步表 PX_SYNC_DEPT_EMP／PX_SYNC_DEPT 的主要部門（裁示 ⑪）；email 自階段 3 起讀同步表 PX_SYNC_EMP
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：刪 telNo（申請人分機改由使用者在表單自填，/me 不再回分機）
 // ============================================================
 
 import java.util.List;
@@ -33,7 +36,6 @@ public class MeInfo {
 	private List<String> permissions;
 	private List<String> roleIds;
 	private List<String> execCatgIds;
-	private String telNo;
 	private String email;
 	private String deptName;
 
@@ -107,14 +109,6 @@ public class MeInfo {
 
 	public void setExecCatgIds(List<String> execCatgIds) {
 		this.execCatgIds = execCatgIds;
-	}
-
-	public String getTelNo() {
-		return telNo;
-	}
-
-	public void setTelNo(String telNo) {
-		this.telNo = telNo;
 	}
 
 	public String getEmail() {

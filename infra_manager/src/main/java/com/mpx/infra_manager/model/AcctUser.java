@@ -14,6 +14,9 @@ package com.mpx.infra_manager.model;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 5 回合 2：刪 deptName（不再讀 IM_ACCT_USER.DEPT_NAME，部門改由 /me 查同步表）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：刪 telNo（不再讀 IM_ACCT_USER.TEL_NO，申請人分機改由使用者自填）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -26,7 +29,6 @@ public class AcctUser {
 	private String userId;
 	private String userName;
 	private String email;
-	private String telNo;
 	@JsonIgnore
 	private String pwdHash;
 	private Integer loginFailCnt;
@@ -68,14 +70,6 @@ public class AcctUser {
 
 	public void setEmail(String email) {
 		this.email = email;
-	}
-
-	public String getTelNo() {
-		return telNo;
-	}
-
-	public void setTelNo(String telNo) {
-		this.telNo = telNo;
 	}
 
 	public String getPwdHash() {
