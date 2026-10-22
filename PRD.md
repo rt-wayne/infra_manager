@@ -676,7 +676,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
   - 本段為依瀏覽器行為推論，瀏覽器版本未查證，未實測。
 - **前端狀態**：`/me` 與代碼表由 `composables/useSession.ts` 共用；代碼表快取到登出、401 或重新登入時清除（`resetSession`）。
 - **log**：後端寫 `/home/tomcat/log/infra_manager/`（檔名 `infra_manager.yyyy-MM-dd.log`）、殼 jar 寫 `/home/tomcat/log/infra_manager_web/`（檔名 `infra_manager_web.yyyy-MM-dd.log`）（Windows 為啟動所在磁碟的同路徑），保留 30 天。
-- **DB 共用硬規則**：RD_USER 裡另有 IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等表，是開發 Infra_Manager_Java 時建的、目前沒有任何系統在用（原 Infra_Manager 資料存 JSON 檔）；本模組不可建立、刪除、修改或在程式引用這些表（整併與清表見 BACKLOG 第 69 項）。重疊概念一律另建 IM_ACCT_ 前綴的新表。**人員**：關聯與停用狀態參照 `IM_ACCT_USER`（工號、STATUS）；姓名、Email、部門讀同步表 `PX_SYNC_EMP`／`PX_SYNC_DEPT_EMP`／`PX_SYNC_DEPT`（只認 STATUS＝1、不加 schema 前綴、不得 INNER JOIN）；登入與每個請求的 token 檢查都要求同步表查得到（施工中仍讀 `IM_ACCT_USER` 的電話與密碼欄，見 BACKLOG 第 124 項）。
+- **DB 共用硬規則**：RD_USER 裡另有 IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等表，是開發 Infra_Manager_Java 時建的、目前沒有任何系統在用（原 Infra_Manager 資料存 JSON 檔）；本模組不可建立、刪除、修改或在程式引用這些表（整併與清表見 BACKLOG 第 69 項）。重疊概念一律另建 IM_ACCT_ 前綴的新表。**人員**：關聯與停用狀態參照 `IM_ACCT_USER`（工號、STATUS）；姓名、Email、部門讀同步表 `PX_SYNC_EMP`／`PX_SYNC_DEPT_EMP`／`PX_SYNC_DEPT`（只認 STATUS＝1、不加 schema 前綴、不得 INNER JOIN）；登入與每個請求的 token 檢查都要求同步表查得到（施工中仍讀 `IM_ACCT_USER` 的密碼與鎖定欄，見 BACKLOG 第 124 項）。
 
 **後端主要程式**（`infra_manager\src\main\java\com\mpx\infra_manager\`）
 
