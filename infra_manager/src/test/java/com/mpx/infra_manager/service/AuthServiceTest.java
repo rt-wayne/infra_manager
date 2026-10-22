@@ -25,6 +25,9 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 1（裁示 D0B、E1）：同步表查無——登入比照停用 A01（使用者裁示 A）、token 401 A03 且不寫 LAST_ACCESS、
 //           代理身分查無自動切回、切換身分對象查無 404；顯示名只有中文名（期望字串「英文名 (中文名)」改中文名）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 5 回合 2：/me 部門改由 UserDao.findPrimaryDept 當下查（切換中為代理身分；查無為 null）；AcctUser 夾具不再設部門
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -268,6 +271,7 @@ class AuthServiceTest {
 	@Test
 	void 切換身分_成功_同一交易寫token與軌跡_不可切自己() {
 		assertStatus(() -> auth.impersonate(id(HANK), target(HANK)), HttpStatus.BAD_REQUEST, AcctMsg.IMPERSONATE_SELF);
+		when(userDao.findPrimaryDept(GARY)).thenReturn("資訊部" + GARY);
 		MeInfo me = auth.impersonate(id(HANK), target(GARY));
 		verify(tokenDao).setActAs("hash-" + HANK, GARY, HANK, NOW);
 		verify(adminLogDao).insert(eq(NOW), eq(HANK), eq("黃志翰"), eq(AcctConst.ADM_IMPERSONATE), eq(GARY),
@@ -279,7 +283,18 @@ class AuthServiceTest {
 		assertThat(me.getCanImpersonate()).isFalse();
 		assertThat(me.getEmail()).isEqualTo(GARY + "@example.com");
 		assertThat(me.getTelNo()).isEqualTo("#" + GARY);
-		assertThat(me.getDeptName()).isEqualTo("部門" + GARY);
+		// 部門＝代理身分（有效身分）在同步表的主要部門，/me 當下查
+		assertThat(me.getDeptName()).isEqualTo("資訊部" + GARY);
+		verify(userDao, never()).findPrimaryDept(HANK);
+	}
+
+	/** 第 124 項階段 5 回合 2：/me 部門當下查同步表；查無回 null（前端申請單位欄留空自填） */
+	@Test
+	void me_部門讀同步表主要部門_查無為null() {
+		when(userDao.findPrimaryDept(HANK)).thenReturn("資訊部");
+		assertThat(auth.me(id(HANK)).getDeptName()).isEqualTo("資訊部");
+		when(userDao.findPrimaryDept(HANK)).thenReturn(null);
+		assertThat(auth.me(id(HANK)).getDeptName()).isNull();
 	}
 
 	/** 第 124 項裁示 E1：切換對象同步表查無比照停用 404 */
@@ -332,7 +347,6 @@ class AuthServiceTest {
 		u.setInSync(1);
 		u.setEmail(id + "@example.com");
 		u.setTelNo("#" + id);
-		u.setDeptName("部門" + id);
 		u.setPwdHash("PBKDF2$h");
 		u.setStatus(status);
 		return u;

@@ -22,6 +22,9 @@ package com.mpx.infra_manager.service;
 // 變更說明: BACKLOG 第 124 項階段 3 回合 1（裁示 D0B、E1、⑬B）：token 有效另須實際使用者在同步表 PX_SYNC_EMP 查得到（USER_IN_SYNC＝1），
 //           查無回 401 A03 並記一行專用 INFO log（D10A 不防同步異常，這是同步出錯那天唯一的診斷線索）；
 //           代理身分同步表查無比照停用自動切回；顯示名改只用中文名（AcctUser.userName 已由同步表帶出）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 5 回合 2：Identity 不再帶部門（改由 /me 當下查同步表）
 // ============================================================
 
 import java.time.Clock;
@@ -102,8 +105,7 @@ public class TokenIdentityProvider implements IdentityProvider {
 		boolean impersonating = !real.getUserId().equals(effective.getUserId());
 		PermissionService.Grants g = permissionService.load(effective.getUserId());
 		return new Identity(tokenHash, real.getUserId(), displayName(real), effective.getUserId(), displayName(effective),
-				impersonating, g.permissions(), g.roleIds(), g.execCatgIds(), effective.getEmail(), effective.getTelNo(),
-				effective.getDeptName());
+				impersonating, g.permissions(), g.roleIds(), g.execCatgIds(), effective.getEmail(), effective.getTelNo());
 	}
 
 	public static String displayName(AcctUser u) {

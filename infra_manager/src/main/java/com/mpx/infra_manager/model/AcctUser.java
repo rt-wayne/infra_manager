@@ -11,6 +11,9 @@ package com.mpx.infra_manager.model;
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 1：刪 userEnName（第 67 項併入）；userName、email 改由同步表 PX_SYNC_EMP 帶出
 //           （userName 查無時 SQL 已退回工號）；加 inSync（同步表查得到＝1，裁示 E1／E3）。deptName、telNo 仍讀 IM_ACCT_USER（階段 5、6 改）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 5 回合 2：刪 deptName（不再讀 IM_ACCT_USER.DEPT_NAME，部門改由 /me 查同步表）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -22,7 +25,6 @@ public class AcctUser {
 
 	private String userId;
 	private String userName;
-	private String deptName;
 	private String email;
 	private String telNo;
 	@JsonIgnore
@@ -58,14 +60,6 @@ public class AcctUser {
 
 	public void setUserName(String userName) {
 		this.userName = userName;
-	}
-
-	public String getDeptName() {
-		return deptName;
-	}
-
-	public void setDeptName(String deptName) {
-		this.deptName = deptName;
 	}
 
 	public String getEmail() {

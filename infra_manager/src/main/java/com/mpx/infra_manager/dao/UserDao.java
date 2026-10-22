@@ -22,6 +22,9 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 2（裁示 E3、E4）：FIND_ACTIVE_WITH_ROLES 姓名改讀同步表，只列「本系統啟用且同步表查得到」的使用者
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 5 回合 2（裁示 ⑪）：FIND_BY_ID 不再讀 DEPT_NAME；新增 FIND_PRIMARY_DEPT（同步表主要部門，只給 /me 用）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -34,6 +37,7 @@ import org.springframework.stereotype.Repository;
 
 import com.mpx.common.db.DbClient;
 import com.mpx.infra_manager.model.AcctUser;
+import com.mpx.infra_manager.model.CodeRow;
 import com.mpx.infra_manager.model.UserRoleRow;
 
 @Repository
@@ -41,13 +45,16 @@ public class UserDao {
 
 	/** 單一使用者：本系統列＋同步表姓名／Email；IN_SYNC＝同步表查得到（LEFT JOIN 已帶 STATUS＝1 條件，E 有列即查得到） */
 	public static final String FIND_BY_ID = """
-			SELECT U.USER_ID, U.DEPT_NAME, U.TEL_NO, U.PWD_HASH, U.LOGIN_FAIL_CNT, U.LOCK_DATE, U.LAST_LOGIN_DATE, U.STATUS,
+			SELECT U.USER_ID, U.TEL_NO, U.PWD_HASH, U.LOGIN_FAIL_CNT, U.LOCK_DATE, U.LAST_LOGIN_DATE, U.STATUS,
 			       E.EMAIL, CASE WHEN E.EMP_ID IS NULL THEN 0 ELSE 1 END AS IN_SYNC,
 			""" + "       " + EmpSql.nameExpr("E", "U.USER_ID") + " AS USER_NAME\n" + """
 			  FROM IM_ACCT_USER U
 			""" + "  " + EmpSql.joinEmp("E", "U.USER_ID") + "\n" + """
 			 WHERE U.USER_ID = :userId
 			""";
+
+	/** 一人的主要部門（⑪：主管的部門優先、其次 DEPT_ID 最小；全名空或字串 'NULL' 用部門名）；查無為 NULL。只給 /me 用（逐人子查詢，不放進名單） */
+	public static final String FIND_PRIMARY_DEPT = "SELECT " + EmpSql.primaryDeptExpr(":userId") + " AS CODE FROM DUAL\n";
 
 	public static final String UPDATE_LOGIN_FAIL = """
 			UPDATE IM_ACCT_USER
@@ -93,6 +100,14 @@ public class UserDao {
 		Map<String, Object> params = new HashMap<>();
 		params.put("userId", userId);
 		return DaoSupport.first(dbClient.query(itflowDb, FIND_BY_ID, params, AcctUser.class));
+	}
+
+	/** 主要部門名稱；同步表查無或沒有有效部門回 null */
+	public String findPrimaryDept(String userId) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("userId", userId);
+		CodeRow row = DaoSupport.first(dbClient.query(itflowDb, FIND_PRIMARY_DEPT, params, CodeRow.class));
+		return row == null ? null : row.getCode();
 	}
 
 	public int loginFail(String userId, int maxFail, LocalDateTime now) {

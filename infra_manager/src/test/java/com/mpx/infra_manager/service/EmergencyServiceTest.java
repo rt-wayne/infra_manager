@@ -29,6 +29,9 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 5 回合 2：Identity 建構子少一個 deptName 參數
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -99,7 +102,7 @@ class EmergencyServiceTest {
 	@Test
 	void 權限_無EMG_APPLY送出403_列表與明細登入即可() {
 		Identity noPerm = new Identity("hash-x", MICHAEL, NAMES.get(MICHAEL), MICHAEL, NAMES.get(MICHAEL), false, Set.of(),
-				List.of(), List.of(), null, null, null);
+				List.of(), List.of(), null, null);
 		assertStatus(() -> svc.create(noPerm, form("DB", "prod-db01", "主機當機需緊急登入", 4)), HttpStatus.FORBIDDEN, AcctMsg.P01);
 		verify(fx.emgDao, never()).insert(any(), anyString());
 		// 列表不需權限：無 EMG_VIEW_ALL 者只是範圍縮到本人
@@ -591,7 +594,7 @@ class EmergencyServiceTest {
 		// HANK 切換成申請人 MICHAEL 處理：有效身分是申請人 → 自核；ACT_BY＝HANK、ACT_AS＝MICHAEL
 		fx.hists.clear();
 		Identity asApplicant = new Identity("hash-" + HANK, HANK, NAMES.get(HANK), MICHAEL, NAMES.get(MICHAEL), true,
-				Set.of(AcctConst.PERM_EMG_DECIDE), List.of(), List.of(), null, null, null);
+				Set.of(AcctConst.PERM_EMG_DECIDE), List.of(), List.of(), null, null);
 		svc.returnEmg(asApplicant, EMG_ID, reasonForm(1, "自己退回"));
 		verify(fx.emgDao).decide(EMG_ID, 1, AcctConst.EMG_DECIDE_RETURN, MICHAEL, "自己退回", 1, NOW, HANK);
 		AcctHist h2 = fx.hists.get(0);
@@ -834,7 +837,7 @@ class EmergencyServiceTest {
 		// HANK 切換成申請人 MICHAEL 結案：有效身分是申請人 → 自核
 		fx.hists.clear();
 		Identity asApplicant = new Identity("hash-" + HANK, HANK, NAMES.get(HANK), MICHAEL, NAMES.get(MICHAEL), true,
-				Set.of(AcctConst.PERM_EMG_DECIDE), List.of(), List.of(), null, null, null);
+				Set.of(AcctConst.PERM_EMG_DECIDE), List.of(), List.of(), null, null);
 		svc.close(asApplicant, EMG_ID, f);
 		verify(fx.emgDao).close(EMG_ID, 2, AcctConst.EMG_CLOSE_CHANGED, "說明", MICHAEL, 1, NOW, HANK);
 		AcctHist h2 = fx.hists.get(0);

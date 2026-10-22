@@ -46,6 +46,9 @@ package com.mpx.infra_manager.support;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 1：NAMES 改只有中文名（第 67 項併入、裁示 ⑬B），各測試期望的「英文名 (中文名)」一併改
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 5 回合 2：Identity 建構子少一個 deptName 參數
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -197,19 +200,19 @@ public class TestFixture {
 
 	public static Identity id(String userId) {
 		return new Identity("hash-" + userId, userId, NAMES.get(userId), userId, NAMES.get(userId), false, permsOf(userId),
-				USER_ROLES.getOrDefault(userId, List.of()), USER_EXEC.getOrDefault(userId, List.of()), null, null, null);
+				USER_ROLES.getOrDefault(userId, List.of()), USER_EXEC.getOrDefault(userId, List.of()), null, null);
 	}
 
 	/** 實際使用者 real 切換為 actAs */
 	public static Identity impersonate(String real, String actAs) {
 		return new Identity("hash-" + real, real, NAMES.get(real), actAs, NAMES.get(actAs), true, permsOf(actAs),
-				USER_ROLES.getOrDefault(actAs, List.of()), USER_EXEC.getOrDefault(actAs, List.of()), null, null, null);
+				USER_ROLES.getOrDefault(actAs, List.of()), USER_EXEC.getOrDefault(actAs, List.of()), null, null);
 	}
 
 	/** 自訂權限的身分（名單變更情境用） */
 	public static Identity idWith(String userId, Set<String> perms, List<String> execCatgs) {
 		return new Identity("hash-" + userId, userId, NAMES.get(userId), userId, NAMES.get(userId), false, perms, List.of(),
-				execCatgs, null, null, null);
+				execCatgs, null, null);
 	}
 
 	// ------------------------------------------------------------

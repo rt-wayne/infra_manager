@@ -25,6 +25,10 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 1（裁示 D0B、E1、⑬B）：同步表 PX_SYNC_EMP 查無的人——登入比照停用回 A01（過渡行為，使用者裁示 A；
 //           階段 7 改走 WPX 後換成 D5A「帳號無法使用」）、切換身分對象比照停用回 404；顯示名改只用中文名（第 67 項併入）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 5 回合 2（裁示 ⑪）：/me 的 deptName 改為當下查同步表主要部門（UserDao.findPrimaryDept），
+//           不再讀 IM_ACCT_USER.DEPT_NAME；切換中為代理身分的部門
 // ============================================================
 
 import java.time.Clock;
@@ -162,7 +166,8 @@ public class AuthService {
 		me.setExecCatgIds(id.getExecCatgIds());
 		me.setTelNo(id.getTelNo());
 		me.setEmail(id.getEmail());
-		me.setDeptName(id.getDeptName());
+		// 部門只有 /me 用：當下查有效身分在同步表的主要部門（⑪ 主管優先、其次 DEPT_ID 最小；查無為 null）
+		me.setDeptName(userDao.findPrimaryDept(id.getUserId()));
 		return me;
 	}
 

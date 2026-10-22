@@ -13,6 +13,9 @@ package com.mpx.infra_manager.common;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 5 回合 2：刪 deptName——部門改由 /me 當下查同步表主要部門（只有 /me 用，不必每個請求都算）
 // ============================================================
 
 import java.util.List;
@@ -31,11 +34,10 @@ public class Identity {
 	private final List<String> execCatgIds;
 	private final String email;
 	private final String telNo;
-	private final String deptName;
 
 	public Identity(String tokenHash, String realUserId, String realUserName, String userId, String userName,
 			boolean impersonating, Set<String> permissions, List<String> roleIds, List<String> execCatgIds, String email,
-			String telNo, String deptName) {
+			String telNo) {
 		this.tokenHash = tokenHash;
 		this.realUserId = realUserId;
 		this.realUserName = realUserName;
@@ -47,7 +49,6 @@ public class Identity {
 		this.execCatgIds = execCatgIds == null ? List.of() : List.copyOf(execCatgIds);
 		this.email = email;
 		this.telNo = telNo;
-		this.deptName = deptName;
 	}
 
 	/** 登入 token 的 SHA-256（登出、切換身分用；不是 token 本身） */
@@ -94,10 +95,6 @@ public class Identity {
 
 	public String getTelNo() {
 		return telNo;
-	}
-
-	public String getDeptName() {
-		return deptName;
 	}
 
 	/** 寫入 ACT_AS_ID 的值：切換中為有效身分，否則 null */

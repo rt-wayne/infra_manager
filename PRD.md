@@ -8,7 +8,7 @@
 
 資訊處用來管理「被管理的系統帳號、憑證、機房門禁卡」的 Web 系統，另含機房巡檢紀錄。帳號部分涵蓋申請、7 關簽核、生效、到期提醒與歷史；巡檢部分涵蓋填寫、查詢、異常標記處理。使用者是資訊處同仁：申請人、各關簽核主管、關卡 6 執行人、資訊治理、巡檢人員與系統管理員。
 
-本 repo 只含兩個模組：**帳號權限管理**與**機房巡檢**。同一個 DB schema 裡另有既有的「機房異動申請」模組，不在本 repo、不在本文件範圍。
+本 repo 只含兩個模組：**帳號權限管理**與**機房巡檢**。同一個 DB schema 裡另有開發 Infra_Manager_Java 時建的 IM_ 開頭表，目前沒有系統在用，不在本文件範圍（見「DB 共用硬規則」）。
 
 ## 背景與動機
 
@@ -257,7 +257,7 @@
 | 欄位 | 標準表單 | 門禁卡表單 |
 |---|---|---|
 | 申請人、申請日期 | 有效身分／系統時間（重送顯示原申請日期），唯讀 | 同 |
-| 申請單位 | 必填；新開申請帶有效身分使用者資料的部門名稱（`/me` 的 deptName）並唯讀，部門空白時才開放手填；退件重送保留原單的值並唯讀（原值空白時開放手填） | 同 |
+| 申請單位 | 必填；新開申請帶有效身分在同步表的主要部門（`/me` 的 deptName）並唯讀，查無部門時才開放手填；退件重送保留原單的值並唯讀（原值空白時開放手填） | 同 |
 | 申請人分機／Email | 帶有效身分使用者資料的電話／Email 並唯讀（資料空白就留空），只作「同申請人」帶入來源，不送後端、不儲存 | 同 |
 | 申請類型 | 必填；新增時下方提示「修改」「停用」「重新啟用」「刪除」要從列表的操作按鈕發起：有 ACC_LIST_FULL 寫「帳號列表或帳號申請單列表」，否則只寫「帳號申請單列表」；異動寫「已依您點選的操作鎖定」，退件重送寫「不可變更申請類型與帳號類別」 | 同 |
 | 帳號類別 | 必填；新增只列開放類別；異動與退件重送鎖定 | DOOR |
@@ -676,7 +676,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
   - 本段為依瀏覽器行為推論，瀏覽器版本未查證，未實測。
 - **前端狀態**：`/me` 與代碼表由 `composables/useSession.ts` 共用；代碼表快取到登出、401 或重新登入時清除（`resetSession`）。
 - **log**：後端寫 `/home/tomcat/log/infra_manager/`（檔名 `infra_manager.yyyy-MM-dd.log`）、殼 jar 寫 `/home/tomcat/log/infra_manager_web/`（檔名 `infra_manager_web.yyyy-MM-dd.log`）（Windows 為啟動所在磁碟的同路徑），保留 30 天。
-- **DB 共用硬規則**：RD_USER 與既有「機房異動申請」模組共用；既有模組的表（IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等）本模組不可建立、刪除、修改或在程式引用；重疊概念一律另建 IM_ACCT_ 前綴的新表，人員一律參照 IM_ACCT_USER。
+- **DB 共用硬規則**：RD_USER 裡另有 IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等表，是開發 Infra_Manager_Java 時建的、目前沒有任何系統在用（原 Infra_Manager 資料存 JSON 檔）；本模組不可建立、刪除、修改或在程式引用這些表（整併與清表見 BACKLOG 第 69 項）。重疊概念一律另建 IM_ACCT_ 前綴的新表。**人員**：關聯與停用狀態參照 `IM_ACCT_USER`（工號、STATUS）；姓名、Email、部門讀同步表 `PX_SYNC_EMP`／`PX_SYNC_DEPT_EMP`／`PX_SYNC_DEPT`（只認 STATUS＝1、不加 schema 前綴、不得 INNER JOIN）；登入與每個請求的 token 檢查都要求同步表查得到（施工中仍讀 `IM_ACCT_USER` 的電話與密碼欄，見 BACKLOG 第 124 項）。
 
 **後端主要程式**（`infra_manager\src\main\java\com\mpx\infra_manager\`）
 
@@ -988,7 +988,7 @@ END
 
 **邏輯參照**（重點；其餘同名欄即參照同名主鍵）：IM_ACCT.ACCT_ID 與建立它的 IM_ACCT_REQ.REQ_ID 值相同；IM_ACCT_REQ.ACCT_ID → IM_ACCT；IM_ACCT_HIST.REQ_ID 僅 SOURCE_CODE＝REQ 時有值、EMG_ID 僅 SOURCE_CODE＝EMG 時有值（→ IM_EMG_ACCESS）；IM_EMG_AFFECT_ACCT.EMG_ID → IM_EMG_ACCESS、ACCT_ID → IM_ACCT；IM_ACCT_NOTIFY_LOG.REF_ID 依 REF_TYPE_CODE 指向不同對象（組合鍵）；所有人員欄 → IM_ACCT_USER.USER_ID（排程與初始資料為 SYSTEM）；IM_DOC_SEQ 不與其他表關聯。
 
-**顯示名的兩種算法**：快照欄（*_NAME）由 `Texts.displayName` 產生（同步表中文姓名 trim 後、空白退回工號）；申請單明細與待辦的 applyByName／execByName／verifyByName、附件上傳人、緊急存取的七個人名與影響帳號記錄人，則由 SQL 即時 LEFT JOIN 同步表 `PX_SYNC_EMP` 計算（`EmpSql.nameExpr`：中文姓名 trim 後、空白或查無退回該欄工號；該欄工號本身為空則為空），兩者結果相同。見 BACKLOG 第 13 項。
+**顯示名的來源**：一律是同步表 `PX_SYNC_EMP` 的中文姓名去頭尾空白，空白或查無時顯示工號（「顯示名」名詞定義）。寫入當下存進快照欄（*_NAME）的由 Java `Texts.displayName` 產生；畫面即時顯示的——申請單明細與待辦的 applyByName／execByName／verifyByName、附件上傳人、緊急存取的七個人名與影響帳號記錄人、角色與執行人名單、切換身分與指派下拉——由 SQL LEFT JOIN 同步表計算（`EmpSql.nameExpr`；該欄工號本身為空則為空）。兩條路徑結果相同；快照欄寫入後不隨同步表變動。
 
 **初始資料**（代碼表 7 張隨 `db\infra_manager_init_data.sql` 建立，CREATE_BY＝SYSTEM、STATUS＝1；人員三表 IM_ACCT_USER、IM_ACCT_ROLE_USER、IM_EXEC_MAP 不在該檔——使用者以 DB 手動維護，角色指派與執行人對照由系統管理畫面維護、DB 直接改只作備援；代碼表中 IM_ACCT_ROLE_PERM 的 35 列只是**初始**授予，上線後可在角色權限設定頁調整，現況以 DB 為準；筆數為測試 DB 2026-10-19 實查值，含 STATUS＝0 的列）
 
@@ -1082,7 +1082,7 @@ END
 |---|---|---|---|---|---|
 | POST | `/auth/login` | 無 | userId、password | token、me | 401 A01、A02 |
 | POST | `/auth/logout` | 登入 | — | 200 空本文 | 401 |
-| GET | `/me` | 登入 | — | userId、userName（有效身分）、realUserId、realUserName、impersonating、canImpersonate（實際操作人有 SYS_IMPERSONATE 且未切換）、permissions[]、roleIds[]、execCatgIds[]、telNo、email、deptName（三者皆為有效身分的資料；email 讀同步表 `PX_SYNC_EMP`，telNo、deptName 仍讀 `IM_ACCT_USER`） | 401 |
+| GET | `/me` | 登入 | — | userId、userName（有效身分）、realUserId、realUserName、impersonating、canImpersonate（實際操作人有 SYS_IMPERSONATE 且未切換）、permissions[]、roleIds[]、execCatgIds[]、telNo、email、deptName（三者皆為有效身分的資料；email 讀同步表 `PX_SYNC_EMP`；deptName＝同步表主要部門，呼叫 `/me` 當下查——主管的部門優先、其次部門代碼最小，全名空白用部門名，查無為 null；telNo 仍讀 `IM_ACCT_USER`） | 401 |
 | GET | `/users` | 實際操作人 SYS_IMPERSONATE | — | [userId、userName、roleIds[]]（有效使用者：本系統啟用且同步表查得到、不看最後登入；不含自己） | 403 |
 | POST | `/auth/impersonate` | 實際操作人 SYS_IMPERSONATE | targetUserId | me | 403（寫 DENY）、400 E02／不可切換為自己、404 |
 | POST | `/auth/impersonate/end` | 登入（切換中） | — | me | 409 E20 |
