@@ -101,11 +101,11 @@ DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓�
 
 ### 執行前共通注意
 
-- **字元集**：DB 字元集須為 AL32UTF8（Big5 系字元集存不了罕用的人名用字，會無聲變成問號）。SQL*Plus 只用來執行下方 `db\` 兩個檔案，在 cmd 視窗執行，執行前在同一個視窗先下 `set NLS_LANG=.AL32UTF8`。下方各段含中文值的語句（例如第 1 段的中文姓名、部門）一律用 SQL Developer 執行，不要貼進 cmd 的 SQL*Plus——cmd 預設是 Big5 代碼頁，中文會無聲變成亂碼、不會報錯。
+- **字元集**：DB 字元集須為 AL32UTF8（Big5 系字元集存不了罕用的人名用字，會無聲變成問號）。SQL*Plus 只用來執行下方 `db\` 兩個檔案，在 cmd 視窗執行，執行前在同一個視窗先下 `set NLS_LANG=.AL32UTF8`。下方各段含中文值的語句（例如巡檢項目名稱、資產分類名稱）一律用 SQL Developer 執行，不要貼進 cmd 的 SQL*Plus——cmd 預設是 Big5 代碼頁，中文會無聲變成亂碼、不會報錯。
 - **一次只執行一個操作**：下面每個操作各自一個區塊，只複製你要做的那一塊，**不要把整節貼進去一起執行**。
 - **關 autocommit**：每句 INSERT／UPDATE 都應**影響 1 筆**（例外在該段註明），確認筆數無誤再 COMMIT，異常就 ROLLBACK。核對完立即 COMMIT 或 ROLLBACK——交易沒結束前，被改到的那個人登入會卡住。
 - 替換 `【】` 後的實際值不要存回本檔、不要 commit 進版控。
-- **SQL 歷史**：SQL Developer 預設會保留執行過的語句（「SQL 歷史記錄」，F8），第 1 段與建新環境的初始管理者 INSERT 含工號、Email 等個資；正式環境操作後，在 SQL 歷史記錄視窗清除歷史，或刪 `%APPDATA%\SQL Developer\SqlHistory\` 下對應的檔案。
+- **SQL 歷史**：SQL Developer 預設會保留執行過的語句（「SQL 歷史記錄」，F8），第 1 段與建新環境的初始管理者 INSERT 含工號；正式環境操作後，在 SQL 歷史記錄視窗清除歷史，或刪 `%APPDATA%\SQL Developer\SqlHistory\` 下對應的檔案。
 
 ### 建新環境：執行 `db\` 兩個 SQL 檔
 
@@ -118,11 +118,22 @@ DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓�
 
 **既有環境升級到角色權限維護介面**（角色指派、執行人對照、角色權限設定三個畫面）：以 RD_USER 執行 `db\infra_manager_89_role_admin.sql`（執行方式同上）。本檔只更新 IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM 四張表的 COMMENT、不動結構、不需 GRANT（AP_USER 對相關表本來就有四種權限，2026-10-19 於測試 DB 實查；正式環境執行後用檔尾第三句再核對一次，少了 INSERT 或 UPDATE 就要補 GRANT）；資料只改一個值：SYS_ADMIN 的角色說明拿掉「角色指派與執行人對照第一階段以 DB 維護」，且只在說明仍是初始舊字時才改。可重跑；全新環境用建表檔與初始資料檔建完不必跑（兩檔已同步）。檔尾四句查詢的期望值寫在該段註解。
 
-**既有環境升級到第 124 項（登入改用 WPX）前置**：以 RD_USER 執行 `db\infra_manager_124_1_prep.sql`（執行方式同上）。本檔只把 `IM_ACCT_USER.USER_EN_NAME`（英文顯示名）改成可空，不動資料、不改 COMMENT、不需 GRANT；舊版程式照常寫英文名，不受影響，所以可以在新版部署前先跑。測試 DB `itflow_uat` 開發機與 UAT 共用，**只跑一次、兩邊同時生效**，跑完登入 UAT 確認照常。可重跑（已可空或欄位已刪除就印「略過」）。DDL 會自動提交，執行中若有人正在登入（交易未結束），會等它結束再改。檔尾兩句查詢的期望值寫在該段註解。全新環境不必跑；建表檔這一欄暫仍是 NOT NULL，第 124 項完成時才改成最終結構（進度見 `BACKLOG.md` 第 124 項）。
+**既有環境升級到第 124 項（登入改用 WPX）前置**：以 RD_USER 執行 `db\infra_manager_124_1_prep.sql`（執行方式同上）。本檔只把 `IM_ACCT_USER.USER_EN_NAME`（英文顯示名）改成可空，不動資料、不改 COMMENT、不需 GRANT；舊版程式照常寫英文名，不受影響，所以可以在新版部署前先跑。測試 DB `itflow_uat` 開發機與 UAT 共用，**只跑一次、兩邊同時生效**，跑完登入 UAT 確認照常。可重跑（已可空或欄位已刪除就印「略過」）。DDL 會自動提交，執行中若有人正在登入（交易未結束），會等它結束再改。檔尾兩句查詢的期望值寫在該段註解。全新環境不必跑（建表檔已是最終結構、沒有這一欄）。測試 DB 已於 2026-10-20 執行。
 
-建完補第一位系統管理員。**這一步只能用 DB 設定**：角色指派畫面需要 SYS_ROLE，新環境還沒有任何人持有，進不了畫面；第一位設好、登入後，其他人的角色與執行人改用畫面指派。**用 SQL Developer 另開一個連線**執行（姓名含中文；也不要接在跑 init_data 檔的 SQL*Plus 連線裡——該檔的遇錯即停設定整個連線都有效，之後任何一句打錯都會直接結束 SQL*Plus 並回滾）：
+**既有環境升級到第 124 項：UAT 切換窗口**（只做一次；測試 DB 開發機與 UAT 共用，切完兩邊同時是新結構）。兩支腳本都以 RD_USER 執行（執行方式同上），**一定要依序、在窗口內跑**——舊版程式還在跑時會繼續寫「英文名 (中文名)」，也會讀寫要刪的欄：
 
-1. 打開 `infra_manager_init_data.sql` 檔尾的「初始管理者範本」，把最下面兩句 INSERT 複製到 SQL 工具，**只去掉這幾行行首的「-- 」**（沒去掉的話整段都是註解，執行不會報錯、但什麼都沒寫入），把【工號】【Email】等占位符換成實際值（不必填密碼：登入用公司帳號密碼，由 WPX 驗證）。
+1. 通知 UAT 使用者停機數分鐘；DBA 匯出 `IM_ACCT_USER` 與 `IM_ACCT_HIST`、`IM_INSP`、`IM_INSP_RESULT`、`IM_ACCT_ADMIN_LOG` 四張表離線保存（腳本 R 改錯、腳本 D 刪錯只能從這份還原）。
+2. 停 UAT 的舊版殼 jar 與後端。
+3. 跑腳本 R `db\infra_manager_124_2_name_snapshot.sql`：把 8 處「英文名 (中文名)」人名快照改成中文名。第 1 段先列要改的筆數，第 2 段改寫並 COMMIT（任何一句出錯整段回滾並結束），第 3 段核對：OLD_LEFT 全部 0 才算完成。字面像「X (Y)」但對不上任何人的值（LOOKS_OLD，例如之後改過中文名的人）照規則不改、列出筆數即可。可重跑；腳本 D 跑過後再跑會報錯結束、不改資料。
+4. 跑腳本 D `db\infra_manager_124_3_drop_cols.sql`：刪 `IM_ACCT_USER` 的 9 個舊欄並改寫 COMMENT。第 1 段會先確認人名快照已無「英文名 (中文名)」，沒跑腳本 R 就報錯結束、不刪任何欄。刪欄不可逆。檔尾第一句期望 7 欄：USER_ID、LAST_LOGIN_DATE、STATUS、CREATE_DATE、CREATE_BY、UPDATE_DATE、UPDATE_BY。可重跑（已刪的欄略過）。若報 ORA-00054，代表還有連線在改這張表，確認舊版已停後重跑。
+5. 確認 UAT 後端的 WPX 私鑰檔與 `infra.manager.wpx.*` 設定就位（見第 2 節），部署並啟動新版後端與殼 jar。WPX 設定不全時後端會直接啟動失敗。
+6. 驗收：本人用公司帳號登入成功、打錯密碼一次顯示「帳號或密碼錯誤」、不存在的工號顯示「帳號或密碼錯誤」；申請單、帳號歷史、巡檢、系統管理軌跡的人名只有中文名；手動觸發一次排程（第 7 節）。
+
+全新環境（含尚未上線的正式環境）三支第 124 項腳本都不必跑，直接用 `db\` 兩個檔案建立就是最終結構。切換前發出的登入在切換後仍有效（登入紀錄表結構不變）。
+
+建完補第一位系統管理員。**這一步只能用 DB 設定**：角色指派畫面需要 SYS_ROLE，新環境還沒有任何人持有，進不了畫面；第一位設好、登入後，其他人的角色與執行人改用畫面指派。**用 SQL Developer 另開一個連線**執行（不要接在跑 init_data 檔的 SQL*Plus 連線裡——該檔的遇錯即停設定整個連線都有效，之後任何一句打錯都會直接結束 SQL*Plus 並回滾）：
+
+1. 打開 `infra_manager_init_data.sql` 檔尾的「初始管理者範本」，把最下面兩句 INSERT 複製到 SQL 工具，**只去掉這幾行行首的「-- 」**（沒去掉的話整段都是註解，執行不會報錯、但什麼都沒寫入），把【工號】換成實際值。姓名、Email、部門、密碼都不必填：人員資料讀同步表 `PX_SYNC_EMP`，登入用公司帳號密碼、由 WPX 驗證；這位管理者必須在同步表查得到，否則登入會顯示「帳號無法使用」。主要部門含「資訊部」的人也可以先登入一次讓系統自動建立帳號列，再只執行第二句（角色指派）。
 2. 要讓這位管理者能處理申請單的執行回報，再依下方第 6a 段為**每個帳號類別各加一列**（關卡 6 認執行人對照表 IM_EXEC_MAP、不認角色；類別代碼用下方查代碼的第二句查）。這一步也可以省略，改在第 3 步完成、登入後到執行人對照頁指派（範本的 SYS_ADMIN 角色初始就有 SYS_EXECUTOR）。
 3. 執行以上全部 INSERT，確認每句都影響 1 筆後，執行 `COMMIT;`。
 
@@ -133,7 +144,9 @@ DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓�
 ```sql
 SELECT ROLE_ID, ROLE_NAME FROM IM_ACCT_ROLE WHERE STATUS = 1 ORDER BY SORT_SEQ;
 SELECT CATG_ID, CATG_NAME FROM IM_ACCT_CATG WHERE STATUS = 1 ORDER BY SORT_SEQ;
-SELECT USER_ID, USER_EN_NAME, USER_NAME, STATUS FROM IM_ACCT_USER WHERE USER_ID = '【工號】';
+SELECT U.USER_ID, E.EMP_NAME, U.STATUS, CASE WHEN E.EMP_ID IS NULL THEN '同步表查無（不能登入）' ELSE '同步表查得到' END AS IN_SYNC
+  FROM IM_ACCT_USER U LEFT JOIN PX_SYNC_EMP E ON E.EMP_ID = U.USER_ID AND E.STATUS = 1
+ WHERE U.USER_ID = '【工號】';
 SELECT INSP_ITEM_ID, SECT_NAME, ITEM_NAME, STATUS FROM IM_INSP_ITEM ORDER BY SORT_SEQ;
 SELECT ASSET_CLASS_ID, ASSET_CLASS_NAME, IS_SELECTABLE FROM IM_ASSET_CLASS WHERE STATUS = 1 ORDER BY SORT_SEQ;
 ```
@@ -141,12 +154,13 @@ SELECT ASSET_CLASS_ID, ASSET_CLASS_NAME, IS_SELECTABLE FROM IM_ASSET_CLASS WHERE
 **查每個人實際生效的角色**（只算啟用中的人員指派與角色；GENERAL 不存這張表、所有啟用中使用者自動擁有，所以查不到是正常的）
 
 ```sql
-SELECT U.USER_ID, U.USER_EN_NAME, U.USER_NAME, U.STATUS,
+SELECT U.USER_ID, E.EMP_NAME, U.STATUS,
        LISTAGG(R.ROLE_ID, ',') WITHIN GROUP (ORDER BY R.SORT_SEQ) AS ROLES
   FROM IM_ACCT_USER U
+  LEFT JOIN PX_SYNC_EMP E ON E.EMP_ID = U.USER_ID AND E.STATUS = 1
   LEFT JOIN IM_ACCT_ROLE_USER RU ON RU.USER_ID = U.USER_ID AND RU.STATUS = 1
   LEFT JOIN IM_ACCT_ROLE R ON R.ROLE_ID = RU.ROLE_ID AND R.STATUS = 1
- GROUP BY U.USER_ID, U.USER_EN_NAME, U.USER_NAME, U.STATUS
+ GROUP BY U.USER_ID, E.EMP_NAME, U.STATUS
  ORDER BY U.USER_ID;
 ```
 
@@ -160,13 +174,14 @@ SELECT RP.ROLE_ID, P.PERM_NAME
  WHERE RP.PERM_ID = '【權限碼】' AND RP.STATUS = 1;
 ```
 
-**查每個帳號類別的啟用中執行人數**（口徑同系統移除執行人時的檢查：對照列 STATUS＝1 且使用者也啟用中；0 人的類別也會列出）
+**查每個帳號類別的啟用中執行人數**（口徑同系統移除執行人時的檢查：對照列 STATUS＝1 且使用者啟用中、同步表查得到；0 人的類別也會列出）
 
 ```sql
 SELECT C.CATG_ID, C.CATG_NAME, COUNT(U.USER_ID) AS EXEC_CNT
   FROM IM_ACCT_CATG C
   LEFT JOIN IM_EXEC_MAP M ON M.CATG_ID = C.CATG_ID AND M.STATUS = 1
   LEFT JOIN IM_ACCT_USER U ON U.USER_ID = M.USER_ID AND U.STATUS = 1
+        AND EXISTS (SELECT 1 FROM PX_SYNC_EMP E WHERE E.EMP_ID = U.USER_ID AND E.STATUS = 1)
  WHERE C.STATUS = 1
  GROUP BY C.CATG_ID, C.CATG_NAME, C.SORT_SEQ
  ORDER BY C.SORT_SEQ;
@@ -181,13 +196,11 @@ SELECT R.CATG_ID, R.REQ_ID, R.SUBMIT_DATE
  ORDER BY R.CATG_ID, R.SUBMIT_DATE, R.REQ_ID;
 ```
 
-**1. 新增使用者**（工號＝登入帳號，密碼是公司帳號密碼、由 WPX 驗證，本系統不存密碼。主要部門含「資訊部」的同仁第一次登入時會自動建立，不必先做本段；本段用於讓資格外的人也能登入——已有帳號列者登入時不再看資格。英文名必填；分機電話選填：使用者在申請表單按「同申請人」、且表單上沒填申請人分機與 Email 時，會帶入「使用人聯絡方式」並蓋掉原本填的內容（門禁卡類別不帶入）；不填就把 `'【分機電話】'` 換成 `NULL`）
+**1. 預建資格外人員的帳號列**（工號＝登入帳號，密碼是公司帳號密碼、由 WPX 驗證，本系統不存密碼。主要部門含「資訊部」的同仁第一次登入時會自動建立，不必做本段；本段用於讓資格外的人也能登入——已有帳號列者登入時不再看資格。只填工號：姓名、Email、部門一律讀同步表 `PX_SYNC_EMP`，申請人分機由使用者在表單自填。這個人**必須在同步表查得到**（先用上方「確認工號」那句查，`IN_SYNC` 要是「同步表查得到」），否則登入會顯示「帳號無法使用」）
 
 ```sql
-INSERT INTO IM_ACCT_USER (USER_ID, USER_EN_NAME, USER_NAME, DEPT_NAME, EMAIL, TEL_NO,
-                          STATUS, CREATE_DATE, CREATE_BY)
-VALUES ('【工號】', '【英文名】', '【中文姓名】', '【部門】', '【Email】', '【分機電話】',
-        1, SYSDATE, '【操作人工號】');
+INSERT INTO IM_ACCT_USER (USER_ID, STATUS, CREATE_DATE, CREATE_BY)
+VALUES ('【工號】', 1, SYSDATE, '【操作人工號】');
 ```
 
 **2. 停用／重新啟用使用者**（停用後從下一個請求起就無法使用系統；若正被系統管理員扮演，會自動視為切回。重新啟用曾停用的人＝同句把 STATUS 改 1，不能再 INSERT，會主鍵衝突）
@@ -300,7 +313,7 @@ DELETE FROM IM_ACCT_NOTIFY_LOG
 - J01 刪了紀錄後，帳號要仍符合條件才會重寄：逾期信要帳號仍是已逾期；7 天提醒要仍是已核准、且到期日落在基準日到基準日＋7 天之間（可用第 7 節的 baseDate 調整基準日，但先看該處的粗體警告：帶未來日期會把帳號轉成逾期，且無法復原）。不符合時觸發排程也不會寄，不代表 SMTP 有問題。
 - J03 刪了紀錄後，該單要仍是「逾期未補核准」（主管還沒補核准或退回）才會重寄；已處理的單刪了也不會再寄。J03 預設每 15 分鐘自動跑，刪完紀錄後不手動觸發也會在下一輪補寄。
 
-**未列出的操作**（例如改使用者的 Email、部門、分機電話）：UPDATE 一律一併設 `UPDATE_DATE = SYSDATE`、`UPDATE_BY = '【操作人工號】'`，WHERE 用該表主鍵，確認影響 1 筆再 COMMIT。新增代碼（帳號類別、巡檢項目、資產分類）可能牽動程式邏輯，先找開發人員，不要直接 INSERT。
+**未列出的操作**（例如改巡檢項目說明、資產分類名稱；使用者的姓名、Email、部門不在本系統，要改請找同步表 `PX_SYNC_EMP` 的負責同事）：UPDATE 一律一併設 `UPDATE_DATE = SYSDATE`、`UPDATE_BY = '【操作人工號】'`，WHERE 用該表主鍵，確認影響 1 筆再 COMMIT。新增代碼（帳號類別、巡檢項目、資產分類）可能牽動程式邏輯，先找開發人員，不要直接 INSERT。
 
 ## 7. 手動觸發排程
 

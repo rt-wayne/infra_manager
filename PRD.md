@@ -67,7 +67,7 @@
 | 實際操作人 | 真正按下按鈕的登入者；切換身分時是切換前的本人 |
 | 代理身分 | 系統管理員切換身分後扮演的使用者；切換期間權限與資料範圍完全等同此人 |
 | 有效身分 | 切換中＝代理身分，否則＝實際操作人；權限、資料範圍、業務欄位一律用有效身分 |
-| 顯示名 | 同步表 `PX_SYNC_EMP` 的中文姓名（去頭尾空白），空白時顯示工號（`Texts.displayName`）。各表 *_NAME 快照欄自第 124 項階段 3 起存此格式（更早寫入的快照仍是舊的「英文名 (中文名)」） |
+| 顯示名 | 同步表 `PX_SYNC_EMP` 的中文姓名（去頭尾空白），空白時顯示工號（`Texts.displayName`）。各表 *_NAME 快照欄自第 124 項階段 3 起存此格式（更早寫入的快照仍是舊的「英文名 (中文名)」，UAT 切換窗口由腳本 R 改成中文名；字面對不上現有使用者的不改，測試 DB 試算有 12 筆，為同一位使用者改過中文名前寫入，裁示維持原樣） |
 
 ### 功能清單
 
@@ -186,8 +186,8 @@
 - 未切換時呼叫切回 → 409 E20。代理身分被停用（STATUS 變 0）或在同步表查無時自動視為切回（不寫軌跡）。登出即結束切換。
 - 軌跡：切換寫 IMPERSONATE、切回寫 IMPERSONATE_END（RESULT_CODE＝SUCCESS）；無權限者嘗試切換 → 403 並寫一筆 DENY。
 - 操作人顯示（三種位置格式不同）：
-  - **帳號歷史**：「{實際操作人}（以 {代理身分} 身分）」，例「Hank (何嘉浤)（以 Gary (許永成) 身分）」；排程事件顯示「系統排程」（`labels.ts` histActorText）。
-  - **巡檢填寫人、異常處理人**：「{代理身分}（實際操作人：{實際操作人}）」，例「Kevin (李凱鈞)（實際操作人：Hank (何嘉浤)）」（`labels.ts` personText）。
+  - **帳號歷史**：「{實際操作人}（以 {代理身分} 身分）」，例「何嘉浤（以 許永成 身分）」（人名只有中文名，讀同步表；第 124 項前寫入的「英文名 (中文名)」快照由切換窗口的腳本 R 改成中文名）；排程事件顯示「系統排程」（`labels.ts` histActorText）。
+  - **巡檢填寫人、異常處理人**：「{代理身分}（實際操作人：{實際操作人}）」，例「李凱鈞（實際操作人：何嘉浤）」（`labels.ts` personText）。
   - **通知本文、待辦**：申請人只顯示有效身分（申請單 APPLY_BY 本來就記有效身分），不帶實際操作人。
 
 | 欄位種類 | 記誰 | 欄位 |
@@ -201,16 +201,16 @@
 
 **帳號類別（8 種）**：共用同一套 7 關流程，差異只在表單欄位、執行人、提示訊息；只有門禁卡有實質不同的規則（見第 10 節）。
 
-| 代碼＝中文 | 開放新增（初始資料） | 建議到期日提示 U04 | 初始執行人 |
+| 代碼＝中文 | 開放新增（初始資料） | 建議到期日提示 U04 | 初始執行人（測試 DB 工號） |
 |---|---|---|---|
-| HOST＝主機帳號 | 1 | 0 | Alex |
-| DB＝資料庫帳號 | 1 | 0 | Terry、Michael |
-| APP＝應用系統帳號 | 0 | 0 | Alex |
-| SVC＝服務帳號 | 0 | 1 | Alex、Alan |
-| NET＝網路設備帳號 | 0 | 0 | Alex |
-| VENDOR＝廠商/委外帳號 | 0 | 1 | Sage |
-| CERT＝憑證/金鑰 | 0 | 1 | Alex、Alan |
-| DOOR＝機房門禁卡 | 1 | 0 | Alex、Alan |
+| HOST＝主機帳號 | 1 | 0 | 0055783 |
+| DB＝資料庫帳號 | 1 | 0 | 0000351、2600374 |
+| APP＝應用系統帳號 | 0 | 0 | 0055783 |
+| SVC＝服務帳號 | 0 | 1 | 0055783、0056484 |
+| NET＝網路設備帳號 | 0 | 0 | 0055783 |
+| VENDOR＝廠商/委外帳號 | 0 | 1 | 0166994 |
+| CERT＝憑證/金鑰 | 0 | 1 | 0055783、0056484 |
+| DOOR＝機房門禁卡 | 1 | 0 | 0055783、0056484 |
 
 - 開放開關（IS_ENABLED）只管「新增」：新增表單類別下拉只列 IS_ENABLED＝1 且 STATUS＝1；既有帳號照常可異動；帳號列表 8 個類別頁籤始終顯示。
 - 改 DB 的 IS_ENABLED 不需重新部署：後端每個請求都讀 DB，立即生效；前端的代碼表（`/codes`）在同一個登入期間有快取（`useSession.ts:108-127`），使用者要重新整理頁面或重新登入才看到新的下拉選項。在此之前若送出已關閉的類別，後端回 400 E05。
@@ -716,7 +716,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 ### 資料結構
 
-23 張表、47 個索引（PK 23＋一般 24）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（23 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對）；系統管理相關四張表（IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM，說明由畫面維護與軌跡內容）的 COMMENT 另有既有環境升級腳本 `db/infra_manager_89_role_admin.sql`（改 COMMENT、不動結構、不需 GRANT——AP_USER 對相關表已有四種權限；資料只改 SYS_ADMIN 角色說明一個值，仍是初始舊字時才改；可重跑；建表檔與初始資料檔同步，新環境不必跑），命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
+23 張表、47 個索引（PK 23＋一般 24）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（23 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對）；系統管理相關四張表（IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM，說明由畫面維護與軌跡內容）的 COMMENT 另有既有環境升級腳本 `db/infra_manager_89_role_admin.sql`（改 COMMENT、不動結構、不需 GRANT——AP_USER 對相關表已有四種權限；資料只改 SYS_ADMIN 角色說明一個值，仍是初始舊字時才改；可重跑；建表檔與初始資料檔同步，新環境不必跑）；第 124 項（登入改用 WPX、人員資料讀同步表）有三支既有環境升級腳本：`db/infra_manager_124_1_prep.sql`（腳本 S1，英文名欄改可空，測試 DB 已執行）、`db/infra_manager_124_2_name_snapshot.sql`（腳本 R，8 處「英文名 (中文名)」人名快照改中文名）、`db/infra_manager_124_3_drop_cols.sql`（腳本 D，刪 `IM_ACCT_USER` 9 個舊欄並重寫 COMMENT），R、D 只在 UAT 切換窗口依序跑、測試 DB 尚未執行，建表檔與初始資料檔已是最終結構、新環境三支都不必跑，命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
 
 **慣例**
 
@@ -728,21 +728,14 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 下表「必」＝NOT NULL，PK 欄以（PK）標示。
 
-**IM_ACCT_USER 使用者**（DB 維護；STATUS 0＝不可登入，若正被扮演則自動視為切回）
+**IM_ACCT_USER 使用者**（本系統帳號列：資訊部人員首次登入自動建立，資格外人員由 DB 預建；STATUS 0＝不可登入，若正被扮演則自動視為切回。姓名、Email、部門不存本表，讀同步表 `PX_SYNC_EMP`；密碼由 WPX 驗證，不存本表）
 
 | 欄 | 型別 | 必 | 說明 |
 |---|---|---|---|
-| USER_ID（PK） | VARCHAR2(30) | ✓ | 工號＝登入帳號，數字字串最多 7 碼 |
-| USER_EN_NAME | VARCHAR2(50) |  | 英文顯示名。已升級的 DB（`db\infra_manager_124_1_prep.sql`）可空；建表檔暫仍 NOT NULL，第 124 項完成時連同本欄一起刪除（見 `BACKLOG.md` 第 124 項） |
-| USER_NAME | VARCHAR2(30 CHAR) | | 中文姓名。本系統已不讀（姓名讀同步表 `PX_SYNC_EMP`），第 124 項完成時刪除 |
-| DEPT_NAME | VARCHAR2(50 CHAR) | | 部門。本系統已不讀（`/me` 部門讀同步表主要部門），第 124 項完成時刪除 |
-| EMAIL | VARCHAR2(100) | | Email。本系統已不讀（收件 Email 讀同步表，同步表空白＝不收信、通知記 SKIP），第 124 項完成時刪除 |
-| TEL_NO | VARCHAR2(30) | | 分機／電話。本系統已不讀（申請人分機改由使用者在表單自填），第 124 項完成時刪除 |
-| PWD_HASH | VARCHAR2(200) | | 密碼雜湊。本系統已不讀（登入改由 WPX 驗證），第 124 項完成時刪除 |
-| PWD_UPDATE_DATE | DATE | | 密碼最後設定時間。本系統已不讀，第 124 項完成時刪除 |
-| LOGIN_FAIL_CNT | NUMBER(2) | ✓ | 連續失敗次數，預設 0（首次登入自動建立時用預設值）。本系統已不讀寫（鎖定交給 WPX），第 124 項完成時刪除 |
-| LOCK_DATE | DATE | | 鎖定時間。本系統已不讀寫，第 124 項完成時刪除 |
+| USER_ID（PK） | VARCHAR2(30) | ✓ | 工號＝登入帳號，數字字串最多 7 碼；對應同步表 `PX_SYNC_EMP.EMP_ID` |
 | LAST_LOGIN_DATE | DATE | | 最後成功登入 |
+
+建表檔 `db/infra_manager_create_table.sql` 已是上表的最終結構。**既有環境（測試 DB，開發機與 UAT 共用）在第 124 項 UAT 切換窗口跑腳本 D（`db/infra_manager_124_3_drop_cols.sql`）之前**，本表另有 9 個舊欄：USER_EN_NAME（英文名，已由 `db/infra_manager_124_1_prep.sql` 改可空）、USER_NAME、DEPT_NAME、EMAIL、TEL_NO、PWD_HASH、PWD_UPDATE_DATE、LOGIN_FAIL_CNT（必填，預設 0）、LOCK_DATE；本系統程式不讀也不寫這 9 欄（掃描測試強制），首次登入自動建立時由 DB 預設值補 LOGIN_FAIL_CNT。
 
 **IM_ACCT_ROLE 角色**：ROLE_ID（PK）VARCHAR2(20)；ROLE_NAME VARCHAR2(30 CHAR) 必；ROLE_DESCR VARCHAR2(200 CHAR)；IS_SYSTEM NUMBER(1) 必（1＝不可刪除：GENERAL、SYS_ADMIN；預設 0）；SORT_SEQ NUMBER(3) 必（預設 0）。STATUS＝0 不計入權限。
 
@@ -1009,24 +1002,24 @@ END
 | IM_ACCT_ROLE_USER | 55 | 啟用 22 筆；見下 |
 | 其他業務與紀錄表 | — | 測試 DB 已有測試資料、筆數隨測試變動，不記：IM_ACCT、IM_ACCT_REQ、IM_ACCT_ATTACH、IM_ACCT_HIST、IM_INSP、IM_INSP_RESULT、IM_ACCT_NOTIFY_LOG、IM_ACCT_JOB_RUN、IM_ACCT_LOGIN_TOKEN、IM_ACCT_ADMIN_LOG、IM_DOC_SEQ |
 
-測試 DB 使用者（皆為真實人員；本表只記英文名，工號、中文姓名、部門以 DB 的 IM_ACCT_USER 為準；13 位皆啟用；登入用各人公司帳號密碼，由 WPX 驗證）。表中只列啟用中（STATUS＝1）的角色指派與執行人對照：
+測試 DB 使用者（皆為真實人員；本表只記工號，姓名、部門以同步表 `PX_SYNC_EMP` 為準；13 位皆啟用、皆在同步表查得到；登入用各人公司帳號密碼，由 WPX 驗證）。表中只列啟用中（STATUS＝1）的角色指派與執行人對照（2026-10-22 查詢）：
 
-| 英文名 | 角色（GENERAL 不列） | 執行人類別 |
+| 工號 | 角色（GENERAL 不列） | 執行人類別 |
 |---|---|---|
-| Gary | SYS_ADMIN、IT_HEAD、ACCT_REGISTRY、INSP_STAFF | —（8 類對照皆為 STATUS＝0） |
-| Hank | SYS_ADMIN | —（8 類對照皆為 STATUS＝0） |
-| Kevin | SYS_ADMIN、GOV、INSP_STAFF | —（8 類對照皆為 STATUS＝0） |
-| Molly | GOV、GOV_MGR、ACCT_REGISTRY、INSP_STAFF | — |
-| Terry | INFRA_MGR、ACCT_REGISTRY、INSP_STAFF | DB |
-| Wensen | INFRA_MGR、INSP_STAFF | — |
-| Alex | DC_ADMIN、INSP_STAFF | HOST、APP、SVC、NET、CERT、DOOR |
-| Alan | DC_ADMIN、INSP_STAFF | SVC、CERT、DOOR |
-| Cathy | GOV | — |
-| Michael | 僅 GENERAL | DB |
-| Sage | 僅 GENERAL | VENDOR |
-| Wayne、Brian | 僅 GENERAL（8 個角色指派皆為 STATUS＝0） | —（8 類對照皆為 STATUS＝0） |
+| 0000285 | SYS_ADMIN、IT_HEAD、ACCT_REGISTRY、INSP_STAFF | —（8 類對照皆為 STATUS＝0） |
+| 2410303 | SYS_ADMIN | —（8 類對照皆為 STATUS＝0） |
+| 2606459 | SYS_ADMIN、GOV、INSP_STAFF | —（8 類對照皆為 STATUS＝0） |
+| 0073246 | GOV、GOV_MGR、ACCT_REGISTRY、INSP_STAFF | — |
+| 0000351 | INFRA_MGR、ACCT_REGISTRY、INSP_STAFF | DB |
+| 0121178 | INFRA_MGR、INSP_STAFF | — |
+| 0055783 | DC_ADMIN、INSP_STAFF | HOST、APP、SVC、NET、CERT、DOOR |
+| 0056484 | DC_ADMIN、INSP_STAFF | SVC、CERT、DOOR |
+| 0167825 | GOV | — |
+| 2600374 | 僅 GENERAL | DB |
+| 0166994 | 僅 GENERAL | VENDOR |
+| 2410305、2410311 | 僅 GENERAL（8 個角色指派皆為 STATUS＝0） | —（8 類對照皆為 STATUS＝0） |
 
-完整帳號列表（ACC_LIST_FULL，經 ACCT_REGISTRY）只有 Gary、Molly、Terry。關卡 5（IT_HEAD）只有 Gary 一人；緊急存取補核准（EMG_DECIDE）為 Gary、Molly、Terry、Wensen。Michael、Sage 沒有任何清單權限，待辦只看到被指派執行的單；Terry 同時是關卡 3 核准人與 DB 類執行人。查詢某人生效角色、某權限碼給了哪些角色的 SQL 見 `SETUP.md` 第 6 節「各操作的可執行 SQL」。
+完整帳號列表（ACC_LIST_FULL，經 ACCT_REGISTRY）只有 0000285、0073246、0000351。關卡 5（IT_HEAD）只有 0000285 一人；緊急存取補核准（EMG_DECIDE）為 0000285、0073246、0000351、0121178。2600374、0166994 沒有任何清單權限，待辦只看到被指派執行的單；0000351 同時是關卡 3 核准人與 DB 類執行人。查詢某人生效角色、某權限碼給了哪些角色的 SQL 見 `SETUP.md` 第 6 節「各操作的可執行 SQL」。
 
 帳號類別初始資料：
 

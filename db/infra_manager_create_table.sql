@@ -5,7 +5,9 @@
 --       本系統無外鍵、無觸發器；交易表（申請單、巡檢單等）初始為空。
 -- 來源：2026-10-10 以 DBMS_METADATA 自測試 DB（Oracle 19c）反向產出後整理；
 --       2026-10-12 加入第二階段緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT，
---       與既有環境升級腳本 infra_manager_phase2_emg.sql 內容一致。
+--       與既有環境升級腳本 infra_manager_phase2_emg.sql 內容一致；
+--       2026-10-22 第 124 項（登入改用 WPX、人員資料讀同步表）：IM_ACCT_USER 刪 9 欄（英文名、姓名、部門、Email、分機、
+--       密碼雜湊、密碼設定時間、失敗次數、鎖定時間），表與快照欄 COMMENT 改寫，與既有環境腳本 S1、D 跑完後的結構一致。
 -- 約定：欄位型別、必填、索引與文件衝突時，以本檔為準（交接文件開頭的約定）。
 -- 前提：在空 schema 執行，需 CREATE TABLE、CREATE SEQUENCE 權限與表空間配額；
 --       檔案編碼 UTF-8，DB 字元集需可存中文（如 AL32UTF8）。
@@ -305,15 +307,6 @@ CREATE TABLE IM_ACCT_ROLE_USER
 -- ===== TABLE IM_ACCT_USER
 CREATE TABLE IM_ACCT_USER
    (	USER_ID VARCHAR2(30) NOT NULL,
-	USER_EN_NAME VARCHAR2(50) NOT NULL,
-	USER_NAME VARCHAR2(30 CHAR),
-	DEPT_NAME VARCHAR2(50 CHAR),
-	EMAIL VARCHAR2(100),
-	TEL_NO VARCHAR2(30),
-	PWD_HASH VARCHAR2(200),
-	PWD_UPDATE_DATE DATE,
-	LOGIN_FAIL_CNT NUMBER(2,0) DEFAULT 0 NOT NULL,
-	LOCK_DATE DATE,
 	LAST_LOGIN_DATE DATE,
 	STATUS NUMBER(1,0) DEFAULT 1 NOT NULL,
 	CREATE_DATE DATE DEFAULT SYSDATE NOT NULL,
@@ -572,7 +565,7 @@ COMMENT ON TABLE IM_ACCT_REQ IS '帳號申請單。存申請的內容與簽核�
 COMMENT ON TABLE IM_ACCT_ROLE IS '角色（帳號權限管理／機房巡檢專用）。角色經 IM_ACCT_ROLE_PERM 展開為權限碼，程式只判斷權限碼、不判斷角色名稱；與既有機房異動申請模組的角色表各自獨立。資料來源：初始資料。主鍵：ROLE_ID。保留：永久';
 COMMENT ON TABLE IM_ACCT_ROLE_PERM IS '角色權限對照。角色授予的權限碼；GENERAL 的權限以資料列存在，程式對每位啟用中使用者自動加上。拿掉＝STATUS 改 0；重新授予＝同列 STATUS 改回 1、只寫 UPDATE_*、保留第一次的 CREATE_*。資料來源：初始資料；上線後由角色權限設定畫面維護（寫系統管理軌跡 ROLE_PERM_SET；只開放有功能的權限碼，GENERAL 那列仍以 DB 維護）；DB 直接改不留軌跡、不檢查在途案件，只作備援。主鍵：ROLE_ID＋PERM_ID。保留：永久';
 COMMENT ON TABLE IM_ACCT_ROLE_USER IS '角色人員。一位人員可擁有多個角色；權限每次請求依當下名單判斷。不得存 GENERAL。移除＝STATUS 改 0；重新指派＝同列 STATUS 改回 1、只寫 UPDATE_*、保留第一次的 CREATE_*，所以最近一次指派人與時間＝NVL(UPDATE_*, CREATE_*)。資料來源：角色指派畫面（寫系統管理軌跡）；DB 直接改不留軌跡、不檢查在途案件，只作備援。主鍵：ROLE_ID＋USER_ID。保留：永久';
-COMMENT ON TABLE IM_ACCT_USER IS '使用者。本模組自建的登入使用者表（偏離 SA 3.1，日後合併共用登入時只換取身分實作）；STATUS＝1 才能登入，並自動擁有 GENERAL 角色權限。與既有機房異動申請模組的使用者表各自獨立。資料來源：DB 維護（第一階段無維護畫面）。主鍵：USER_ID。保留：永久';
+COMMENT ON TABLE IM_ACCT_USER IS '使用者。本系統的帳號列：密碼由 WPX 驗證、不存本表；姓名、Email、部門讀同步表 PX_SYNC_EMP，不存本表。STATUS＝1 且同步表查得到才能登入，並自動擁有 GENERAL 角色權限。資料來源：資訊部人員首次登入自動建立（CREATE_BY＝SYSTEM），資格外人員由 DB 預建（無維護畫面）。主鍵：USER_ID。保留：永久';
 COMMENT ON TABLE IM_ASSET_CLASS IS '資產分類碼。依 SR-008-A04 資訊資產標示、保護與處置說明表的硬體／軟體分類碼，供申請表單選擇與資產分類說明頁顯示；IS_REVIEW_TRIGGER＝1 者納入定期審查條件。「未分類」不建資料列，以 ASSET_CLASS_ID 為空表示。資料來源：初始資料。主鍵：ASSET_CLASS_ID。保留：永久';
 COMMENT ON TABLE IM_DOC_SEQ IS '單號流水號。各類單據每日取號用，單號＝前綴 2 碼＋yyyymmdd＋「-」＋3 碼流水號（例 AR20261015-001），依前綴分開、每日從 001 起；唯一性由各業務表主鍵保證。資料來源：程式取號（當日第一筆由程式建立）。主鍵：DOC_TYPE_ID＋SEQ_DATE。保留：永久';
 COMMENT ON TABLE IM_EMG_ACCESS IS '緊急存取單。送出即生效，補核准期限＝送出＋24 小時；狀態不存欄位，由 DECIDE_CODE、CLOSE_DATE、DUE_DATE 計算（待補核准＝DECIDE_CODE 空且未逾 DUE_DATE；逾期未補核准＝DECIDE_CODE 空且已逾 DUE_DATE；已補核准＝APPROVE；已退回＝RETURN 且 CLOSE_DATE 空；已退回（已結案）＝RETURN 且 CLOSE_DATE 有值）。受影響帳號記於 IM_EMG_AFFECT_ACCT。資料來源：緊急存取畫面。主鍵：EMG_ID（IM_DOC_SEQ 前綴 EA）。保留：永久';
@@ -615,7 +608,7 @@ COMMENT ON COLUMN IM_ACCT.UPDATE_BY IS '最後更新人員工號';
 COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.LOG_ID IS '軌跡流水號（同秒事件以此排序）';
 COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.ACT_DATE IS '發生時間（伺服器時間，含時分秒）';
 COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.ACT_BY IS '實際操作人工號，參照 IM_ACCT_USER.USER_ID';
-COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.ACT_BY_NAME IS '操作人顯示名快照（英文名 (中文名)）';
+COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.ACT_BY_NAME IS '操作人顯示名快照（中文名，取自同步表；查無為工號）';
 COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.ACTION_CODE IS '動作：IMPERSONATE＝切換身分、IMPERSONATE_END＝切回、ROLE_GRANT＝指派角色、ROLE_REVOKE＝移除角色、EXEC_GRANT＝指派執行人、EXEC_REVOKE＝移除執行人、ROLE_PERM_SET＝角色權限存檔（一次存檔可同時有加有拿，只寫一筆）';
 COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.TARGET_USER_ID IS '對象使用者工號（切換／切回的代理身分；名單維護的被指派或被移除者），參照 IM_ACCT_USER.USER_ID；超過欄寬的輸入存空；權限設定（ROLE_PERM_SET）時為空，對象是角色、roleId 在 CONTENT_JSON';
 COMMENT ON COLUMN IM_ACCT_ADMIN_LOG.CONTENT_JSON IS '內容（JSON 文字）：切換時記對象顯示名；名單維護成功記 roleId＋roleName 或 catgId＋catgName、targetUserName、before.status（null＝原無此列／0／1）、after.status；被拒記 denyCode（NO_PERM／LAST_SYS_ROLE／IN_FLIGHT）、blockedPerms、blockedTotal、blockedIds（最多 50 筆）；角色權限存檔成功記 roleId、roleName、memberCount、added、removed，被拒另記 denyCode 與 blocked[{permId、total、ids（每碼最多 20 筆）}]，無權限只記 roleId、addedCount、removedCount。超過 3900 bytes 逐筆丟單號保留總數';
@@ -667,7 +660,7 @@ COMMENT ON COLUMN IM_ACCT_HIST.SOURCE_CODE IS '事件來源：REQ＝簽核流程
 COMMENT ON COLUMN IM_ACCT_HIST.ACTION_CODE IS '動作：SUBMIT＝送出申請、RESUB＝重新送出、APPROVE＝核准、REJECT＝退件、EXEC_DONE＝回報執行完畢（帳號生效）、VERIFY_OK＝複驗通過、VERIFY_REJECT＝複驗退回、EXPIRE＝到期轉為已逾期、EMG_MODIFY＝緊急存取異動（依申請人回報，主管處理時寫入）、EMG_CLOSE_MODIFY＝緊急存取結案登記異動、FLAG_CLEAR＝審查異常旗標清除；預留 REVIEW_DONE、REVIEW_REJECT';
 COMMENT ON COLUMN IM_ACCT_HIST.STAGE_ID IS '發生關卡，參照 IM_ACCT_APPR_STAGE.STAGE_ID；系統事件為空，緊急存取事件亦為空';
 COMMENT ON COLUMN IM_ACCT_HIST.ACT_BY IS '實際操作人工號，參照 IM_ACCT_USER.USER_ID；系統排程為空';
-COMMENT ON COLUMN IM_ACCT_HIST.ACT_BY_NAME IS '實際操作人顯示名快照（英文名 (中文名)）；系統排程為「系統排程」';
+COMMENT ON COLUMN IM_ACCT_HIST.ACT_BY_NAME IS '實際操作人顯示名快照（中文名，取自同步表；查無為工號）；系統排程為「系統排程」';
 COMMENT ON COLUMN IM_ACCT_HIST.ACT_AS_ID IS '代理身分工號（切換身分時），參照 IM_ACCT_USER.USER_ID';
 COMMENT ON COLUMN IM_ACCT_HIST.ACT_AS_NAME IS '代理身分顯示名快照';
 COMMENT ON COLUMN IM_ACCT_HIST.ACT_DATE IS '發生時間（伺服器時間，含時分秒）';
@@ -799,18 +792,9 @@ COMMENT ON COLUMN IM_ACCT_ROLE_USER.CREATE_DATE IS '建立日期（含時分秒�
 COMMENT ON COLUMN IM_ACCT_ROLE_USER.CREATE_BY IS '第一次指派人員工號；重新指派不改此欄';
 COMMENT ON COLUMN IM_ACCT_ROLE_USER.UPDATE_DATE IS '最後更新日期（含時分秒）：移除或重新指派時寫入。新增時為空';
 COMMENT ON COLUMN IM_ACCT_ROLE_USER.UPDATE_BY IS '最後更新人員工號：移除人或重新指派人';
-COMMENT ON COLUMN IM_ACCT_USER.USER_ID IS '工號（數字字串、最多 7 碼），即登入帳號';
-COMMENT ON COLUMN IM_ACCT_USER.USER_EN_NAME IS '英文顯示名（例：Terry）';
-COMMENT ON COLUMN IM_ACCT_USER.USER_NAME IS '中文姓名（例：邱健唐）。畫面顯示格式「英文名 (中文名)」，空白時只顯示英文名';
-COMMENT ON COLUMN IM_ACCT_USER.DEPT_NAME IS '部門';
-COMMENT ON COLUMN IM_ACCT_USER.EMAIL IS 'Email；空白者不收信（通知紀錄記 SKIP）';
-COMMENT ON COLUMN IM_ACCT_USER.TEL_NO IS '分機／電話（例：#1614）';
-COMMENT ON COLUMN IM_ACCT_USER.PWD_HASH IS '密碼雜湊，格式 PBKDF2$迭代次數$base64(salt)$base64(hash)（PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310000）；空值＝不可登入。由雜湊工具產生，不存明文';
-COMMENT ON COLUMN IM_ACCT_USER.PWD_UPDATE_DATE IS '密碼最後設定時間';
-COMMENT ON COLUMN IM_ACCT_USER.LOGIN_FAIL_CNT IS '連續登入失敗次數；達 5 次寫 LOCK_DATE，登入成功歸 0。default 0';
-COMMENT ON COLUMN IM_ACCT_USER.LOCK_DATE IS '鎖定時間；非空＝鎖定中（即使密碼正確也拒絕登入），DB 清空此欄並將 LOGIN_FAIL_CNT 歸 0 即解鎖';
+COMMENT ON COLUMN IM_ACCT_USER.USER_ID IS '工號（數字字串、最多 7 碼），即登入帳號；對應同步表 PX_SYNC_EMP.EMP_ID';
 COMMENT ON COLUMN IM_ACCT_USER.LAST_LOGIN_DATE IS '最後成功登入時間';
-COMMENT ON COLUMN IM_ACCT_USER.STATUS IS '資料狀態：1＝啟用（可登入、自動擁有 GENERAL 權限）、0＝停用（不可登入）。default 1';
+COMMENT ON COLUMN IM_ACCT_USER.STATUS IS '資料狀態：1＝啟用（WPX 驗證通過且同步表查得到即可登入、自動擁有 GENERAL 權限）、0＝停用（不可登入）。default 1';
 COMMENT ON COLUMN IM_ACCT_USER.CREATE_DATE IS '建立日期（含時分秒）。default SYSDATE';
 COMMENT ON COLUMN IM_ACCT_USER.CREATE_BY IS '建立人員工號';
 COMMENT ON COLUMN IM_ACCT_USER.UPDATE_DATE IS '最後更新日期（含時分秒）。新增時為空';

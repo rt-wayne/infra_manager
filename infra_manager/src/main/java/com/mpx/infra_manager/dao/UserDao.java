@@ -33,6 +33,9 @@ package com.mpx.infra_manager.dao;
 // 變更說明: BACKLOG 第 124 項階段 7 回合 1（登入改走 WPX；裁示 ①B、②A、③B、D3A、D9B）：FIND_BY_ID 拿掉 PWD_HASH、LOGIN_FAIL_CNT、LOCK_DATE；
 //           刪 UPDATE_LOGIN_FAIL（鎖定交給 WPX）；UPDATE_LOGIN_OK 只寫最後登入時間（不再歸 0 失敗次數、不看鎖定）；
 //           新增 MERGE_FIRST_LOGIN：本系統沒有帳號列、且符合資格（同步表查得到＋主要部門含「資訊部」）才建立，CREATE_BY＝SYSTEM
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 8 回合 2：MERGE_FIRST_LOGIN 註解改寫（建表檔已是最終結構）；程式未改
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -68,7 +71,8 @@ public class UserDao {
 	/**
 	 * 首次登入自動建立（裁示 ①B、D3A、D9B）：本系統沒有帳號列、且資格符合才 INSERT，否則影響 0 筆。
 	 * 資格與建立在同一句判斷；兩人同時首次登入同一工號時，後到者撞主鍵丟 DuplicateKeyException，由呼叫端重查。
-	 * 只寫本系統自己的欄位（USER_ID、STATUS、共用欄），LOGIN_FAIL_CNT 用 DB 預設 0；英文名欄在已跑腳本 S1 的 DB 可空。
+	 * 只寫本系統自己的欄位（USER_ID、STATUS、共用欄），即建表檔的最終結構；腳本 D 刪欄前的既有環境，
+	 * 舊欄的失敗次數用 DB 預設 0、英文名欄已由腳本 S1 改可空，這句照樣能用。
 	 */
 	public static final String MERGE_FIRST_LOGIN = """
 			MERGE INTO IM_ACCT_USER U
