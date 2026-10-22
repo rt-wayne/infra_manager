@@ -1,0 +1,208 @@
+-- ============================================================================
+-- 機房巡檢與帳號權限管理系統：第 124 項「登入改用外部驗證 API」腳本 R（既有環境升級用）
+-- ============================================================================
+-- 內容：把稽核紀錄裡存成「英文名 (中文名)」的人名快照改成只有中文名（使用者裁示 ⑭B、D12B），共 8 處：
+--         IM_ACCT_HIST.ACT_BY_NAME、ACT_AS_NAME（帳號歷史的操作人、代理身分）
+--         IM_INSP.INSP_BY_NAME、ACT_AS_NAME（巡檢人、代理身分）
+--         IM_INSP_RESULT.FIX_BY_NAME、FIX_ACT_AS_NAME（異常處理人、代理身分）
+--         IM_ACCT_ADMIN_LOG.ACT_BY_NAME（系統管理軌跡的操作人）
+--         IM_ACCT_ADMIN_LOG.CONTENT_JSON 內的 "targetUserName":"英文名 (中文名)"（被調整的人）
+--       新版程式寫入的快照只有中文名（人名讀同步表 PX_SYNC_EMP），改寫後同一畫面新舊紀錄的人名寫法一致。
+-- 對應方式：以 IM_ACCT_USER 的英文名與中文名組出舊版寫法「TRIM(英文名) || ' (' || TRIM(中文名) || ')'」，
+--       快照「整欄完全相同」才改成 TRIM(中文名)；JSON 以完整字串 "targetUserName":"英文名 (中文名)" 取代。
+--       不改：'系統排程'（排程寫入的操作人）；英文名或中文名為空的人（舊版只寫了其中一種，本來就不是「英文名 (中文名)」）；
+--       已離開 IM_ACCT_USER 的人；字面像「X (Y)」但對不上任何人的值——這幾類由第 3 段列出筆數，不動資料。
+--       改到的列 UPDATE_DATE 寫 SYSDATE、UPDATE_BY 寫 SYSTEM，留下被腳本改過的痕跡（程式不讀這幾張表的 UPDATE_*）。
+-- 執行時機：只在 UAT 切換窗口第 ③ 步、舊版程式停止之後跑（舊版仍在跑時會繼續寫入「英文名 (中文名)」）；
+--       必須在腳本 D（infra_manager_124_3_drop_cols.sql）刪掉 USER_EN_NAME、USER_NAME 之前跑，刪了就無從對應。
+--       跑之前 DBA 先完成 E5 備份（匯出 IM_ACCT_USER 與上述四張表）——改錯只能從備份還原。
+-- 對象：已有資料的既有環境（測試 DB itflow_uat，開發機與 UAT 共用，只跑一次）。
+--       全新環境（含尚未上線的正式環境）：不必跑，表是空的。
+-- 可重跑：已改過的值不再符合「英文名 (中文名)」，第二次跑影響 0 筆。腳本 D 跑過後再跑，第 0 段會報錯結束、不改任何資料。
+-- 前提：以表的擁有者（RD_USER）執行。SQL Developer 請用「執行指令碼」（F5）；SQL*Plus 執行前先 set NLS_LANG=.AL32UTF8
+--       ——本檔比對的是中文字串，編碼不對會什麼都對不上（不報錯、影響 0 筆）。
+-- 步驟：第 1 段（唯讀）先看要改幾筆 → 第 2 段改寫並 COMMIT → 第 3 段（唯讀）核對剩下的筆數。
+--       第 2 段任何一句出錯會整段 ROLLBACK 並結束，不會留下改一半的資料。
+-- 注意：本檔不含任何帳密、主機位址、人名；執行輸出含真實姓名，不要貼進版控或公開頻道。
+-- 施工計畫：backlog/124-登入改用外部驗證API.md「上線序列」與「階段清單」階段 8、9。
+-- ============================================================================
+
+SET DEFINE OFF
+SET SERVEROUTPUT ON
+WHENEVER SQLERROR EXIT ROLLBACK
+
+-- ===== 0. 前置檢查：英文名、中文名欄還在（腳本 D 跑過就不能跑本檔）
+DECLARE
+  v_cnt NUMBER;
+BEGIN
+  SELECT COUNT(*) INTO v_cnt
+    FROM USER_TAB_COLUMNS
+   WHERE TABLE_NAME = 'IM_ACCT_USER' AND COLUMN_NAME IN ('USER_EN_NAME', 'USER_NAME');
+  IF v_cnt < 2 THEN
+    RAISE_APPLICATION_ERROR(-20001, 'IM_ACCT_USER 已沒有 USER_EN_NAME／USER_NAME（腳本 D 已跑過），無法對應，本檔不執行');
+  END IF;
+  DBMS_OUTPUT.PUT_LINE('前置檢查通過：IM_ACCT_USER 仍有英文名、中文名欄');
+END;
+/
+
+-- ===== 1. 改寫前計數（唯讀）
+-- TO_FIX＝會被改寫的筆數；已是中文名、'系統排程'、對不上的筆數見第 3 段（改寫前跑第 3 段也可以，先看全貌）。
+-- 舊版寫法對照表（每位英文名、中文名都有值的使用者一列）：
+WITH OLD_NAME AS (
+  SELECT TRIM(USER_EN_NAME) || ' (' || TRIM(USER_NAME) || ')' AS OLD_TEXT, TRIM(USER_NAME) AS NEW_TEXT
+    FROM IM_ACCT_USER
+   WHERE TRIM(USER_EN_NAME) IS NOT NULL AND TRIM(USER_NAME) IS NOT NULL
+)
+SELECT 'IM_ACCT_HIST.ACT_BY_NAME' AS COL_NAME, COUNT(*) AS TO_FIX FROM IM_ACCT_HIST T WHERE T.ACT_BY_NAME IN (SELECT OLD_TEXT FROM OLD_NAME)
+UNION ALL
+SELECT 'IM_ACCT_HIST.ACT_AS_NAME', COUNT(*) FROM IM_ACCT_HIST T WHERE T.ACT_AS_NAME IN (SELECT OLD_TEXT FROM OLD_NAME)
+UNION ALL
+SELECT 'IM_INSP.INSP_BY_NAME', COUNT(*) FROM IM_INSP T WHERE T.INSP_BY_NAME IN (SELECT OLD_TEXT FROM OLD_NAME)
+UNION ALL
+SELECT 'IM_INSP.ACT_AS_NAME', COUNT(*) FROM IM_INSP T WHERE T.ACT_AS_NAME IN (SELECT OLD_TEXT FROM OLD_NAME)
+UNION ALL
+SELECT 'IM_INSP_RESULT.FIX_BY_NAME', COUNT(*) FROM IM_INSP_RESULT T WHERE T.FIX_BY_NAME IN (SELECT OLD_TEXT FROM OLD_NAME)
+UNION ALL
+SELECT 'IM_INSP_RESULT.FIX_ACT_AS_NAME', COUNT(*) FROM IM_INSP_RESULT T WHERE T.FIX_ACT_AS_NAME IN (SELECT OLD_TEXT FROM OLD_NAME)
+UNION ALL
+SELECT 'IM_ACCT_ADMIN_LOG.ACT_BY_NAME', COUNT(*) FROM IM_ACCT_ADMIN_LOG T WHERE T.ACT_BY_NAME IN (SELECT OLD_TEXT FROM OLD_NAME)
+UNION ALL
+SELECT 'IM_ACCT_ADMIN_LOG.CONTENT_JSON', COUNT(*) FROM IM_ACCT_ADMIN_LOG T
+ WHERE EXISTS (SELECT 1 FROM OLD_NAME O WHERE INSTR(T.CONTENT_JSON, '"targetUserName":"' || O.OLD_TEXT || '"') > 0);
+
+-- ===== 2. 改寫並 COMMIT
+-- 七個名字欄：整欄等於某人的「英文名 (中文名)」才改成中文名
+UPDATE IM_ACCT_HIST T
+   SET T.ACT_BY_NAME = (SELECT MIN(TRIM(U.USER_NAME)) FROM IM_ACCT_USER U
+                         WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                           AND T.ACT_BY_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')'),
+       T.UPDATE_DATE = SYSDATE, T.UPDATE_BY = 'SYSTEM'
+ WHERE EXISTS (SELECT 1 FROM IM_ACCT_USER U
+                WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                  AND T.ACT_BY_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')');
+
+UPDATE IM_ACCT_HIST T
+   SET T.ACT_AS_NAME = (SELECT MIN(TRIM(U.USER_NAME)) FROM IM_ACCT_USER U
+                         WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                           AND T.ACT_AS_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')'),
+       T.UPDATE_DATE = SYSDATE, T.UPDATE_BY = 'SYSTEM'
+ WHERE EXISTS (SELECT 1 FROM IM_ACCT_USER U
+                WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                  AND T.ACT_AS_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')');
+
+UPDATE IM_INSP T
+   SET T.INSP_BY_NAME = (SELECT MIN(TRIM(U.USER_NAME)) FROM IM_ACCT_USER U
+                          WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                            AND T.INSP_BY_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')'),
+       T.UPDATE_DATE = SYSDATE, T.UPDATE_BY = 'SYSTEM'
+ WHERE EXISTS (SELECT 1 FROM IM_ACCT_USER U
+                WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                  AND T.INSP_BY_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')');
+
+UPDATE IM_INSP T
+   SET T.ACT_AS_NAME = (SELECT MIN(TRIM(U.USER_NAME)) FROM IM_ACCT_USER U
+                         WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                           AND T.ACT_AS_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')'),
+       T.UPDATE_DATE = SYSDATE, T.UPDATE_BY = 'SYSTEM'
+ WHERE EXISTS (SELECT 1 FROM IM_ACCT_USER U
+                WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                  AND T.ACT_AS_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')');
+
+UPDATE IM_INSP_RESULT T
+   SET T.FIX_BY_NAME = (SELECT MIN(TRIM(U.USER_NAME)) FROM IM_ACCT_USER U
+                         WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                           AND T.FIX_BY_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')'),
+       T.UPDATE_DATE = SYSDATE, T.UPDATE_BY = 'SYSTEM'
+ WHERE EXISTS (SELECT 1 FROM IM_ACCT_USER U
+                WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                  AND T.FIX_BY_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')');
+
+UPDATE IM_INSP_RESULT T
+   SET T.FIX_ACT_AS_NAME = (SELECT MIN(TRIM(U.USER_NAME)) FROM IM_ACCT_USER U
+                             WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                               AND T.FIX_ACT_AS_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')'),
+       T.UPDATE_DATE = SYSDATE, T.UPDATE_BY = 'SYSTEM'
+ WHERE EXISTS (SELECT 1 FROM IM_ACCT_USER U
+                WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                  AND T.FIX_ACT_AS_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')');
+
+UPDATE IM_ACCT_ADMIN_LOG T
+   SET T.ACT_BY_NAME = (SELECT MIN(TRIM(U.USER_NAME)) FROM IM_ACCT_USER U
+                         WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                           AND T.ACT_BY_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')'),
+       T.UPDATE_DATE = SYSDATE, T.UPDATE_BY = 'SYSTEM'
+ WHERE EXISTS (SELECT 1 FROM IM_ACCT_USER U
+                WHERE TRIM(U.USER_EN_NAME) IS NOT NULL AND TRIM(U.USER_NAME) IS NOT NULL
+                  AND T.ACT_BY_NAME = TRIM(U.USER_EN_NAME) || ' (' || TRIM(U.USER_NAME) || ')');
+
+-- 系統管理軌跡 JSON：每位使用者把完整字串 "targetUserName":"英文名 (中文名)" 換成 "targetUserName":"中文名"
+DECLARE
+  v_old   VARCHAR2(300 CHAR);
+  v_new   VARCHAR2(300 CHAR);
+  v_total NUMBER := 0;
+BEGIN
+  FOR u IN (SELECT TRIM(USER_EN_NAME) AS EN, TRIM(USER_NAME) AS ZH FROM IM_ACCT_USER
+             WHERE TRIM(USER_EN_NAME) IS NOT NULL AND TRIM(USER_NAME) IS NOT NULL) LOOP
+    v_old := '"targetUserName":"' || u.EN || ' (' || u.ZH || ')"';
+    v_new := '"targetUserName":"' || u.ZH || '"';
+    UPDATE IM_ACCT_ADMIN_LOG
+       SET CONTENT_JSON = REPLACE(CONTENT_JSON, v_old, v_new), UPDATE_DATE = SYSDATE, UPDATE_BY = 'SYSTEM'
+     WHERE INSTR(CONTENT_JSON, v_old) > 0;
+    v_total := v_total + SQL%ROWCOUNT;
+  END LOOP;
+  DBMS_OUTPUT.PUT_LINE('IM_ACCT_ADMIN_LOG.CONTENT_JSON 改寫 ' || v_total || ' 列');
+END;
+/
+
+COMMIT;
+
+-- ===== 3. 改寫後核對（唯讀）
+-- 以下解除遇錯即停：互動式 SQL*Plus 用 @ 執行本檔後，同一連線再打錯指令才不會直接結束 SQL*Plus。
+WHENEVER SQLERROR CONTINUE
+-- 期望：OLD_LEFT（仍是「英文名 (中文名)」）全部 0；
+--       ZH_NAME（已是某位使用者的中文名）＝改寫前已是中文名的筆數＋第 1 段的 TO_FIX；
+--       SYS_JOB（'系統排程'）不變；LOOKS_OLD（字面像「X (Y)」但對不上任何人，例如已離開 IM_ACCT_USER 的人）不動、列出供人工判斷；
+--       OTHER＝其餘（英文名或中文名其一為空時舊版寫的單一名字、已不在 IM_ACCT_USER 的人等），不動。
+WITH OLD_NAME AS (
+  SELECT TRIM(USER_EN_NAME) || ' (' || TRIM(USER_NAME) || ')' AS OLD_TEXT
+    FROM IM_ACCT_USER
+   WHERE TRIM(USER_EN_NAME) IS NOT NULL AND TRIM(USER_NAME) IS NOT NULL
+),
+ZH_NAME AS (
+  SELECT TRIM(USER_NAME) AS ZH FROM IM_ACCT_USER WHERE TRIM(USER_NAME) IS NOT NULL
+),
+SNAP AS (
+  SELECT 'IM_ACCT_HIST.ACT_BY_NAME' AS COL_NAME, ACT_BY_NAME AS V FROM IM_ACCT_HIST
+  UNION ALL SELECT 'IM_ACCT_HIST.ACT_AS_NAME', ACT_AS_NAME FROM IM_ACCT_HIST WHERE ACT_AS_NAME IS NOT NULL
+  UNION ALL SELECT 'IM_INSP.INSP_BY_NAME', INSP_BY_NAME FROM IM_INSP
+  UNION ALL SELECT 'IM_INSP.ACT_AS_NAME', ACT_AS_NAME FROM IM_INSP WHERE ACT_AS_NAME IS NOT NULL
+  UNION ALL SELECT 'IM_INSP_RESULT.FIX_BY_NAME', FIX_BY_NAME FROM IM_INSP_RESULT WHERE FIX_BY_NAME IS NOT NULL
+  UNION ALL SELECT 'IM_INSP_RESULT.FIX_ACT_AS_NAME', FIX_ACT_AS_NAME FROM IM_INSP_RESULT WHERE FIX_ACT_AS_NAME IS NOT NULL
+  UNION ALL SELECT 'IM_ACCT_ADMIN_LOG.ACT_BY_NAME', ACT_BY_NAME FROM IM_ACCT_ADMIN_LOG
+)
+SELECT S.COL_NAME, COUNT(*) AS TOTAL,
+       SUM(CASE WHEN S.V IN (SELECT OLD_TEXT FROM OLD_NAME) THEN 1 ELSE 0 END) AS OLD_LEFT,
+       SUM(CASE WHEN S.V IN (SELECT ZH FROM ZH_NAME) THEN 1 ELSE 0 END) AS ZH_NAME,
+       SUM(CASE WHEN S.V = '系統排程' THEN 1 ELSE 0 END) AS SYS_JOB,
+       SUM(CASE WHEN S.V NOT IN (SELECT OLD_TEXT FROM OLD_NAME) AND S.V NOT IN (SELECT ZH FROM ZH_NAME) AND S.V <> '系統排程'
+                 AND REGEXP_LIKE(S.V, '^.+ \(.+\)$') THEN 1 ELSE 0 END) AS LOOKS_OLD,
+       SUM(CASE WHEN S.V NOT IN (SELECT OLD_TEXT FROM OLD_NAME) AND S.V NOT IN (SELECT ZH FROM ZH_NAME) AND S.V <> '系統排程'
+                 AND NOT REGEXP_LIKE(S.V, '^.+ \(.+\)$') THEN 1 ELSE 0 END) AS OTHER
+  FROM SNAP S
+ GROUP BY S.COL_NAME
+ ORDER BY S.COL_NAME;
+
+-- 系統管理軌跡 JSON：OLD_LEFT 期望 0；LOOKS_OLD＝targetUserName 字面像「X (Y)」但對不上任何人，不動、列出供人工判斷
+WITH OLD_NAME AS (
+  SELECT TRIM(USER_EN_NAME) || ' (' || TRIM(USER_NAME) || ')' AS OLD_TEXT
+    FROM IM_ACCT_USER
+   WHERE TRIM(USER_EN_NAME) IS NOT NULL AND TRIM(USER_NAME) IS NOT NULL
+)
+SELECT 'IM_ACCT_ADMIN_LOG.CONTENT_JSON' AS COL_NAME,
+       COUNT(CASE WHEN INSTR(T.CONTENT_JSON, '"targetUserName":"') > 0 THEN 1 END) AS WITH_TARGET,
+       COUNT(CASE WHEN EXISTS (SELECT 1 FROM OLD_NAME O WHERE INSTR(T.CONTENT_JSON, '"targetUserName":"' || O.OLD_TEXT || '"') > 0)
+                  THEN 1 END) AS OLD_LEFT,
+       COUNT(CASE WHEN REGEXP_LIKE(T.CONTENT_JSON, '"targetUserName":"[^"]+ \([^"]+\)"')
+                   AND NOT EXISTS (SELECT 1 FROM OLD_NAME O WHERE INSTR(T.CONTENT_JSON, '"targetUserName":"' || O.OLD_TEXT || '"') > 0)
+                  THEN 1 END) AS LOOKS_OLD
+  FROM IM_ACCT_ADMIN_LOG T;

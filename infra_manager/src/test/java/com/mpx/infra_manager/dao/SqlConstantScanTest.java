@@ -93,6 +93,12 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-10-22
 // 變更說明: 第 124 項階段 7 回合 1（登入改走 WPX）：FIND_BY_ID 不得含 PWD_HASH、LOGIN_FAIL_CNT、LOCK_DATE；
 //           UPDATE_LOGIN_OK 只寫最後登入時間；MERGE_FIRST_LOGIN 含資格片段、只有 WHEN NOT MATCHED、只寫本系統自己的欄
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: 第 124 項階段 8 回合 1（上線序列第一點，腳本 D 刪欄前的保護）：IM_ACCT_USER 要刪的 9 欄——
+//           他表沒有同名欄的 6 欄（USER_EN_NAME、TEL_NO、PWD_HASH、PWD_UPDATE_DATE、LOGIN_FAIL_CNT、LOCK_DATE）所有 DAO 常數與片段一律不得出現；
+//           USER_NAME、DEPT_NAME、EMAIL 同步表或輸出別名也會用到，改為：引用 IM_ACCT_USER 的常數，其別名只能取
+//           USER_ID、STATUS、LAST_LOGIN_DATE 與共用四欄，且不得不帶別名使用這三個欄名（AS 輸出別名除外）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -104,6 +110,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
@@ -146,6 +153,18 @@ class SqlConstantScanTest {
 	static final Pattern ABOLISHED_CODE = Pattern.compile("'(EXTEND|VOID|CONFIRM|NA|TO_EXEC|EXTEND_DONE|IMPORT\\w*)'");
 	static final Pattern ABOLISHED_COLUMN = Pattern.compile(
 			"\\b(ORIG_REQ_ID|ORIG_ACCT_ID|NEW_ACCT_ID|IMPORT_ID|DISABLE_TYPE_CODE|REVIEW_BASIS_CODE|IS_DIRECT|IS_SHOW|APPLY_TEL_NO|APPLY_EMAIL|EXCPT_CNT\\s*,\\s*INSP_STATE_CODE)\\b");
+	/** 第 124 項 D1A：IM_ACCT_USER 要刪、且本系統與同步表都沒有同名欄的 6 欄 */
+	static final Pattern USER_DROPPED_COLUMN = Pattern.compile(
+			"\\b(USER_EN_NAME|TEL_NO|PWD_HASH|PWD_UPDATE_DATE|LOGIN_FAIL_CNT|LOCK_DATE)\\b");
+	/** 第 124 項 D1A：IM_ACCT_USER 刪欄後留下的欄（腳本 D 後的最終結構） */
+	static final List<String> USER_KEPT_COLUMNS = List.of("USER_ID", "STATUS", "LAST_LOGIN_DATE", "CREATE_DATE", "CREATE_BY",
+			"UPDATE_DATE", "UPDATE_BY");
+	static final Pattern USER_TABLE = Pattern.compile("\\bIM_ACCT_USER\\b");
+	/** IM_ACCT_USER 後面接的表別名（接 ON、SET、USING、WHERE、括號或換行後 SET 的不是別名） */
+	static final Pattern USER_TABLE_ALIAS = Pattern.compile("\\bIM_ACCT_USER\\s+(?!(?:ON|SET|USING|WHERE)\\b)([A-Z][A-Z0-9_]*)\\b");
+	/** 要刪的 9 欄中他處有同名的 3 欄，不帶別名直接使用（「AS USER_NAME」輸出別名、「E.EMAIL」帶別名的不算） */
+	static final Pattern BARE_SHARED_NAME_COLUMN = Pattern.compile("(?<!AS )(?<![\\w.])(USER_NAME|DEPT_NAME|EMAIL)\\b");
+
 	/** END 後面直接接英文字母（END_DATE 之類有底線的欄名不算） */
 	static final Pattern GLUED_END = Pattern.compile("\\bEND[A-Z]");
 	/** 對同步人員檔做 LEFT JOIN 以外的 JOIN（PX_SYNC_EMP_MGR 不算；同步表查無的人會整列消失） */
@@ -204,8 +223,64 @@ class SqlConstantScanTest {
 			if (ABOLISHED_COLUMN.matcher(s).find()) {
 				bad.add(e.getKey() + " 含已刪欄位");
 			}
+			if (USER_DROPPED_COLUMN.matcher(s).find()) {
+				bad.add(e.getKey() + " 含 IM_ACCT_USER 要刪的欄");
+			}
 		}
 		assertThat(bad).isEmpty();
+	}
+
+	/**
+	 * 第 124 項階段 8（上線序列第一點）：腳本 D 刪掉 IM_ACCT_USER 的 9 欄前，程式不得再讀寫其中任何一欄。
+	 * USER_NAME、DEPT_NAME、EMAIL 同步表也有、也常當輸出別名，所以不用全域禁字，改看「IM_ACCT_USER 的別名取了哪些欄」
+	 */
+	@Test
+	void 引用IM_ACCT_USER的SQL_只取刪欄後留下的欄() throws Exception {
+		// 規則本身：別名判斷與不帶別名的同名欄判斷
+		assertThat(userTableAliases("JOIN IM_ACCT_USER U ON U.USER_ID = T.USER_ID LEFT JOIN IM_ACCT_USER AU ON AU.USER_ID = X"))
+				.containsExactly("U", "AU");
+		assertThat(userTableAliases("UPDATE IM_ACCT_USER\n   SET LAST_LOGIN_DATE = :now")).isEmpty();
+		assertThat(userTableAliases("MERGE INTO IM_ACCT_USER U\nUSING (SELECT 1 FROM DUAL) S")).containsExactly("U");
+		assertThat(BARE_SHARED_NAME_COLUMN.matcher("SELECT USER_NAME FROM IM_ACCT_USER").find()).isTrue();
+		assertThat(BARE_SHARED_NAME_COLUMN.matcher("INSERT INTO IM_ACCT_USER (USER_ID, EMAIL)").find()).isTrue();
+		assertThat(BARE_SHARED_NAME_COLUMN.matcher("NVL(TRIM(E.EMP_NAME), U.USER_ID) AS USER_NAME, E.EMAIL").find()).isFalse();
+
+		Map<String, String> sqls = daoSqlsWithEmpSql();
+		List<String> checked = new ArrayList<>();
+		List<String> bad = new ArrayList<>();
+		for (Map.Entry<String, String> e : sqls.entrySet()) {
+			String s = e.getValue();
+			if (!USER_TABLE.matcher(s).find()) {
+				continue;
+			}
+			checked.add(e.getKey());
+			for (String alias : userTableAliases(s)) {
+				Matcher m = Pattern.compile("(?<![\\w.])" + alias + "\\.([A-Z][A-Z0-9_]*)").matcher(s);
+				while (m.find()) {
+					if (!USER_KEPT_COLUMNS.contains(m.group(1))) {
+						bad.add(e.getKey() + " 取 " + alias + "." + m.group(1));
+					}
+				}
+			}
+			Matcher bare =BARE_SHARED_NAME_COLUMN.matcher(s);
+			if (bare.find()) {
+				bad.add(e.getKey() + " 不帶別名使用 " + bare.group(1));
+			}
+		}
+		// 涵蓋面：token 檢查、使用者查詢、首次登入、登入時間、名單、收件人、計數都引用 IM_ACCT_USER
+		assertThat(checked).contains("LoginTokenDao.FIND", "UserDao.FIND_BY_ID", "UserDao.MERGE_FIRST_LOGIN",
+				"UserDao.UPDATE_LOGIN_OK", "UserDao.FIND_ACTIVE_WITH_ROLES", "PermDao.RCPT_SELECT", "RoleAdminDao.FIND_ROLE_MEMBERS",
+				"RoleAdminDao.FIND_EXEC_MEMBERS", "RoleAdminDao.FIND_CANDIDATES", "RoleAdminDao.COUNT_ACTIVE_USERS");
+		assertThat(bad).isEmpty();
+	}
+
+	private static List<String> userTableAliases(String sql) {
+		List<String> aliases = new ArrayList<>();
+		Matcher m = USER_TABLE_ALIAS.matcher(sql);
+		while (m.find()) {
+			aliases.add(m.group(1));
+		}
+		return aliases;
 	}
 
 	/** 掃描清單 DAOS 須涵蓋 dao 套件所有 @Repository（新增 DAO 忘了列進來就整支不會被掃） */
