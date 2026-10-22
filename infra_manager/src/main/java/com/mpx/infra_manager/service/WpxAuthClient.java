@@ -18,6 +18,11 @@ package com.mpx.infra_manager.service;
 // 變更說明: 階段 1 審查 M1：成功須 Success 為 boolean true 且 Code 為 0；Code 0 但 Success 不是 true（WPX 漏設 Code 時
 //           .NET 整數預設為 0）歸服務異常並記 WARN「回應不一致」（使用者裁示 ①A），避免驗證失敗卻放行。
 //           已查證 WPX 回 -23 時為 HTTP 200（2026-10-20），重取公鑰流程維持只看 2xx 本文
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 7 回合 2：啟動時檢查（比照附件目錄）——位址、appId、私鑰路徑任一未設定、私鑰路徑不是絕對路徑、
+//           私鑰檔讀不到或不是 PKCS#8 PEM → 記一行 ERROR 並啟動失敗（登入已改走 WPX，設定不全等於沒有人能登入）；
+//           啟動時就讀進私鑰，之後呼叫不必再讀檔。只檢查本機設定，不連 WPX（WPX 暫時連不上不該擋住啟動）
 // ============================================================
 
 import java.io.IOException;
@@ -25,6 +30,7 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
@@ -62,6 +68,7 @@ import org.springframework.web.client.ResponseErrorHandler;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import jakarta.annotation.PostConstruct;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.JsonNode;
@@ -294,6 +301,39 @@ public class WpxAuthClient {
 				}
 			}
 			return privateKey;
+		}
+	}
+
+	/** 啟動失敗時的 ERROR log／例外訊息前綴（後接原因；不含私鑰內容） */
+	static final String MSG_STARTUP_INVALID = "WPX 登入設定不正確，後端無法啟動：";
+
+	/**
+	 * 啟動時檢查本機設定並讀進私鑰（BACKLOG 第 124 項階段 7 回合 2）。不連 WPX。
+	 * 單元測試以套件可見的建構子建立、不經 Spring，不會觸發本方法；要測時直接呼叫。
+	 */
+	@PostConstruct
+	void validateOnStartup() {
+		try {
+			requireConfig();
+			if (!isAbsolutePath(privateKeyPath)) {
+				throw new WpxException("infra.manager.wpx.private-key 必須是絕對路徑，Windows 請用 / 或 \\\\，例：D:/secrets/WPX/my.private.pkcs8.pem");
+			}
+			privateKey();
+		} catch (WpxException e) {
+			log.error(MSG_STARTUP_INVALID + e.getMessage());
+			throw new IllegalStateException(MSG_STARTUP_INVALID + e.getMessage());
+		}
+	}
+
+	/** 非空且解析後為絕對路徑 */
+	static boolean isAbsolutePath(String value) {
+		if (value == null || value.isBlank()) {
+			return false;
+		}
+		try {
+			return Path.of(value.trim()).isAbsolute();
+		} catch (InvalidPathException e) {
+			return false;
 		}
 	}
 

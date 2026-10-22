@@ -67,6 +67,9 @@ package com.mpx.infra_manager.common;
 //           權限碼 ACC_EXPORT（後端原本沒有此常數、只在前端判斷）；ADMIN_VISIBLE_PERMS＝角色權限設定頁可見的 20 碼
 //           （裁示 ⑩A／⑮A：有功能的碼才放出來、不看 DB 的 PHASE_CODE；新功能上線時加 PERM_* 常數的同一 commit 要加進清單，
 //           SqlConstantScanTest 強制每個 PERM_* 常數都在清單內）；DENY 軌跡每碼單號上限 ADMIN_BLOCKED_PER_PERM_LOG_MAX
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 7 回合 2：刪 LOGIN_MAX_FAIL（登入改走 WPX，連錯鎖定交給 WPX）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -341,8 +344,7 @@ public final class AcctConst {
 	/** 系統排程事件的 ACT_BY_NAME（spec §4.8） */
 	public static final String SYSTEM_ACTOR_NAME = "系統排程";
 
-	// 登入（spec §2.1；程式常數，spec §9.4）
-	public static final int LOGIN_MAX_FAIL = 5;
+	// 登入（spec §2.1；程式常數，spec §9.4）；連錯鎖定交給 WPX，本系統不計次數
 	public static final int TOKEN_MAX_HOURS = 8;
 	/** 閒置上限；與 TOKEN_MAX_HOURS 同長，等於不另設閒置限制（BACKLOG 第 28 項）；要縮短時改成分鐘數字 */
 	public static final int TOKEN_IDLE_MINUTES = TOKEN_MAX_HOURS * 60;

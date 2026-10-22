@@ -9,7 +9,7 @@
 --       會無聲變成亂碼（不會報錯）。
 -- VENDOR 類別 IS_ENABLED 依交接文件寫 0；測試 DB 原為 1，2026-10-11 已改為 0，
 -- 兩邊一致（BACKLOG 第 9 項）。
--- 注意：本檔不含任何帳密；初始管理者範本的密碼雜湊需自行產生後替換（見檔尾）。
+-- 注意：本檔不含任何帳密；登入密碼由 WPX 驗證，本系統不存密碼（初始管理者見檔尾）。
 -- ============================================================================
 
 -- 遇到錯誤立刻停止並回滾，避免半套資料被檔尾的 COMMIT 提交
@@ -153,12 +153,12 @@ COMMIT;
 -- 初始管理者帳號「範本」（預設註解掉，整段不會執行）
 -- ============================================================================
 -- 新環境建好後沒有任何使用者、無人能登入。請照以下步驟補第一位管理者：
--- 1. 用後端的 PwdHashTool 產生密碼雜湊（操作步驟見 SETUP.md）
--- 2. 把最下面兩句 INSERT 與 COMMIT 複製到 SQL 工具裡（只去掉那幾行行首的
+-- 1. 把最下面兩句 INSERT 與 COMMIT 複製到 SQL 工具裡（只去掉那幾行行首的
 --    「-- 」，本段說明不要跟著執行），將【工號】【英文名】【中文姓名】【部門】
---    【Email】【密碼雜湊】換成實際值後執行（工號＝登入帳號，數字字串最多 7 碼）
--- 3. 【不要把替換後的實際值存回本檔、也不要 commit 進版控】——本檔在 repo 裡，
---    寫入真實工號、Email、密碼雜湊等於把個資與憑證推上遠端
+--    【Email】換成實際值後執行（工號＝登入帳號，數字字串最多 7 碼）。
+--    密碼不必填：登入時用公司帳號密碼，由 WPX 驗證，本系統不存密碼
+-- 2. 【不要把替換後的實際值存回本檔、也不要 commit 進版控】——本檔在 repo 裡，
+--    寫入真實工號、Email 等於把個資推上遠端
 --
 -- 補充三點：
 -- (a) 簽核與巡檢等其他角色依需要比照 IM_ACCT_ROLE_USER 那句再各加一列
@@ -172,8 +172,8 @@ COMMIT;
 --     畫面維護（寫系統管理軌跡），DB 直接改只作備援、不留軌跡；只有第一位
 --     系統管理員因為還沒有人能進畫面，才必須用本範本以 DB 設定。
 --
--- INSERT INTO IM_ACCT_USER (USER_ID, USER_EN_NAME, USER_NAME, DEPT_NAME, EMAIL, PWD_HASH, PWD_UPDATE_DATE, STATUS, CREATE_DATE, CREATE_BY)
--- VALUES ('【工號】', '【英文名】', '【中文姓名】', '【部門】', '【Email】', '【密碼雜湊】', SYSDATE, 1, SYSDATE, 'SYSTEM');
+-- INSERT INTO IM_ACCT_USER (USER_ID, USER_EN_NAME, USER_NAME, DEPT_NAME, EMAIL, STATUS, CREATE_DATE, CREATE_BY)
+-- VALUES ('【工號】', '【英文名】', '【中文姓名】', '【部門】', '【Email】', 1, SYSDATE, 'SYSTEM');
 --
 -- INSERT INTO IM_ACCT_ROLE_USER (ROLE_ID, USER_ID, STATUS, CREATE_DATE, CREATE_BY)
 -- VALUES ('SYS_ADMIN', '【工號】', 1, SYSDATE, 'SYSTEM');

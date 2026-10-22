@@ -9,6 +9,9 @@
   修改日期: 2026-10-11
   變更說明: BACKLOG 第 28 項：token 改存 localStorage（各分頁共用，本檔程式未改）；
             登入頁開著時其他分頁登入成功，本頁會整頁重新整理並由路由守衛帶往原路由
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-22
+  變更說明: BACKLOG 第 124 項階段 7：登入改走 WPX，後端登入錯誤改為 A01、A04、A05 三種（A02 鎖定已刪）；本檔程式未改，照舊顯示後端 message
 -->
 <template>
   <main class="login-page">

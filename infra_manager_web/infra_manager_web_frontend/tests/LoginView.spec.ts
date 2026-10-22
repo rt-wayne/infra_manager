@@ -6,6 +6,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 28 項：token 改存 localStorage，每案前改清 localStorage
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 7 回合 2：失敗範例由 A02（鎖定，已刪）改 A04「帳號無法使用」
 // ============================================================
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -67,14 +70,14 @@ describe('LoginView', () => {
     w.unmount()
   })
 
-  it('登入失敗：顯示後端 message（A02），不存 token', async () => {
-    loginMock.mockRejectedValue(httpError(401, { message: '此帳號已鎖定，請聯絡系統管理員' }, '/auth/login'))
+  it('登入失敗：顯示後端 message（A04），不存 token', async () => {
+    loginMock.mockRejectedValue(httpError(401, { message: '帳號無法使用' }, '/auth/login'))
     const { w, router } = await mountLogin()
     await w.find('#loginUserId').setValue('0000012')
     await w.find('#loginPassword').setValue('secret')
     await w.find('form').trigger('submit')
     await flushPromises()
-    expect(w.find('.login-msg').text()).toBe('此帳號已鎖定，請聯絡系統管理員')
+    expect(w.find('.login-msg').text()).toBe('帳號無法使用')
     expect(getToken()).toBe('')
     expect(router.currentRoute.value.path).toBe('/login')
     w.unmount()

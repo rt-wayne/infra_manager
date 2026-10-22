@@ -23,7 +23,7 @@ JSON 使用 Jackson 3（套件 `tools.jackson`，例 `tools.jackson.databind.Obj
 |---|---|---|
 | `com.mpx.Application` | 啟動類別；掃描根 `com.mpx`；排除 `DataSourceAutoConfiguration`；載入 `config/database.properties` | 不可 |
 | `com.mpx.common.db` | 共用 DB 連線元件（`DbClient`、`DbConnectionManager`、`DbConnectApiClient` 等 6 個類別） | 不可 |
-| `com.mpx.infra_manager` | 業務程式（帳號權限管理／機房巡檢，spec v2.0；概要見第 10 節） | 自由新增 |
+| `com.mpx.infra_manager` | 業務程式（帳號權限管理／機房巡檢，spec v2.0；概要見第 9 節） | 自由新增 |
 | `src/main/resources/application.properties` | 專案名、port | 可改值 |
 | `src/main/resources/config/*.properties` | 連線資訊 API、DB 別名、自訂設定（見第 4 節） | 可改值 |
 | `src/main/resources/logback-spring.xml` | log 設定（見第 6 節） | 一般不需改 |
@@ -222,14 +222,7 @@ public class ItemController {
 - [ ] 沒有把 `*.properties` 真檔、帳密或真實位址加進 git。
 - [ ] `./mvnw clean package` 通過，42 個 common.db 測試全過。
 
-## 9. 密碼雜湊工具（spec v2.0 §9.2）
-
-`IM_ACCT_USER.PWD_HASH` 由工具類別 `com.mpx.infra_manager.tools.PwdHashTool` 產生（雜湊本體為 `com.mpx.infra_manager.common.PasswordHasher`：
-PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310000，輸出 `PBKDF2$310000$base64(salt)$base64(hash)`）。
-
-執行步驟見根目錄 `SETUP.md`。
-
-## 10. 業務程式概要（spec v2.0，2026-10-07）
+## 9. 業務程式概要（spec v2.0，2026-10-07）
 
 | 主題 | 位置 | 說明 |
 |---|---|---|
@@ -242,5 +235,5 @@ PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310000，輸出 `PBKDF2$310000$bas
 | 寄信 | `service.MailSender`（介面）、`service.SmtpMailSender`、`service.LogMailSender`、`common.MailConfig`、`service.MailAllowList`、`service.MailHtml` | 本文為 HTML（`MailHtml` 組版面、值一律跳脫，信末連結＝`infra.manager.mail.site-url`＋前端頁面，留空不放）；`spring.mail.host`（`application.properties`）與 `infra.manager.mail.from` 都有值時 `MailConfig` 選 SMTP 實際寄出，否則只寫 log；只寄給寄送名單 `infra.manager.mail.allow-list` 內的工號（留空誰都不寄，`send-to-all=true` 忽略名單），名單外記 SKIP「不在寄送名單」 |
 | 通知收件人 | `service.NotificationService`、`dao.PermDao#findUsersInRoles` | 角色收件人固定為程式常數（`AcctConst.MAIL_ROLE_EXPIRY`＝GOV：到期前 7 天、轉已逾期、每週彙總；`AcctConst.MAIL_ROLE_JOB_FAIL`＝SYS_ADMIN：排程失敗），**不放設定檔**（變更單 #2）；成員於寄信當下查 `IM_ACCT_ROLE_USER`（STATUS＝1）＋`IM_ACCT_USER`（STATUS＝1），無 Email 記 SKIP |
 
-- 新增的設定 key 全在 `config/environment.properties`（選用檔，缺 key 用程式預設；只有附件根目錄無預設，未設定時啟動失敗）；例外是 SMTP 連線用 Spring 固定 key `spring.mail.*`，放 `application.properties`。
+- 新增的設定 key 全在 `config/environment.properties`（選用檔，缺 key 用程式預設；只有附件根目錄與 WPX 登入設定 `infra.manager.wpx.*` 無預設，未設定時啟動失敗）；例外是 SMTP 連線用 Spring 固定 key `spring.mail.*`，放 `application.properties`。
 - `spring.servlet.multipart.max-file-size`／`max-request-size` 未設定時程式預設 10MB／11MB（`AppConfig`）。

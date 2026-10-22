@@ -80,7 +80,7 @@ function initSession(): Promise<void> {
   return initPromise
 }
 
-/** 登入：成功存 token 與 me；失敗 reject（A01／A02 由登入頁顯示後端 message） */
+/** 登入：成功存 token 與 me；失敗 reject（A01／A04／A05 由登入頁顯示後端 message） */
 async function login(userId: string, password: string): Promise<void> {
   const r = await apiLogin(userId, password)
   resetSession()

@@ -17,11 +17,10 @@
 | 124 | 登入改用 WPX VerifySecure 外部驗證 API（本系統不再存密碼、鎖定交給 WPX、驗證成功但本系統無此人則自動建立，暫限資訊部），人員姓名／Email／部門改由全系統直接讀同步表 `PX_SYNC_EMP`；英文名一併拿掉（原第 67 項併入）、申請人分機改自填；裁示 ①～⑭、D0～D12、E1～E8 與 9 個階段施工計畫見詳情檔；正式環境尚未上線。使用者 2026-10-19～20 交代 | [backlog/124-登入改用外部驗證API.md](backlog/124-登入改用外部驗證API.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：第 124 項階段 7 回合 2——刪 `PasswordHasher`、`tools/PwdHashTool` 與其測試、`AcctConst.LOGIN_MAX_FAIL`、`AcctMsg.A02`（前端登入頁註解與 `LoginView.spec.ts` 範例文字一併換成 A04／A05）；WPX 私鑰路徑啟動時檢查（比照附件目錄未設定就啟動失敗）；PRD 刪「密碼」段的雜湊元件句、元件表 tools 列、訊息表 A02 列；第 19 項結案。回合 1 已 commit（登入已改走 WPX）。開發機兩個 jar 仍是 d69feaa（密碼登入），要實測 WPX 登入需重建重啟
+- 下一步：第 124 項階段 7 收尾——同一則訊息平行派 `code-reviewer`（範圍 266e417..HEAD）與 `test-runner`（後端全測、前端全測＋型別檢查）；開發機重建重啟（三步建置，後端啟動會檢查 WPX 設定與私鑰），請使用者實測本人登入、打錯密碼、不存在工號。回合 1、2 皆已 commit。開發機兩個 jar 仍是 d69feaa（密碼登入）
 - 已改動（未 commit）：無（本機 `host.properties` 補 `wpx.*`、`environment.properties` 補 `infra.manager.wpx.*`，兩檔不進版控）
 - 本階段起點：266e417
-- 卡住／待確認：無卡階段 7 的項目；詳情檔待確認 4～9（UAT NTP、切換執行者、正式 appId／HTTPS／key、離職是否消失、正式同步方式、正式 synonym）仍開放，不卡階段 7；`SETUP.md` 第 6 節第 3、4 段（解鎖、重設密碼）登入改 WPX 後已無作用，依計畫階段 8 刪除
-
+- 卡住／待確認：無卡階段 7 的項目；詳情檔待確認 4～9（UAT NTP、切換執行者、正式 appId／HTTPS／key、離職是否消失、正式同步方式、正式 synonym）仍開放，不卡階段 7
 ## 已拍板待實作
 
 | ID | 摘要 | 優先 | 詳情 |
@@ -37,7 +36,6 @@
 | 16 | 原始規格書缺件：子 README 與 `.example` 註解（範本已於 2026-10-14 刪除）引用 `spec_im_acct_insp_v2.0.md`、變更單 #1～#4，但 repo 與使用者手上都沒有；PRD 不引用 | 2026-10-10 | — |
 | 17 | `infra_manager_web\README.md` 第 2 節「兩包結構」表仍是範本初始描述：說 Controller 目錄只有 `package-info.java`、`src\types\` 與 `src\views\` 只有 `.gitkeep`、router 的 routes 是空陣列，實際都已有程式（4 個型別檔、10 個畫面、14 個 path） | 2026-10-10 | — |
 | 18 | 登入查詢後才被改成停用（STATUS＝0）的帳號，該次登入仍取得 token 與回應中的權限清單；下一次呼叫 API 即因 `TokenIdentityProvider` 檢查 STATUS 而回 A03，攻擊面接近零 | 2026-10-10 | — |
-| 19 | 人工鎖定（DB 直接寫 LOCK_DATE）只擋之後的登入，不擋已發出的 token；`TokenIdentityProvider` 每次請求只查 STATUS 不查 LOCK_DATE。要不要讓鎖定也立即作廢既有 token 屬設計決策 | 2026-10-10 | — |
 | 20 | 門禁卡新增複驗退回後再次回報、卡號沒變時不應更新主表帳號名稱（`RequestService.java:465` 的 `else if`），此分支沒有測試；只有換卡號會更新的測試（`RequestServiceTest.java:231`） | 2026-10-10 | — |
 | 21 | `im_acct_insp_交接文件.md`（初始交付文件）第 692 行寫「空檔視同未上傳」，未含「副檔名不符仍回 E14」的例外，與現行程式不一致；先決定這份文件是否持續隨程式維護。同類（第 89 項階段 6 code-reviewer 範圍外發現）：該文件第 64 行偏離表第 3 條仍寫「純 DB 維護，不留軌跡」，角色指派、執行人對照、角色權限已改由畫面維護並寫軌跡 | 2026-10-10 | — |
 | 22 | J02（每週逾期彙總信）以「本週有無任何通知紀錄」判斷是否已寄，寄送失敗（FAIL）也寫紀錄，所以本週信全部寄失敗時同週不會再重寄（`JobService.java:299`、`NotificationService.java:296,303`）；J01 同一套判斷。SETUP 已註明後果，要不要改程式未拍板 | 2026-10-10 | — |
@@ -70,7 +68,7 @@
 | 64 | `SETUP.md` 第 26 行寫了郵件主機名稱，與檔頭「不記主機位址」的規則衝突；要移到 PRD 環境設定、改成「向負責人取得」或維持現狀未定。後端加網址前綴（2026-10-14）時 code-reviewer 發現 | 2026-10-14 | — |
 | 65 | `im_acct_insp_交接文件.md` 第 22、29 行仍寫後端根路徑 `/api/v1`，後端已加前綴改為 `/infra_manager/api/v1`；與第 21 項同一題：先決定這份初始交付文件是否持續隨程式維護。後端加網址前綴（2026-10-14）時 code-reviewer 發現 | 2026-10-14 | — |
 | 69 | 本專案完成後，把原有的 Infra_Manager 整併進本專案；Infra_Manager_Java（原 Infra_Manager 改寫到一半的版本，本專案寄信寫法與信件版面曾比照它）預計不再使用。整併完成後要清掉 DB 中沒有用到的 IM_ 開頭表（IM 即專案名縮寫；那些表是開發 Infra_Manager_Java 時建的，目前沒有任何系統在用；使用者 2026-10-15 裁示維持整併後再清、留作整併設計參考，DROP 前逐表列清單給使用者確認）。現況（2026-10-15 查看）：原 Infra_Manager＝「機房設備異動申請系統」，Node.js（Express＋EJS）、資料存 JSON 檔、port 3200 根路徑，正式機運作中，程式在 `D:\ai\Infra_Manager_OLD`；Infra_Manager_Java 未部署，程式在 `D:\ai\Infra_Manager_Java改寫`（repo `rt-wayne/Infra_Manager_Java`、Java 檔 217 個、套件 `com.mpx.infra_manager_java`、殼 jar 名 `infra_manager_web`，最後程式 commit 2026-10-13，2026-10-16 文件加註停止開發 `3986ec2`）。路線已裁示（使用者 2026-10-16）：①C 以本專案為底，舊 Node 系統（原 Infra_Manager）當需求與驗收依據，從 Infra_Manager_Java 搬業務層、DDL 與測試；②A Java 版 repo 已改名為 `rt-wayne/Infra_Manager_Java` 並封存（唯讀）；③A 舊系統取號漏洞維持現狀、不改正式機 Node 程式，等整併上線。整併範圍細節（詳情檔待確認 ④～⑩）、時程未定。使用者 2026-10-15 交代記錄 | 2026-10-15 | [backlog/69-整併原Infra_Manager.md](backlog/69-整併原Infra_Manager.md) |
-| 71 | `infra_manager\README.md` 第 10 節（業務程式概要）表格「排程」列只寫「J01、J02 的 cron」，漏了 J03（`infra.manager.job.j03.cron`）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
+| 71 | `infra_manager\README.md` 第 9 節（業務程式概要）表格「排程」列只寫「J01、J02 的 cron」，漏了 J03（`infra.manager.job.j03.cron`）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
 | 72 | BACKLOG 項目以行號指涉 SETUP 位置已漂移：第 44 項寫「`SETUP.md` 第 71 行」（`npm run build` 那行實為第 69 行）、第 64 項寫「`SETUP.md` 第 26 行」（郵件主機名稱實為第 22 行）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
 | 73 | `SETUP.md` 第 8 節「改名部署步驟」第 6 步新增 Apache `ProxyPass` 後沒寫要重載 Apache（例如 `apachectl -t` 檢查語法後重載，實際指令依 UAT 環境），第 9 步「移除舊規則」同樣；漏做時驗證會出現「直連通、經 Apache 404」，負責人會誤以為規則寫錯。第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
 | 74 | `SETUP.md` 第 8 節「改完 `host.properties` 要重啟殼 jar」（暗示不用重新打包）與 `infra_manager_web\README.md` 第 399 行「打包在 jar 內，改完要重新建置」互相矛盾；要先向 UAT 負責人確認 UAT 實際讀 jar 內那份還是共用 config 目錄的同名檔，再統一說法。已知線索（2026-10-16）：jar 一律在開發機打包、由使用者人工交給 UAT 負責人；UAT 啟動參數帶 `--spring.config.additional-location=<共用 config 目錄>`，該目錄同名檔**有寫到的鍵**優先於 jar 內的值（逐鍵合併）——若 UAT 共用目錄的 `host.properties` 有那個鍵，改它重啟即可，否則要在開發機改 jar 內那份並重新打包。批 1 之前就存在，第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |

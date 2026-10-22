@@ -36,7 +36,7 @@
   - 正式環境才設 `infra.manager.mail.send-to-all=true`，寄給所有收件人。
   - `infra.manager.mail.site-url` 填使用者在瀏覽器開的前端網址（含 context），信末才會有「前往系統」連結，例 `http://主機:8787/infra_manager_web/`。直接從瀏覽器網址列複製也可以（`#` 之後、結尾的 `index.html` 會自動去掉）。留空＝不放連結；不是 `http://` 或 `https://` 開頭、沒有主機名稱，或網址含空白、雙引號等不合法字元，也視同留空，啟動 log 會有 WARN。
   - 改完要重啟後端。啟動 log 會有一行「寄信：SMTP 實際寄出；寄送名單 N 人」或「寄信：SMTP 未設定…只寫 log」，可據此確認。若出現 WARN「SMTP 已啟用但寄送名單是空的…」，代表名單空又沒開 `send-to-all`，所有通知都不會寄出。
-- WPX 登入（BACKLOG 第 124 項施工中，目前登入仍用本系統密碼；以下設定先備好，未設定不影響啟動）：
+- WPX 登入（登入一律交給 WPX 驗證，以下設定**必填**：位址、appId、私鑰任一未設定，或私鑰不是絕對路徑、讀不到、格式不對，後端會啟動失敗，log 有一行 ERROR「WPX 登入設定不正確，後端無法啟動：」後接原因。啟動時不連 WPX，WPX 暫時連不上時照常啟動，登入回「登入服務異常，請聯絡管理者」）：
   - `config\host.properties` 加 `wpx.domain`（協定＋主機）、`wpx.api.port`（例 `:8777`）、`wpx.api.path`（留空）、`wpx.api.domain.path=${wpx.domain}${wpx.api.port}${wpx.api.path}`，四個都要保留。位址向 WPX 窗口或 UAT 負責人取得（UAT 上 PX Track 的 `host.properties` 已有同一組值）。
   - `config\environment.properties` 加 `infra.manager.wpx.app-id`（測試環境填 `Test`）、`infra.manager.wpx.dbalias=APX`、`infra.manager.wpx.private-key`（私鑰檔絕對路徑，Windows 用 `/`）、`infra.manager.wpx.timeout-seconds=10`。
   - 私鑰檔是 PKCS#8 PEM（開頭 `-----BEGIN PRIVATE KEY-----`）。**不要放在 `src\main\resources\` 底下**（會被打包進 jar），也不要放進 repo；放在主機上只有執行帳號讀得到的目錄。測試環境與 PX Track 共用同一把測試私鑰：UAT 指向 PX Track 已放好的那個檔案即可；開發機用 WPX 交付包的 `pxgo.private.pkcs8.pem`（向專案負責人取得）。
@@ -95,7 +95,7 @@ java -jar target\infra_manager_web-0.0.1-SNAPSHOT.jar
 
 **角色指派、執行人對照、角色權限平常用畫面**（系統管理 → 角色指派／執行人對照／角色權限設定，需 SYS_ROLE 或 SYS_EXECUTOR）：畫面改會寫系統管理軌跡、原因必填，並擋下「移除或拿掉後沒有人能處理在途案件」與「移除或拿掉後沒有人持有角色指派權限（SYS_ROLE）」。本節的角色、執行人 SQL（第 5a、5b、6a、6b 段）**只作備援**：DB 直接改**不留軌跡、不檢查在途案件**，也不檢查是不是最後一位 SYS_ROLE 持有人。只有兩種情況必須用 DB：建新環境的第一位系統管理員（還沒有人能進畫面，見下方「建新環境」），以及一般人員（GENERAL）的權限（畫面對 GENERAL 唯讀，見第 6c 段，同樣不留軌跡、不檢查在途）。
 
-使用者（含解鎖、重設密碼）、巡檢項目、資產分類、帳號類別開關沒有畫面，一律直接改 RD_USER 的表。改完下一個請求即生效，不用重新部署；系統不留管理軌跡，改動前自行確認影響。
+使用者（停用、預建資格外人員）、巡檢項目、資產分類、帳號類別開關沒有畫面，一律直接改 RD_USER 的表。改完下一個請求即生效，不用重新部署；系統不留管理軌跡，改動前自行確認影響。
 
 DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓某個關卡或類別沒有人能處理：角色看「查每個人實際生效的角色」與「查某個權限碼給了哪些角色」；執行人看「查每個帳號類別的啟用中執行人數」與「查停在關卡 6（待執行）的申請單」。
 
@@ -105,7 +105,7 @@ DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓�
 - **一次只執行一個操作**：下面每個操作各自一個區塊，只複製你要做的那一塊，**不要把整節貼進去一起執行**。
 - **關 autocommit**：每句 INSERT／UPDATE 都應**影響 1 筆**（例外在該段註明），確認筆數無誤再 COMMIT，異常就 ROLLBACK。核對完立即 COMMIT 或 ROLLBACK——交易沒結束前，被改到的那個人登入會卡住。
 - 替換 `【】` 後的實際值不要存回本檔、不要 commit 進版控。
-- **SQL 歷史**：SQL Developer 預設會保留執行過的語句（「SQL 歷史記錄」，F8），第 1、4 段與建新環境的初始管理者 INSERT 含密碼雜湊；正式環境操作後，在 SQL 歷史記錄視窗清除歷史，或刪 `%APPDATA%\SQL Developer\SqlHistory\` 下對應的檔案。
+- **SQL 歷史**：SQL Developer 預設會保留執行過的語句（「SQL 歷史記錄」，F8），第 1 段與建新環境的初始管理者 INSERT 含工號、Email 等個資；正式環境操作後，在 SQL 歷史記錄視窗清除歷史，或刪 `%APPDATA%\SQL Developer\SqlHistory\` 下對應的檔案。
 
 ### 建新環境：執行 `db\` 兩個 SQL 檔
 
@@ -122,7 +122,7 @@ DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓�
 
 建完補第一位系統管理員。**這一步只能用 DB 設定**：角色指派畫面需要 SYS_ROLE，新環境還沒有任何人持有，進不了畫面；第一位設好、登入後，其他人的角色與執行人改用畫面指派。**用 SQL Developer 另開一個連線**執行（姓名含中文；也不要接在跑 init_data 檔的 SQL*Plus 連線裡——該檔的遇錯即停設定整個連線都有效，之後任何一句打錯都會直接結束 SQL*Plus 並回滾）：
 
-1. 打開 `infra_manager_init_data.sql` 檔尾的「初始管理者範本」，把最下面兩句 INSERT 複製到 SQL 工具，**只去掉這幾行行首的「-- 」**（沒去掉的話整段都是註解，執行不會報錯、但什麼都沒寫入），把【工號】【密碼雜湊】等占位符換成實際值。
+1. 打開 `infra_manager_init_data.sql` 檔尾的「初始管理者範本」，把最下面兩句 INSERT 複製到 SQL 工具，**只去掉這幾行行首的「-- 」**（沒去掉的話整段都是註解，執行不會報錯、但什麼都沒寫入），把【工號】【Email】等占位符換成實際值（不必填密碼：登入用公司帳號密碼，由 WPX 驗證）。
 2. 要讓這位管理者能處理申請單的執行回報，再依下方第 6a 段為**每個帳號類別各加一列**（關卡 6 認執行人對照表 IM_EXEC_MAP、不認角色；類別代碼用下方查代碼的第二句查）。這一步也可以省略，改在第 3 步完成、登入後到執行人對照頁指派（範本的 SYS_ADMIN 角色初始就有 SYS_EXECUTOR）。
 3. 執行以上全部 INSERT，確認每句都影響 1 筆後，執行 `COMMIT;`。
 
@@ -181,13 +181,13 @@ SELECT R.CATG_ID, R.REQ_ID, R.SUBMIT_DATE
  ORDER BY R.CATG_ID, R.SUBMIT_DATE, R.REQ_ID;
 ```
 
-**1. 新增使用者**（工號＝登入帳號；英文名必填；雜湊用下方 PwdHashTool 產生；分機電話選填：使用者在申請表單按「同申請人」、且表單上沒填申請人分機與 Email 時，會帶入「使用人聯絡方式」並蓋掉原本填的內容（門禁卡類別不帶入）；不填就把 `'【分機電話】'` 換成 `NULL`）
+**1. 新增使用者**（工號＝登入帳號，密碼是公司帳號密碼、由 WPX 驗證，本系統不存密碼。主要部門含「資訊部」的同仁第一次登入時會自動建立，不必先做本段；本段用於讓資格外的人也能登入——已有帳號列者登入時不再看資格。英文名必填；分機電話選填：使用者在申請表單按「同申請人」、且表單上沒填申請人分機與 Email 時，會帶入「使用人聯絡方式」並蓋掉原本填的內容（門禁卡類別不帶入）；不填就把 `'【分機電話】'` 換成 `NULL`）
 
 ```sql
 INSERT INTO IM_ACCT_USER (USER_ID, USER_EN_NAME, USER_NAME, DEPT_NAME, EMAIL, TEL_NO,
-                          PWD_HASH, PWD_UPDATE_DATE, STATUS, CREATE_DATE, CREATE_BY)
+                          STATUS, CREATE_DATE, CREATE_BY)
 VALUES ('【工號】', '【英文名】', '【中文姓名】', '【部門】', '【Email】', '【分機電話】',
-        '【密碼雜湊】', SYSDATE, 1, SYSDATE, '【操作人工號】');
+        1, SYSDATE, '【操作人工號】');
 ```
 
 **2. 停用／重新啟用使用者**（停用後從下一個請求起就無法使用系統；若正被系統管理員扮演，會自動視為切回。重新啟用曾停用的人＝同句把 STATUS 改 1，不能再 INSERT，會主鍵衝突）
@@ -198,26 +198,12 @@ UPDATE IM_ACCT_USER
  WHERE USER_ID = '【工號】';
 ```
 
-**3. 解鎖**（登入連錯 5 次被鎖）
+**3. 解鎖**：本系統已不鎖定帳號，不必做。登入連錯是由 WPX 鎖住公司帳號，依公司帳號流程找 WPX 窗口解鎖。
 
-```sql
-UPDATE IM_ACCT_USER
-   SET LOCK_DATE = NULL, LOGIN_FAIL_CNT = 0,
-       UPDATE_DATE = SYSDATE, UPDATE_BY = '【操作人工號】'
- WHERE USER_ID = '【工號】';
-```
+**4. 讓某人已登入的畫面立即失效**（例：公司帳號密碼外洩、人員異動當下要立刻踢出。改密碼由公司帳號流程處理，本系統不經手；改了密碼**不會**登出本系統已登入的畫面）
 
-**4. 重設密碼**（重設**不會**登出已登入的人，也**不會**解鎖——被鎖定的人另做第 3 段）
-
-```sql
-UPDATE IM_ACCT_USER
-   SET PWD_HASH = '【密碼雜湊】', PWD_UPDATE_DATE = SYSDATE,
-       UPDATE_DATE = SYSDATE, UPDATE_BY = '【操作人工號】'
- WHERE USER_ID = '【工號】';
-```
-
-- 因密碼外洩而重設時，要讓對方手上的登入一起失效：在**同一個交易**裡接著執行下面這句，把該人所有還沒登出的登入標成已登出，再一起 COMMIT。COMMIT 後舊登入立即永久失效（與系統登出相同），不必停用使用者。這句影響的筆數＝該人所有沒按登出的登入紀錄數，可以是 0 或多筆，不是 1 筆；早已逾時但沒按登出的舊紀錄也算在內，所以筆數可能遠多於實際在線數，屬正常。這句執行後、交易沒結束前，該人正在用的頁面也可能沒反應，核對完立即 COMMIT。
-- COMMIT 後**再執行一次同一句並 COMMIT**：核對筆數期間若有人用舊密碼登入，那次登入會等到第一次 COMMIT 後才完成並取得新 token，第二次執行就是把它補標掉（通常影響 0 筆）。
+- 執行下面這句，把該人所有還沒登出的登入標成已登出，再 COMMIT。COMMIT 後舊登入立即永久失效（與系統登出相同），不必停用使用者。這句影響的筆數＝該人所有沒按登出的登入紀錄數，可以是 0 或多筆，不是 1 筆；早已逾時但沒按登出的舊紀錄也算在內，所以筆數可能遠多於實際在線數，屬正常。這句執行後、交易沒結束前，該人正在用的頁面也可能沒反應，核對完立即 COMMIT。
+- COMMIT 後**再執行一次同一句並 COMMIT**：核對筆數期間若有人用舊密碼登入，那次登入會等到第一次 COMMIT 後才完成並取得新 token，第二次執行就是把它補標掉（通常影響 0 筆）。若密碼還沒改、對方隨時能再登入，要先停用使用者（第 2 段）。
 
 ```sql
 UPDATE IM_ACCT_LOGIN_TOKEN
@@ -313,21 +299,6 @@ DELETE FROM IM_ACCT_NOTIFY_LOG
 
 **未列出的操作**（例如改使用者的 Email、部門、分機電話）：UPDATE 一律一併設 `UPDATE_DATE = SYSDATE`、`UPDATE_BY = '【操作人工號】'`，WHERE 用該表主鍵，確認影響 1 筆再 COMMIT。新增代碼（帳號類別、巡檢項目、資產分類）可能牽動程式邏輯，先找開發人員，不要直接 INSERT。
 
-### 產生密碼雜湊（PwdHashTool）
-
-在 `infra_manager\` 下（`JAVA_HOME` 已指向 JDK 25）：
-
-```
-.\mvnw.cmd -q compile
-"%JAVA_HOME%\bin\java" -cp target\classes com.mpx.infra_manager.tools.PwdHashTool
-```
-
-- 上面第二行是 cmd 寫法。直接在主控台執行時輸入密碼不回顯，按 Enter 後印出 `PBKDF2$...` 字串，整串貼進 PWD_HASH。
-- 讀一行密碼，只去掉行尾換行，其他字元（含空白）原樣保留。
-- 不接受命令列參數（帶參數會直接結束，exit code 2）；不寫檔、不記 log。
-- 也可用管線餵入一行密碼，但密碼會留在 shell 歷史；cmd 的 `echo xxx|` 會把 `|` 前的空白一起送進去，要用管線請改用 Git Bash 或 PowerShell。
-- 同一密碼每次產生的字串都不同，都能驗證通過。
-
 ## 7. 手動觸發排程
 
 系統沒有觸發排程的畫面，以 curl 呼叫 API。需 SYS_JOB_RUN 權限（初始資料中只有 SYS_ADMIN 角色有）。以下以直連後端（`server.port` 8989、context-path `/infra_manager`）為例；經殼 jar 時把 `http://localhost:8989/infra_manager` 換成殼 jar 的位址加 `/infra_manager_web`（例 `http://localhost:8787/infra_manager_web/api/v1/...`）。指令為 Git Bash 寫法，`【】` 換成實際值。
@@ -356,7 +327,7 @@ echo "$RESP" | tail -n 1
 - 最後印出 `200` 就是成功，token 已存進變數 `TOKEN`，下一步直接用；要確認有沒有存到，用 `echo ${#TOKEN}` 看長度（應為 43），不要把 token 本身印出來。不是 200 時用 `echo "$RESP"` 看錯誤訊息。
 - 印出 `000`＝連不上後端（沒啟動或位址錯），這時 `$RESP` 也沒有內容。
 - 印出 `404`＝網址前綴和後端的 `server.servlet.context-path` 對不上（網址少了 `/infra_manager`、仍用舊前綴 `/im_acct_insp`，或後端沒設 context-path）。
-- 工號不存在、密碼錯、使用者停用都回 401 `{"message":"帳號或密碼錯誤"}`；其中只有「密碼錯」每次算一次輸錯，連錯 5 次會被鎖定（工號不存在或已停用不計次）。被鎖定回 401「此帳號已鎖定，請聯絡系統管理員」（解鎖見第 6 節第 3 段）。
+- 密碼是公司帳號密碼，由 WPX 驗證。登入失敗都回 401，訊息三種：「帳號或密碼錯誤」（工號不存在或密碼錯）、「帳號無法使用」（公司帳號被鎖定或停用，或本系統停用、不符首次登入資格）、「登入服務異常，請聯絡管理者」（WPX 連不上或回應異常，看後端 log 的 WPX 原始 Code）。連錯會由 WPX 鎖住公司帳號，影響範圍不只本系統，測試時不要反覆送錯密碼。
 - 回 400「請求內容格式錯誤」＝密碼含 Tab 之類的控制字元，組出的 JSON 格式不合法、後端拒收，請找開發人員協助。
 
 **2. 觸發排程**

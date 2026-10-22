@@ -27,7 +27,7 @@ import { clearToken, getToken } from './tokenStore'
 /** 401 預設文案（A03） */
 export const MSG_SESSION_EXPIRED = '登入已逾時，請重新登入'
 
-/** 不套 401 導向的路徑：登入失敗（A01／A02）由登入頁自己顯示；登出時 token 已失效也照常登出，不另顯示逾時訊息 */
+/** 不套 401 導向的路徑：登入失敗（A01／A04／A05）由登入頁自己顯示；登出時 token 已失效也照常登出，不另顯示逾時訊息 */
 const NO_REDIRECT_PATHS = ['/auth/login', '/auth/logout']
 
 /**

@@ -78,7 +78,7 @@
 - 以工號＋公司帳號密碼登入。密碼由 WPX 的 VerifySecure 登入 API 驗證（元件 `WpxAuthClient`），本系統不存、不比對密碼，也不計失敗次數、不鎖定（連錯鎖定由 WPX 處理）。WPX 發的 token 本系統不保存，驗過後由本系統發自己的 token。
 - 判斷順序：
   1. 工號空白或超過 30 字、密碼空白 → A01，不送 WPX。
-  2. 送 WPX 驗證：帳密錯（WPX Code -1、-11～-15）→ A01；留職停薪、鎖定、時段、分店或 IP 限制（-2～-10）→ A04；檢查層錯誤（-18～-27）、未列出的代碼、Code 0 但 Success 不是 true、連不上、本系統 WPX 設定不全 → A05。WPX 原始 Code 只寫 log，不回給使用者。
+  2. 送 WPX 驗證：帳密錯（WPX Code -1、-11～-15）→ A01；留職停薪、鎖定、時段、分店或 IP 限制（-2～-10）→ A04；檢查層錯誤（-18～-27）、未列出的代碼、Code 0 但 Success 不是 true、連不上 → A05（本系統 WPX 設定不全時後端根本不會啟動，見「環境設定」）。WPX 原始 Code 只寫 log，不回給使用者。
   3. WPX 驗過才查本系統（先查本系統會讓停用帳號不必知道密碼就被告知無法使用）。本系統沒有此工號的帳號列 → 首次登入自動建立：同步表 `PX_SYNC_EMP` 查得到、且主要部門（主管的部門優先、其次部門代碼最小）名稱含「資訊部」才建立，只寫工號、STATUS＝1 與共用欄（CREATE_BY＝`SYSTEM`），只取得一般人員權限；資格判斷與建立在同一句 SQL。不符資格 → A04。兩人同時首次登入同一工號時，後到者撞主鍵後重查、照常登入。
   4. 已有帳號列者不再看資格（調離資訊部照常登入；DBA 手動建帳號列即可讓資格外的人登入）。帳號停用（STATUS≠1）或同步表查無（STATUS≠1 也算查無）→ A04。
   5. 寫最後登入時間（影響 0 筆＝帳號列已被刪 → A04）、發新 token。
@@ -668,7 +668,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 - **DB 存取**：一律經範本共用元件 `com.mpx.common.db.DbClient`（內部用 `NamedParameterJdbcTemplate`，具名參數 SQL）；連線資訊於執行期向「DB 連線資訊 API」取得，DB 別名寫在設定檔。`com.mpx.common.*` 與 `com.mpx.Application` 為範本共用程式，不屬本模組業務。
 - **交易**：業務層以 TransactionTemplate 包多句寫入；交易管理器 `LazyDataSourceTransactionManager` 第一次開交易才取 DataSource。最後登入時間、最後存取時間、首次登入自動建立等單句寫入不開交易。
 - **時間**：業務時間由應用程式 Clock（Asia/Taipei）產生並以參數綁定寫入，SQL 不用 SYSDATE；比較日期時去掉時分秒。
-- **密碼**：登入不比對本系統的密碼雜湊（改由 WPX 驗證，見「登入、登出」）。程式裡仍有雜湊元件 `PasswordHasher`（PBKDF2WithHmacSHA256）與 `tools\PwdHashTool.java`，登入流程已不使用。
+- **密碼**：本系統不存、不比對密碼，也沒有密碼雜湊元件；密碼只在登入時轉交 WPX 驗證（見「登入、登出」）。
 - **WPX 呼叫**：密碼以 WPX 公鑰 RSA-OAEP 加密、整包以本系統私鑰 SHA256withRSA 簽章；密碼、加密內容、簽章、WPX 回應本文與 WPX 發的 token 一律不寫 log、不保存，log 只記工號與 WPX 原始 Code。
 - **token**：32 bytes 亂數，base64url 回前端；DB 只存 SHA-256（16 進位小寫 64 碼）。驗證通過即更新最後存取時間（節流為每分鐘最多寫一次）。閒置上限（`AcctConst.TOKEN_IDLE_MINUTES = TOKEN_MAX_HOURS * 60`，要縮短時改成分鐘數字）、8 小時、5 次與雜湊參數皆為程式常數。log 不記密碼、token、雜湊值。
 - **API 不快取**：後端 `/api/**`（context 內路徑，即完整網址 `/infra_manager/api/**`）回應一律帶 `Cache-Control: no-store`（殼 jar 照抄給瀏覽器），避免按上一頁時讀到硬碟快取裡的舊身分，也不讓個資留在硬碟快取。Spring 找處理者之前就失敗的 405／406／415 與上傳超限 413 不帶（都是 POST 或前端不會發的請求）。
@@ -686,11 +686,10 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 | 層 | 檔案與職責 |
 |---|---|
-| common | `AppConfig`（Clock、TransactionTemplate、啟用排程、載入業務設定）、`Identity`／`IdentityProvider`／`IdentityArgumentResolver`（取身分單一介面，Controller 宣告 Identity 參數即注入）、`TokenCodec`、`PasswordHasher`、`AcctConst`（代碼、時效、通知收件角色）、`AcctMsg`（錯誤文案）、`ApiException`、`GlobalExceptionHandler`（例外轉 `{message}`；multipart 超限轉 413 E15；其他 500 不外洩）、`NoStoreInterceptor`（context 內 `/api/**` 回應 no-store，由 `WebConfig` 註冊）、`DocSeqService`（取號）、`Texts`（顯示名、trim、LIKE 跳脫、欄寬檢查） |
+| common | `AppConfig`（Clock、TransactionTemplate、啟用排程、載入業務設定）、`Identity`／`IdentityProvider`／`IdentityArgumentResolver`（取身分單一介面，Controller 宣告 Identity 參數即注入）、`TokenCodec`、`AcctConst`（代碼、時效、通知收件角色）、`AcctMsg`（錯誤文案）、`ApiException`、`GlobalExceptionHandler`（例外轉 `{message}`；multipart 超限轉 413 E15；其他 500 不外洩）、`NoStoreInterceptor`（context 內 `/api/**` 回應 no-store，由 `WebConfig` 註冊）、`DocSeqService`（取號）、`Texts`（顯示名、trim、LIKE 跳脫、欄寬檢查） |
 | controller | `AuthController`、`HomeController`、`AccountController`、`RequestController`、`AttachmentController`、`InspectionController`、`JobController`、`AdminController`（系統管理：角色指派、執行人對照與角色權限設定）；只轉呼叫 service，不寫權限邏輯 |
 | service | `AuthService`（登入〔WPX 驗證、首次登入自動建立〕、登出、`/me`、切換身分）、`WpxAuthClient`（呼叫 WPX 登入 API、結果分三類）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`SmtpMailSender`（SMTP 寄出）／`LogMailSender`（SMTP 未設定時只寫 log）、`MailAllowList`（寄送名單）、`JobService`、`HomeService`、`InspectionService`、`CodeService`、`RoleAdminService`（角色指派與執行人對照維護：清單、候選人、指派、移除；兩個名單共用同一條驗證順序、全域鎖、HolderGuard、軌跡流程，差異集中在 Roster）、`RolePermAdminService`（角色權限設定：可見碼矩陣、一個角色的差異存檔 11 步驗證；取鎖、角色與原因檢查沿用 RoleAdminService）、`HolderGuard`（名單維護的「最後一位持有人」檢查：權限碼口徑與執行人口徑；第三頁每碼各自排除該格）、`AdminLogWriter`（名單維護軌跡與 CONTENT_JSON 組裝） |
 | dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`RoleAdminDao`（角色指派與執行人對照名單、全域互斥鎖、持有人數與執行人數、在途案件）、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
-| tools | `PwdHashTool`：從主控台讀密碼（不回顯、不收命令列參數）輸出 PWD_HASH 字串（登入已不使用密碼雜湊） |
 
 **前端主要程式**（`infra_manager_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/infra_manager_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage，key `infra_manager_web.token`、`infra_manager_web.identityChanged`；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\accountExport.ts`（帳號列表匯出與共用儲存格文字）、`utils\perms.ts`、`utils\codes.ts`。
 
@@ -1010,7 +1009,7 @@ END
 | IM_ACCT_ROLE_USER | 55 | 啟用 22 筆；見下 |
 | 其他業務與紀錄表 | — | 測試 DB 已有測試資料、筆數隨測試變動，不記：IM_ACCT、IM_ACCT_REQ、IM_ACCT_ATTACH、IM_ACCT_HIST、IM_INSP、IM_INSP_RESULT、IM_ACCT_NOTIFY_LOG、IM_ACCT_JOB_RUN、IM_ACCT_LOGIN_TOKEN、IM_ACCT_ADMIN_LOG、IM_DOC_SEQ |
 
-測試 DB 使用者（皆為真實人員；本表只記英文名，工號、中文姓名、部門以 DB 的 IM_ACCT_USER 為準；13 位皆啟用、未鎖定、有密碼雜湊）。表中只列啟用中（STATUS＝1）的角色指派與執行人對照：
+測試 DB 使用者（皆為真實人員；本表只記英文名，工號、中文姓名、部門以 DB 的 IM_ACCT_USER 為準；13 位皆啟用；登入用各人公司帳號密碼，由 WPX 驗證）。表中只列啟用中（STATUS＝1）的角色指派與執行人對照：
 
 | 英文名 | 角色（GENERAL 不列） | 執行人類別 |
 |---|---|---|
@@ -1230,7 +1229,6 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | E26 | 409 | 其他管理員正在調整名單，請稍後再試 |
 | E27 | 409 | 權限設定已被他人調整，請重新整理（角色權限存檔：added 的碼現在已授予、或 removed 的碼現在未授予） |
 | A01 | 401 | 帳號或密碼錯誤 |
-| A02 | 401 | 此帳號已鎖定，請聯絡系統管理員（登入已不再回；鎖定交給 WPX） |
 | A03 | 401 | 登入已逾時，請重新登入 |
 | A04 | 401 | 帳號無法使用 |
 | A05 | 401 | 登入服務異常，請聯絡管理者 |
@@ -1255,7 +1253,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | | `spring.mail.host`、`spring.mail.port`、`spring.mail.properties.mail.smtp.*` | SMTP 主機、port、連線／讀取／寫入逾時；host 留空＝不實際寄信、只寫 log |
 | `config\host.properties` | `rt-api.domain`、`db.connect.api.port`、`db.connect.api.path` | DB 連線資訊 API 的協定＋主機、port、路徑 |
 | | `db.connect.api.domain.path` | 由上面三個 key 組合，程式只讀這個；四個 key 都要保留（值可空） |
-| | `wpx.domain`、`wpx.api.port`、`wpx.api.path`、`wpx.api.domain.path` | WPX 登入 API 的協定＋主機、port、路徑與組合結果（程式只讀 `wpx.api.domain.path`；與 UAT 上 PX Track 同一組 key）。登入用；未設定時仍可啟動，但登入一律回 A05 |
+| | `wpx.domain`、`wpx.api.port`、`wpx.api.path`、`wpx.api.domain.path` | WPX 登入 API 的協定＋主機、port、路徑與組合結果（程式只讀 `wpx.api.domain.path`；與 UAT 上 PX Track 同一組 key）。登入用，必填：未設定時後端啟動失敗 |
 | `config\database.properties` | `itflow.db.alias` | 本模組 23 張表所在 DB 的別名（連線資訊 API 認得的名稱）；所有 DAO 讀這個 key |
 | `config\environment.properties` | `infra.manager.attach.dir` | 附件根目錄絕對路徑（必填）；未設定或非絕對路徑時後端啟動失敗 |
 | | `infra.manager.job.enabled` | 是否啟用排程（關閉時手動 API 仍可用） |
@@ -1265,9 +1263,9 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | | `infra.manager.mail.allow-list` | 寄送名單（逗號分隔工號，半形或全形逗號皆可）；留空＝誰都不寄 |
 | | `infra.manager.mail.send-to-all` | true＝忽略寄送名單、寄給所有收件人（預設 false） |
 | | `infra.manager.mail.site-url` | 系統網址（使用者開的前端網址，含 context，例 `http://主機:8787/infra_manager_web/`），信末「前往系統」連結用；留空＝不放連結；不是 `http://`／`https://` 開頭、格式不正確或沒有主機（含空白、雙引號等）時視同留空、啟動記 WARN；`#` 之後、結尾 `index.html` 與斜線會去掉 |
-| | `infra.manager.wpx.app-id` | WPX 登錄的系統代號（測試環境與 PX Track 共用 `Test`，區分大小寫）。登入用；未設定時登入一律回 A05 |
+| | `infra.manager.wpx.app-id` | WPX 登錄的系統代號（測試環境與 PX Track 共用 `Test`，區分大小寫）。必填：未設定時後端啟動失敗 |
 | | `infra.manager.wpx.dbalias` | WPX 的 dbalias（預設 `APX`，測試與正式相同） |
-| | `infra.manager.wpx.private-key` | 本系統簽章私鑰檔（PKCS#8 PEM）的絕對路徑；檔案放 repo 與 jar 以外 |
+| | `infra.manager.wpx.private-key` | 本系統簽章私鑰檔（PKCS#8 PEM）的絕對路徑；檔案放 repo 與 jar 以外。必填：未設定、不是絕對路徑、檔案讀不到或格式不對時，後端啟動失敗並記一行 ERROR「WPX 登入設定不正確，後端無法啟動：…」（啟動時只檢查本機設定、不連 WPX；WPX 連不上時照常啟動，登入回 A05） |
 | | `infra.manager.wpx.timeout-seconds` | 呼叫 WPX 的連線與讀取逾時秒數（預設 10） |
 
 `environment.properties` 不存在時後端仍可啟動、缺 key 用程式預設值（附件根目錄除外）。

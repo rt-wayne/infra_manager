@@ -11,6 +11,9 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-20
 // 變更說明: 階段 1 審查 M1：Code 0 但 Success 不是 boolean true（false、缺欄、字串 "true"）一律歸服務異常、附 Code 0，並記「回應不一致」
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 7 回合 2：啟動檢查——設定齊全通過且不發請求；六種設定不正確皆啟動失敗、各記一行 ERROR、訊息不含私鑰內容
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -388,6 +391,36 @@ class WpxAuthClientTest {
 		assertThat(newClient(BASE, " ", privateKeyFile.toString()).verify(USER, PWD).outcome()).isEqualTo(Outcome.SERVICE_ERROR);
 		assertThat(newClient(BASE, APP_ID, "").verify(USER, PWD).outcome()).isEqualTo(Outcome.SERVICE_ERROR);
 		server.verify(); // 沒有設定任何期望：一個請求都不該發
+	}
+
+	/** 階段 7 回合 2：設定齊全且私鑰可讀 → 啟動檢查通過，且不連 WPX */
+	@Test
+	void startup_validConfig_passesWithoutAnyRequest() {
+		client.validateOnStartup();
+		server.verify(); // 沒有設定任何期望：啟動檢查不該發請求
+		assertThat(logs.list).noneMatch(e -> e.getFormattedMessage().startsWith(WpxAuthClient.MSG_STARTUP_INVALID));
+	}
+
+	/** 階段 7 回合 2：位址、appId、私鑰任一未設定、私鑰不是絕對路徑、讀不到、不是 PKCS#8 → 啟動失敗並記 ERROR，訊息不含私鑰內容 */
+	@Test
+	void startup_invalidConfig_failsWithErrorLog() throws Exception {
+		Path bad = tempDir.resolve("startup-bad.pem");
+		Files.writeString(bad, "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n", StandardCharsets.US_ASCII);
+		List<WpxAuthClient> cases = List.of(newClient("", APP_ID, privateKeyFile.toString()),
+				newClient(BASE, " ", privateKeyFile.toString()), newClient(BASE, APP_ID, ""),
+				newClient(BASE, APP_ID, "relative/my.private.pkcs8.pem"),
+				newClient(BASE, APP_ID, tempDir.resolve("no-such.pem").toString()), newClient(BASE, APP_ID, bad.toString()));
+		for (WpxAuthClient c : cases) {
+			try {
+				c.validateOnStartup();
+				org.junit.jupiter.api.Assertions.fail("設定不正確卻通過啟動檢查");
+			} catch (IllegalStateException e) {
+				assertThat(e.getMessage()).startsWith(WpxAuthClient.MSG_STARTUP_INVALID).doesNotContain("BEGIN");
+			}
+		}
+		assertThat(logs.list.stream().filter(e -> e.getLevel() == ch.qos.logback.classic.Level.ERROR
+				&& e.getFormattedMessage().startsWith(WpxAuthClient.MSG_STARTUP_INVALID))).hasSize(cases.size());
+		server.verify();
 	}
 
 	@Test
