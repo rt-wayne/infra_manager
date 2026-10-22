@@ -670,7 +670,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 - **時間**：業務時間由應用程式 Clock（Asia/Taipei）產生並以參數綁定寫入，SQL 不用 SYSDATE；比較日期時去掉時分秒。
 - **密碼**：本系統不存、不比對密碼，也沒有密碼雜湊元件；密碼只在登入時轉交 WPX 驗證（見「登入、登出」）。
 - **WPX 呼叫**：密碼以 WPX 公鑰 RSA-OAEP 加密、整包以本系統私鑰 SHA256withRSA 簽章；密碼、加密內容、簽章、WPX 回應本文與 WPX 發的 token 一律不寫 log、不保存，log 只記工號與 WPX 原始 Code。
-- **token**：32 bytes 亂數，base64url 回前端；DB 只存 SHA-256（16 進位小寫 64 碼）。驗證通過即更新最後存取時間（節流為每分鐘最多寫一次）。閒置上限（`AcctConst.TOKEN_IDLE_MINUTES = TOKEN_MAX_HOURS * 60`，要縮短時改成分鐘數字）、8 小時、5 次與雜湊參數皆為程式常數。log 不記密碼、token、雜湊值。
+- **token**：32 bytes 亂數，base64url 回前端；DB 只存 SHA-256（16 進位小寫 64 碼）。驗證通過即更新最後存取時間（節流為每分鐘最多寫一次）。閒置上限（`AcctConst.TOKEN_IDLE_MINUTES = TOKEN_MAX_HOURS * 60`，要縮短時改成分鐘數字）與 8 小時皆為程式常數。log 不記密碼、token、雜湊值。
 - **API 不快取**：後端 `/api/**`（context 內路徑，即完整網址 `/infra_manager/api/**`）回應一律帶 `Cache-Control: no-store`（殼 jar 照抄給瀏覽器），避免按上一頁時讀到硬碟快取裡的舊身分，也不讓個資留在硬碟快取。Spring 找處理者之前就失敗的 405／406／415 與上傳超限 413 不帶（都是 POST 或前端不會發的請求）。
 - **安全標頭**：殼 jar `/infra_manager_web` 底下的所有回應（畫面、靜態檔、轉送後端的 API 回應、錯誤回應）一律帶 `Content-Security-Policy: default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'; worker-src 'self' blob:`（只准載入本站的程式、樣式、圖片與連線；HTML 的 style 屬性放行，因為附件以 blob 網址開新分頁時沿用本站 CSP，瀏覽器內建的 PDF／圖片檢視頁靠 style 屬性排版，被擋時 Edge 的 PDF 只剩約 150px 高、圖片不置中；背景執行緒（Web Worker）放行 blob 網址，因為帳號列表匯出 xlsx 的壓縮（`write-excel-file` 交給 `fflate`）在子檔超過約 160 KB 時以 blob 網址建背景執行緒，被擋時帳號一多就匯出失敗；`<style>` 區塊與行內程式仍不放行，頁面本身的程式仍只准本站）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`；後端回應若帶同名標頭以後端為準。Tomcat 在進入應用程式前就送出的回應不帶（開 `/infra_manager_web` 未加斜線時的 302 轉址、`/infra_manager_web` 以外路徑的 404），兩者都沒有可執行內容。不帶 HSTS（正式環境改走 HTTPS 後再加，見 BACKLOG 第 34 項）。前端若引入外站資源、行內程式、`<style>` 區塊或 data: 圖片，要同步放寬 CSP：改 `SecurityHeadersConfig` 的 `CSP`、`SecurityHeadersConfigTest` 的預期值（測試刻意寫死字串，CSP 被誤改時才抓得到）與本段的值，否則畫面會被瀏覽器擋下。
 - **已知限制——允許任何網站嵌入**：依使用者裁示（2026-10-11）不帶 X-Frame-Options 與 frame-ancestors，任何網站都能用 iframe 嵌入本系統。新版瀏覽器（約 Chrome／Edge 115、Firefox 103 起）會把框內的 localStorage 依外層網站的「站」（同協定＋同一個可註冊網域，不看 port）分開存放：
@@ -1268,7 +1268,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | | `infra.manager.wpx.private-key` | 本系統簽章私鑰檔（PKCS#8 PEM）的絕對路徑；檔案放 repo 與 jar 以外。必填：未設定、不是絕對路徑、檔案讀不到或格式不對時，後端啟動失敗並記一行 ERROR「WPX 登入設定不正確，後端無法啟動：…」（啟動時只檢查本機設定、不連 WPX；WPX 連不上時照常啟動，登入回 A05） |
 | | `infra.manager.wpx.timeout-seconds` | 呼叫 WPX 的連線與讀取逾時秒數（預設 10） |
 
-`environment.properties` 不存在時後端仍可啟動、缺 key 用程式預設值（附件根目錄除外）。
+`environment.properties` 缺 key 時用程式預設值；附件根目錄與 WPX 的 app-id、私鑰沒有預設值，缺了後端啟動失敗（所以這個檔必須存在）。
 
 **殼 jar `infra_manager_web\infra_manager_web\src\main\resources\`**
 
