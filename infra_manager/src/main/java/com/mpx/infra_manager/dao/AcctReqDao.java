@@ -28,6 +28,10 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 5 回合 1（裁示 D2A、第 67 項併入）：刪 nameExpr（英文名 (中文名)），申請人／執行人／複驗人姓名
+//           改 LEFT JOIN 同步表 PX_SYNC_EMP（EmpSql.joinEmp／nameExpr；只顯示中文名、查無退回該列工號、工號空則為空）；不再 JOIN IM_ACCT_USER
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -48,12 +52,6 @@ import com.mpx.infra_manager.model.TodoItem;
 @Repository
 public class AcctReqDao {
 
-	/** 人員顯示名（英文名 (中文名)）；u 為 IM_ACCT_USER 別名 */
-	static String nameExpr(String u) {
-		return "CASE WHEN " + u + ".USER_ID IS NULL THEN NULL WHEN " + u + ".USER_NAME IS NULL THEN " + u + ".USER_EN_NAME ELSE "
-				+ u + ".USER_EN_NAME || ' (' || " + u + ".USER_NAME || ')' END";
-	}
-
 	static final String SELECT_BASE = """
 			SELECT R.REQ_ID, R.ACCT_ID, R.REQ_TYPE_CODE, R.REQ_STATE_CODE, R.CURR_STAGE_ID, R.APPLY_BY, R.APPLY_DEPT, R.APPLY_DATE,
 			       R.CATG_ID, R.ACCT_NAME, R.SYS_NAME, R.DOOR_SCOPE_CODE, R.ASSET_CLASS_ID, R.IS_PRIV,
@@ -63,17 +61,16 @@ public class AcctReqDao {
 			       R.EFFECT_DATE, R.VERIFY_BY, R.VERIFY_DATE, R.VERIFY_REJECT_CNT, R.VERIFY_REJECT_REASON, R.DONE_DATE,
 			       R.VERSION_NO, R.STATUS, R.CREATE_DATE, R.CREATE_BY, R.UPDATE_DATE, R.UPDATE_BY,
 			       S.STAGE_NAME, C.CATG_NAME, AC.ASSET_CLASS_NAME,
-			""" + "       " + nameExpr("UA") + " AS APPLY_BY_NAME,\n"
-			+ "       " + nameExpr("UE") + " AS EXEC_BY_NAME,\n"
-			+ "       " + nameExpr("UV") + " AS VERIFY_BY_NAME\n" + """
+			""" + "       " + EmpSql.nameExpr("UA", "R.APPLY_BY") + " AS APPLY_BY_NAME,\n"
+			+ "       " + EmpSql.nameExpr("UE", "R.EXEC_BY") + " AS EXEC_BY_NAME,\n"
+			+ "       " + EmpSql.nameExpr("UV", "R.VERIFY_BY") + " AS VERIFY_BY_NAME\n" + """
 			  FROM IM_ACCT_REQ R
 			  LEFT JOIN IM_ACCT_APPR_STAGE S ON S.STAGE_ID = R.CURR_STAGE_ID
 			  LEFT JOIN IM_ACCT_CATG C ON C.CATG_ID = R.CATG_ID
 			  LEFT JOIN IM_ASSET_CLASS AC ON AC.ASSET_CLASS_ID = R.ASSET_CLASS_ID
-			  LEFT JOIN IM_ACCT_USER UA ON UA.USER_ID = R.APPLY_BY
-			  LEFT JOIN IM_ACCT_USER UE ON UE.USER_ID = R.EXEC_BY
-			  LEFT JOIN IM_ACCT_USER UV ON UV.USER_ID = R.VERIFY_BY
-			""";
+			""" + "  " + EmpSql.joinEmp("UA", "R.APPLY_BY") + "\n"
+			+ "  " + EmpSql.joinEmp("UE", "R.EXEC_BY") + "\n"
+			+ "  " + EmpSql.joinEmp("UV", "R.VERIFY_BY") + "\n";
 
 	public static final String FIND_BY_ID = SELECT_BASE + """
 			 WHERE R.REQ_ID = :reqId
@@ -189,14 +186,13 @@ public class AcctReqDao {
 	// ---- 待辦（spec §4.5、§6.3）；關卡／類別清單為空時 Service 不呼叫（避免 IN () 語法錯）
 	static final String TODO_BASE = """
 			SELECT 'ACCT_REQ' AS SOURCE, R.REQ_ID, R.REQ_TYPE_CODE, R.CATG_ID, C.CATG_NAME, R.ACCT_NAME, R.IS_PRIV, R.APPLY_BY,
-			""" + "       " + nameExpr("UA") + " AS APPLY_BY_NAME,\n" + """
+			""" + "       " + EmpSql.nameExpr("UA", "R.APPLY_BY") + " AS APPLY_BY_NAME,\n" + """
 			       R.CURR_STAGE_ID AS STAGE_ID, S.STAGE_NAME, R.SUBMIT_DATE, R.VERSION_NO, R.VERIFY_REJECT_CNT,
 			       R.VERIFY_REJECT_REASON
 			  FROM IM_ACCT_REQ R
 			  LEFT JOIN IM_ACCT_CATG C ON C.CATG_ID = R.CATG_ID
 			  LEFT JOIN IM_ACCT_APPR_STAGE S ON S.STAGE_ID = R.CURR_STAGE_ID
-			  LEFT JOIN IM_ACCT_USER UA ON UA.USER_ID = R.APPLY_BY
-			""";
+			""" + "  " + EmpSql.joinEmp("UA", "R.APPLY_BY") + "\n";
 
 	public static final String FIND_TODO_APPROVE = TODO_BASE + """
 			 WHERE R.REQ_STATE_CODE = 'REVIEW'

@@ -82,6 +82,10 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-10-22
 // 變更說明: 第 124 項階段 4 回合 1：四個計數句與收件人前綴改用 E3 有效使用者片段、收件人姓名與 Email 讀同步表；
 //           既有 COUNT_* 斷言 contains("U.STATUS = 1") 會被 RU.STATUS = 1 假滿足（階段 3 審查 B3），改比對片段全文並以正規式擋單獨的 U.STATUS = 1
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: 第 124 項階段 5 回合 1：申請單（含待辦）、附件、緊急存取（含影響帳號）共 13 個人名欄逐一斷言讀同步表片段，
+//           且這五段 SQL 不含 IM_ACCT_USER、USER_EN_NAME（原「人員姓名一律取IM_ACCT_USER或快照」改名）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -327,19 +331,34 @@ class SqlConstantScanTest {
 				.contains("U.STATUS AS USER_STATUS").doesNotContain("U.USER_NAME").doesNotContain(EmpSql.activeUserCond("U"));
 	}
 
+	/** 第 124 項階段 5 回合 1：申請單、待辦、附件、緊急存取的人名一律讀同步表（只顯示中文名、查無退回該欄工號），不再 JOIN IM_ACCT_USER；歷史與巡檢用快照 */
 	@Test
-	void 人員姓名一律取IM_ACCT_USER或快照() {
-		assertThat(AcctReqDao.FIND_BY_ID).contains("LEFT JOIN IM_ACCT_USER UA ON UA.USER_ID = R.APPLY_BY");
+	void 人員姓名一律取同步表或快照() {
+		assertNameFromSync(AcctReqDao.FIND_BY_ID, "UA", "R.APPLY_BY", "APPLY_BY_NAME");
+		assertNameFromSync(AcctReqDao.FIND_BY_ID, "UE", "R.EXEC_BY", "EXEC_BY_NAME");
+		assertNameFromSync(AcctReqDao.FIND_BY_ID, "UV", "R.VERIFY_BY", "VERIFY_BY_NAME");
+		assertNameFromSync(AcctReqDao.FIND_TODO_APPROVE, "UA", "R.APPLY_BY", "APPLY_BY_NAME");
+		assertNameFromSync(AttachDao.FIND_ACTIVE_BY_REQ, "U", "T.CREATE_BY", "CREATE_BY_NAME");
+		// S5：四個實際操作人也回姓名（送出 CREATE_BY、回報／處理／結案 *_ACT_BY）
+		assertNameFromSync(EmgDao.SELECT_BASE, "UA", "E.APPLY_BY", "APPLY_BY_NAME");
+		assertNameFromSync(EmgDao.SELECT_BASE, "UX", "E.CREATE_BY", "CREATE_BY_NAME");
+		assertNameFromSync(EmgDao.SELECT_BASE, "URA", "E.REPORT_ACT_BY", "REPORT_ACT_BY_NAME");
+		assertNameFromSync(EmgDao.SELECT_BASE, "UD", "E.DECIDE_BY", "DECIDE_BY_NAME");
+		assertNameFromSync(EmgDao.SELECT_BASE, "UDA", "E.DECIDE_ACT_BY", "DECIDE_ACT_BY_NAME");
+		assertNameFromSync(EmgDao.SELECT_BASE, "UC", "E.CLOSE_BY", "CLOSE_BY_NAME");
+		assertNameFromSync(EmgDao.SELECT_BASE, "UCA", "E.CLOSE_ACT_BY", "CLOSE_ACT_BY_NAME");
+		assertNameFromSync(EmgDao.FIND_AFFECTS, "UR", "A.RECORD_BY", "RECORD_BY_NAME");
+		for (String sql : List.of(AcctReqDao.FIND_BY_ID, AcctReqDao.FIND_TODO_APPROVE, AttachDao.FIND_ACTIVE_BY_REQ,
+				EmgDao.SELECT_BASE, EmgDao.FIND_AFFECTS)) {
+			assertThat(sql).doesNotContain("IM_ACCT_USER").doesNotContain("USER_EN_NAME");
+		}
 		assertThat(AcctHistDao.FIND_BY_ACCT).contains("H.ACT_BY_NAME").doesNotContain("IM_ACCT_USER");
 		assertThat(InspDao.INSP_SUMMARY).contains("I.INSP_BY_NAME").doesNotContain("IM_ACCT_USER");
-		assertThat(EmgDao.SELECT_BASE).contains("LEFT JOIN IM_ACCT_USER UA ON UA.USER_ID = E.APPLY_BY")
-				.contains("LEFT JOIN IM_ACCT_USER UD ON UD.USER_ID = E.DECIDE_BY")
-				.contains("LEFT JOIN IM_ACCT_USER UC ON UC.USER_ID = E.CLOSE_BY")
-				// S5：四個實際操作人也回姓名（送出 CREATE_BY、回報／處理／結案 *_ACT_BY）
-				.contains("E.CREATE_BY,").contains("AS CREATE_BY_NAME").contains("LEFT JOIN IM_ACCT_USER UX ON UX.USER_ID = E.CREATE_BY")
-				.contains("AS REPORT_ACT_BY_NAME").contains("LEFT JOIN IM_ACCT_USER URA ON URA.USER_ID = E.REPORT_ACT_BY")
-				.contains("AS DECIDE_ACT_BY_NAME").contains("LEFT JOIN IM_ACCT_USER UDA ON UDA.USER_ID = E.DECIDE_ACT_BY")
-				.contains("AS CLOSE_ACT_BY_NAME").contains("LEFT JOIN IM_ACCT_USER UCA ON UCA.USER_ID = E.CLOSE_ACT_BY");
+	}
+
+	private static void assertNameFromSync(String sql, String alias, String idExpr, String column) {
+		assertThat(sql).as(column).contains(EmpSql.joinEmp(alias, idExpr))
+				.contains(EmpSql.nameExpr(alias, idExpr) + " AS " + column);
 	}
 
 	@Test

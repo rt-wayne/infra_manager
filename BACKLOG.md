@@ -17,9 +17,9 @@
 | 124 | 登入改用 WPX VerifySecure 外部驗證 API（本系統不再存密碼、鎖定交給 WPX、驗證成功但本系統無此人則自動建立，暫限資訊部），人員姓名／Email／部門改由全系統直接讀同步表 `PX_SYNC_EMP`；英文名一併拿掉（原第 67 項併入）、申請人分機改自填；裁示 ①～⑭、D0～D12、E1～E8 與 9 個階段施工計畫見詳情檔；正式環境尚未上線。使用者 2026-10-19～20 交代 | [backlog/124-登入改用外部驗證API.md](backlog/124-登入改用外部驗證API.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：第 124 項階段 5 回合 1 開工——先把開工時的 HEAD 記進「本階段起點」，再做 `AcctReqDao.nameExpr` 改同步表姓名、查無用該列工號（呼叫端 `AcctReqDao`、`AttachDao`、`EmgDao`）與 `SqlConstantScanTest` 姓名斷言；計畫見 `backlog/124-登入改用外部驗證API.md` 階段 5 列。階段 4 已完成並 commit；E8 已改 B（不先上 UAT，階段 9 一次切換）
+- 下一步：第 124 項階段 5 回合 2——`/me` 部門改為只在 `/me` 查主要部門（`EmpSql.primaryDeptExpr`，不進每個請求的 token 檢查）；PRD 硬規則改為「人員關聯與狀態參照 IM_ACCT_USER；姓名、Email、部門讀 PX_SYNC_EMP；登入與 token 須同步表查得到」（順修第 70 項）、改寫「顯示名兩種算法」段；第 13 項結案。計畫見 `backlog/124-登入改用外部驗證API.md` 階段 5 列。回合 1 已 commit
 - 已改動（未 commit）：無（本機 `host.properties` 補 `wpx.*`、`environment.properties` 補 `infra.manager.wpx.*`，兩檔不進版控）
-- 本階段起點：（階段 5 開工時填）
+- 本階段起點：abfaa8d
 - 卡住／待確認：無卡階段 4 的項目；詳情檔待確認 4～9（UAT NTP、切換執行者、正式 appId／HTTPS／key、離職是否消失、正式同步方式、正式 synonym）仍開放，不卡階段 4
 
 ## 已拍板待實作

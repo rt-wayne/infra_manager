@@ -12,6 +12,9 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 5 回合 1：上傳人姓名改 LEFT JOIN 同步表 PX_SYNC_EMP（只顯示中文名、查無退回工號），不再 JOIN IM_ACCT_USER
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -46,10 +49,9 @@ public class AttachDao {
 	static final String SELECT_BASE = """
 			SELECT T.ATTACH_ID, T.REQ_ID, T.ATTACH_TYPE_CODE, T.FILE_NAME, T.FILE_PATH, T.FILE_SIZE, T.MIME_TYPE, T.STATUS,
 			       T.CREATE_DATE, T.CREATE_BY,
-			""" + "       " + AcctReqDao.nameExpr("U") + " AS CREATE_BY_NAME\n" + """
+			""" + "       " + EmpSql.nameExpr("U", "T.CREATE_BY") + " AS CREATE_BY_NAME\n" + """
 			  FROM IM_ACCT_ATTACH T
-			  LEFT JOIN IM_ACCT_USER U ON U.USER_ID = T.CREATE_BY
-			""";
+			""" + "  " + EmpSql.joinEmp("U", "T.CREATE_BY") + "\n";
 
 	public static final String FIND_ACTIVE_BY_REQ = SELECT_BASE + """
 			 WHERE T.REQ_ID = :reqId

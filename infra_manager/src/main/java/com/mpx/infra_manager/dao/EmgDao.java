@@ -47,6 +47,10 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 5 回合 1：SELECT_BASE 七個人名與 FIND_AFFECTS 記錄人姓名改 LEFT JOIN 同步表 PX_SYNC_EMP
+//           （只顯示中文名、查無退回該欄工號），不再 JOIN IM_ACCT_USER、不再讀英文名
 // ============================================================
 
 import java.time.LocalDate;
@@ -90,37 +94,38 @@ public class EmgDao {
 
 	/**
 	 * 主表全欄＋類別名、三種有效身分人名、四種實際操作人（送出 CREATE_BY、回報／處理／結案 *_ACT_BY）及其姓名、計算狀態；
-	 * 列表、明細共用。姓名一律 LEFT JOIN IM_ACCT_USER：UA 申請人、UD 處理人、UC 結案人、UX 送出操作人、URA／UDA／UCA 三個節點的實際操作人
+	 * 列表、明細共用。姓名一律 LEFT JOIN 同步表 PX_SYNC_EMP（只顯示中文名、查無退回該欄工號）：UA 申請人、UD 處理人、UC 結案人、
+	 * UX 送出操作人、URA／UDA／UCA 三個節點的實際操作人
 	 */
 	public static final String SELECT_BASE = """
 			SELECT E.EMG_ID, E.CATG_ID, C.CATG_NAME, E.TARGET_DESCR, E.APPLY_BY,
-			""" + "       " + AcctReqDao.nameExpr("UA") + " AS APPLY_BY_NAME,\n" + """
+			""" + "       " + EmpSql.nameExpr("UA", "E.APPLY_BY") + " AS APPLY_BY_NAME,\n" + """
 			       E.CREATE_BY,
-			""" + "       " + AcctReqDao.nameExpr("UX") + " AS CREATE_BY_NAME,\n" + """
+			""" + "       " + EmpSql.nameExpr("UX", "E.CREATE_BY") + " AS CREATE_BY_NAME,\n" + """
 			       E.APPLY_REASON, E.EXPECT_HOUR_QTY, E.SUBMIT_DATE, E.DUE_DATE,
 			       E.REPORT_TYPE_CODE, E.REPORT_DESCR, E.REPORT_DATE, E.REPORT_ACT_BY,
-			""" + "       " + AcctReqDao.nameExpr("URA") + " AS REPORT_ACT_BY_NAME,\n" + """
+			""" + "       " + EmpSql.nameExpr("URA", "E.REPORT_ACT_BY") + " AS REPORT_ACT_BY_NAME,\n" + """
 			       E.DECIDE_CODE, E.DECIDE_BY,
-			""" + "       " + AcctReqDao.nameExpr("UD") + " AS DECIDE_BY_NAME,\n" + """
+			""" + "       " + EmpSql.nameExpr("UD", "E.DECIDE_BY") + " AS DECIDE_BY_NAME,\n" + """
 			       E.DECIDE_DATE, E.DECIDE_ACT_BY,
-			""" + "       " + AcctReqDao.nameExpr("UDA") + " AS DECIDE_ACT_BY_NAME,\n" + """
+			""" + "       " + EmpSql.nameExpr("UDA", "E.DECIDE_ACT_BY") + " AS DECIDE_ACT_BY_NAME,\n" + """
 			       E.RETURN_REASON, E.IS_SELF_DECIDE,
 			       E.CLOSE_BY,
-			""" + "       " + AcctReqDao.nameExpr("UC") + " AS CLOSE_BY_NAME,\n" + """
+			""" + "       " + EmpSql.nameExpr("UC", "E.CLOSE_BY") + " AS CLOSE_BY_NAME,\n" + """
 			       E.CLOSE_DATE, E.CLOSE_ACT_BY,
-			""" + "       " + AcctReqDao.nameExpr("UCA") + " AS CLOSE_ACT_BY_NAME,\n" + """
+			""" + "       " + EmpSql.nameExpr("UCA", "E.CLOSE_ACT_BY") + " AS CLOSE_ACT_BY_NAME,\n" + """
 			       E.CLOSE_DESCR, E.CLOSE_RESULT_CODE, E.IS_SELF_CLOSE,
 			       E.VERSION_NO,
 			""" + "       " + STATE_EXPR + " AS EMG_STATE_CODE\n" + """
 			  FROM IM_EMG_ACCESS E
 			  LEFT JOIN IM_ACCT_CATG C ON C.CATG_ID = E.CATG_ID
-			  LEFT JOIN IM_ACCT_USER UA ON UA.USER_ID = E.APPLY_BY
-			  LEFT JOIN IM_ACCT_USER UX ON UX.USER_ID = E.CREATE_BY
-			  LEFT JOIN IM_ACCT_USER URA ON URA.USER_ID = E.REPORT_ACT_BY
-			  LEFT JOIN IM_ACCT_USER UD ON UD.USER_ID = E.DECIDE_BY
-			  LEFT JOIN IM_ACCT_USER UDA ON UDA.USER_ID = E.DECIDE_ACT_BY
-			  LEFT JOIN IM_ACCT_USER UC ON UC.USER_ID = E.CLOSE_BY
-			  LEFT JOIN IM_ACCT_USER UCA ON UCA.USER_ID = E.CLOSE_ACT_BY
+			""" + "  " + EmpSql.joinEmp("UA", "E.APPLY_BY") + "\n"
+			+ "  " + EmpSql.joinEmp("UX", "E.CREATE_BY") + "\n"
+			+ "  " + EmpSql.joinEmp("URA", "E.REPORT_ACT_BY") + "\n"
+			+ "  " + EmpSql.joinEmp("UD", "E.DECIDE_BY") + "\n"
+			+ "  " + EmpSql.joinEmp("UDA", "E.DECIDE_ACT_BY") + "\n"
+			+ "  " + EmpSql.joinEmp("UC", "E.CLOSE_BY") + "\n"
+			+ "  " + EmpSql.joinEmp("UCA", "E.CLOSE_ACT_BY") + "\n" + """
 			 WHERE E.STATUS = 1
 			""";
 
@@ -163,11 +168,11 @@ public class EmgDao {
 	public static final String FIND_AFFECTS = """
 			SELECT A.EMG_ID, A.AFFECT_TYPE_CODE, A.ACCT_ID, T.ACCT_NAME, T.SYS_NAME, T.CATG_ID, A.AFFECT_DESCR,
 			       A.RECORD_BY,
-			""" + "       " + AcctReqDao.nameExpr("UR") + " AS RECORD_BY_NAME,\n" + """
+			""" + "       " + EmpSql.nameExpr("UR", "A.RECORD_BY") + " AS RECORD_BY_NAME,\n" + """
 			       A.RECORD_DATE
 			  FROM IM_EMG_AFFECT_ACCT A
 			  LEFT JOIN IM_ACCT T ON T.ACCT_ID = A.ACCT_ID
-			  LEFT JOIN IM_ACCT_USER UR ON UR.USER_ID = A.RECORD_BY
+			""" + "  " + EmpSql.joinEmp("UR", "A.RECORD_BY") + "\n" + """
 			 WHERE A.EMG_ID = :emgId
 			   AND A.STATUS = 1
 			 ORDER BY A.AFFECT_TYPE_CODE, A.ACCT_ID
