@@ -28,6 +28,10 @@ package com.mpx.infra_manager.common;
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 3（角色權限設定頁）：E23／E24 沿用代號換文案（受詞由「人」換成「權限」）、
 //           400「沒有任何變更」、badCode 受詞「權限碼」
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 7 回合 1（登入改走 WPX，裁示 ⑨、D5A）：新增 A04「帳號無法使用」、A05「登入服務異常，請聯絡管理者」；
+//           A01 沿用為「帳號或密碼錯誤」；A02（本系統鎖定）登入已不再回，常數於階段 7 回合 2 刪除
 // ============================================================
 
 import java.util.List;
@@ -75,6 +79,10 @@ public final class AcctMsg {
 	public static final String A01 = "帳號或密碼錯誤";
 	public static final String A02 = "此帳號已鎖定，請聯絡系統管理員";
 	public static final String A03 = "登入已逾時，請重新登入";
+	/** WPX 回留職停薪／鎖定／時段／分店或 IP（-2～-10），或 WPX 驗過但本系統不讓用：資格不符的首次登入、停用、同步表查無（裁示 ⑨、D5A） */
+	public static final String A04 = "帳號無法使用";
+	/** WPX 檢查層錯誤（-18～-27）、未列出的代碼、連不上、本系統 WPX 設定不全（裁示 ⑨） */
+	public static final String A05 = "登入服務異常，請聯絡管理者";
 	public static final String P01 = "您沒有執行此操作的權限";
 	public static final String N01 = "查無資料";
 

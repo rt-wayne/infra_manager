@@ -17,10 +17,10 @@
 | 124 | 登入改用 WPX VerifySecure 外部驗證 API（本系統不再存密碼、鎖定交給 WPX、驗證成功但本系統無此人則自動建立，暫限資訊部），人員姓名／Email／部門改由全系統直接讀同步表 `PX_SYNC_EMP`；英文名一併拿掉（原第 67 項併入）、申請人分機改自填；裁示 ①～⑭、D0～D12、E1～E8 與 9 個階段施工計畫見詳情檔；正式環境尚未上線。使用者 2026-10-19～20 交代 | [backlog/124-登入改用外部驗證API.md](backlog/124-登入改用外部驗證API.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：第 124 項階段 7 回合 1 開工（登入改走 WPX，2 回合）——開工時把 HEAD 記入「本階段起點」；回合 1 重寫 `AuthService.login`（長度檢查 → WPX → findById → 無帳號列且資格通過就 MERGE 建立、STATUS=0 或同步表查無回「帳號無法使用」→ 寫最後登入時間、發 token）、`UserDao` 建立句與登入句調整、`AcctMsg` ⑨ 三種文案、重寫 `AuthServiceTest`；細節見詳情檔階段 7 列。階段 5、6 已結束且使用者開發機實測通過（開發機兩個 jar 2026-10-22 重建重啟到 d69feaa）
+- 下一步：第 124 項階段 7 回合 2——刪 `PasswordHasher`、`tools/PwdHashTool` 與其測試、`AcctConst.LOGIN_MAX_FAIL`、`AcctMsg.A02`（前端登入頁註解與 `LoginView.spec.ts` 範例文字一併換成 A04／A05）；WPX 私鑰路徑啟動時檢查（比照附件目錄未設定就啟動失敗）；PRD 刪「密碼」段的雜湊元件句、元件表 tools 列、訊息表 A02 列；第 19 項結案。回合 1 已 commit（登入已改走 WPX）。開發機兩個 jar 仍是 d69feaa（密碼登入），要實測 WPX 登入需重建重啟
 - 已改動（未 commit）：無（本機 `host.properties` 補 `wpx.*`、`environment.properties` 補 `infra.manager.wpx.*`，兩檔不進版控）
-- 本階段起點：
-- 卡住／待確認：無卡階段 7 的項目；詳情檔待確認 4～9（UAT NTP、切換執行者、正式 appId／HTTPS／key、離職是否消失、正式同步方式、正式 synonym）仍開放，不卡階段 4
+- 本階段起點：266e417
+- 卡住／待確認：無卡階段 7 的項目；詳情檔待確認 4～9（UAT NTP、切換執行者、正式 appId／HTTPS／key、離職是否消失、正式同步方式、正式 synonym）仍開放，不卡階段 7；`SETUP.md` 第 6 節第 3、4 段（解鎖、重設密碼）登入改 WPX 後已無作用，依計畫階段 8 刪除
 
 ## 已拍板待實作
 

@@ -89,6 +89,10 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: 第 124 項階段 6（裁示 ⑫A）：UserDao.FIND_BY_ID 不得含 TEL_NO
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: 第 124 項階段 7 回合 1（登入改走 WPX）：FIND_BY_ID 不得含 PWD_HASH、LOGIN_FAIL_CNT、LOCK_DATE；
+//           UPDATE_LOGIN_OK 只寫最後登入時間；MERGE_FIRST_LOGIN 含資格片段、只有 WHEN NOT MATCHED、只寫本系統自己的欄
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -274,9 +278,18 @@ class SqlConstantScanTest {
 		assertThat(UserDao.FIND_BY_ID).contains(EmpSql.joinEmp("E", "U.USER_ID"))
 				.contains(EmpSql.nameExpr("E", "U.USER_ID") + " AS USER_NAME").contains("E.EMAIL")
 				.contains("CASE WHEN E.EMP_ID IS NULL THEN 0 ELSE 1 END AS IN_SYNC")
-				// 上線時要刪的欄：姓名、英文名、Email、部門、分機不再從 IM_ACCT_USER 讀（密碼、鎖定欄階段 7 拿掉）
+				// 上線時要刪的欄：姓名、英文名、Email、部門、分機、密碼、失敗次數、鎖定都不再從 IM_ACCT_USER 讀
 				.doesNotContain("U.USER_NAME").doesNotContain("USER_EN_NAME").doesNotContain("U.EMAIL").doesNotContain("DEPT_NAME")
-				.doesNotContain("TEL_NO");
+				.doesNotContain("TEL_NO").doesNotContain("PWD_HASH").doesNotContain("LOGIN_FAIL_CNT").doesNotContain("LOCK_DATE");
+		// 第 124 項階段 7 回合 1：登入成功只寫最後登入時間（失敗次數與鎖定交給 WPX）
+		assertThat(UserDao.UPDATE_LOGIN_OK).contains("SET LAST_LOGIN_DATE = :now, UPDATE_DATE = :now, UPDATE_BY = :userId")
+				.doesNotContain("LOGIN_FAIL_CNT").doesNotContain("LOCK_DATE");
+		// 首次登入自動建立：資格片段在同一句、只在沒有帳號列時 INSERT（沒有 WHEN MATCHED，不會改到既有帳號）、只寫本系統自己的欄
+		assertThat(UserDao.MERGE_FIRST_LOGIN).startsWith("MERGE INTO IM_ACCT_USER U\n")
+				.contains("SELECT :userId AS USER_ID FROM DUAL\n        WHERE " + EmpSql.qualifiedCond(":userId") + ") S\n")
+				.contains("ON (U.USER_ID = S.USER_ID)").contains("WHEN NOT MATCHED THEN")
+				.contains("INSERT (USER_ID, STATUS, CREATE_DATE, CREATE_BY)").contains("VALUES (S.USER_ID, 1, :now, :createBy)")
+				.doesNotContain("WHEN MATCHED").doesNotContain("UPDATE SET");
 		// 第 124 項階段 5 回合 2：/me 部門＝同步表主要部門片段（⑪），逐人子查詢只用在單一使用者
 		assertThat(UserDao.FIND_PRIMARY_DEPT).isEqualTo("SELECT " + EmpSql.primaryDeptExpr(":userId") + " AS CODE FROM DUAL\n");
 		for (String sql : List.of(UserDao.FIND_ACTIVE_WITH_ROLES, PermDao.RCPT_SELECT, RoleAdminDao.FIND_ROLE_MEMBERS,

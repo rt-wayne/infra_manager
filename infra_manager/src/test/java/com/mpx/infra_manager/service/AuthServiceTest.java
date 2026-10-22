@@ -31,6 +31,12 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：/me 不再回分機，拿掉 telNo 斷言與夾具的分機
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 7 回合 1（登入改走 WPX）：登入測試全部重寫，WpxAuthClient 用 mock——
+//           明顯無效輸入 A01 且不送 WPX；WPX 三分類對應 A01／A04／A05 且不查本系統；成功寫最後登入時間、發 token、已有帳號不看資格；
+//           首次登入資格符合自動建立後重查、資格不符 A04、並發撞主鍵重查；停用、同步表查無 A04；寫最後登入時間影響 0 筆 A04。
+//           刪除密碼雜湊、失敗計數、鎖定相關案例
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -58,12 +64,12 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 
 import com.mpx.infra_manager.common.AcctConst;
 import com.mpx.infra_manager.common.AcctMsg;
 import com.mpx.infra_manager.common.Identity;
-import com.mpx.infra_manager.common.PasswordHasher;
 import com.mpx.infra_manager.common.TokenCodec;
 import com.mpx.infra_manager.dao.AdminLogDao;
 import com.mpx.infra_manager.dao.LoginTokenDao;
@@ -82,9 +88,12 @@ class AuthServiceTest {
 	UserDao userDao;
 	LoginTokenDao tokenDao;
 	AdminLogDao adminLogDao;
-	PasswordHasher hasher;
+	WpxAuthClient wpx;
 	TokenIdentityProvider provider;
 	AuthService auth;
+
+	/** 不在 TestFixture 名單內、本系統還沒有帳號列的工號（首次登入情境） */
+	static final String NEWBIE = "0000099";
 
 	@BeforeEach
 	void setUp() {
@@ -92,10 +101,12 @@ class AuthServiceTest {
 		userDao = mock(UserDao.class);
 		tokenDao = mock(LoginTokenDao.class);
 		adminLogDao = mock(AdminLogDao.class);
-		hasher = mock(PasswordHasher.class);
+		wpx = mock(WpxAuthClient.class);
 		provider = new TokenIdentityProvider(tokenDao, userDao, fx.permissionService, fx.clock);
-		auth = new AuthService(userDao, tokenDao, adminLogDao, hasher, new TokenCodec(), provider, fx.permissionService, fx.tx,
+		auth = new AuthService(userDao, tokenDao, adminLogDao, wpx, new TokenCodec(), provider, fx.permissionService, fx.tx,
 				fx.clock);
+		// 預設 WPX 驗證通過；個別案例再改
+		when(wpx.verify(anyString(), anyString())).thenReturn(wpxResult(WpxAuthClient.Outcome.SUCCESS, 0));
 		for (String u : TestFixture.NAMES.keySet()) {
 			when(userDao.findById(u)).thenReturn(user(u, 1));
 			when(fx.permDao.findPerms(u)).thenReturn(new ArrayList<>(TestFixture.permsOf(u)));
@@ -104,7 +115,6 @@ class AuthServiceTest {
 		}
 		when(tokenDao.setActAs(anyString(), any(), anyString(), any())).thenReturn(1);
 		when(userDao.loginOk(anyString(), any())).thenReturn(1);
-		when(userDao.loginFail(anyString(), org.mockito.ArgumentMatchers.anyInt(), any())).thenReturn(1);
 	}
 
 	// ------------------------------------------------------------
@@ -112,81 +122,97 @@ class AuthServiceTest {
 	// ------------------------------------------------------------
 
 	@Test
-	void 登入成功_回token_DB只存SHA256_失敗次數歸0() {
-		when(hasher.verify(any(), eq("PBKDF2$h"))).thenReturn(true);
-		LoginResult r = auth.login(login(KEVIN, "pw"));
+	void 登入成功_WPX驗過_回token_DB只存SHA256_寫最後登入時間_已有帳號不看資格() {
+		LoginResult r = auth.login(login(" " + KEVIN + " ", "pw"));
+		verify(wpx).verify(KEVIN, "pw");
 		ArgumentCaptor<String> hash = ArgumentCaptor.forClass(String.class);
 		verify(tokenDao).insert(hash.capture(), eq(KEVIN), eq(NOW.plusHours(8)), eq(NOW));
 		assertThat(hash.getValue()).hasSize(64).isNotEqualTo(r.getToken()).isEqualTo(TokenCodec.sha256Hex(r.getToken()));
 		verify(userDao).loginOk(KEVIN, NOW);
+		// 裁示 D4A：已有帳號列者不再判斷資格、不走建立
+		verify(userDao, never()).createOnFirstLogin(anyString(), any());
 		assertThat(r.getMe().getUserId()).isEqualTo(KEVIN);
 		assertThat(r.getMe().getPermissions()).contains("ACC_APPLY", "APPR_G4", "VERIFY_G7", "INSP_VIEW");
 	}
 
 	@Test
-	void 登入_工號不存在_停用_無雜湊_皆仍做雜湊後A01() {
-		assertStatus(() -> auth.login(login("9999999", "pw")), HttpStatus.UNAUTHORIZED, AcctMsg.A01);
-		when(userDao.findById(TESTER)).thenReturn(user(TESTER, 0));
-		assertStatus(() -> auth.login(login(TESTER, "pw")), HttpStatus.UNAUTHORIZED, AcctMsg.A01);
-		AcctUser noPwd = user(GARY, 1);
-		noPwd.setPwdHash(null);
-		when(userDao.findById(GARY)).thenReturn(noPwd);
-		assertStatus(() -> auth.login(login(GARY, "pw")), HttpStatus.UNAUTHORIZED, AcctMsg.A01);
-		verify(hasher, org.mockito.Mockito.times(3)).dummyHash(any());
+	void 登入_工號空白或超長_密碼空白_A01且不送WPX() {
+		String tooLong = "1".repeat(AuthService.USER_ID_MAX + 1);
+		for (LoginForm f : List.of(login(null, "pw"), login("   ", "pw"), login(tooLong, "pw"), login(KEVIN, null),
+				login(KEVIN, ""))) {
+			assertStatus(() -> auth.login(f), HttpStatus.UNAUTHORIZED, AcctMsg.A01);
+		}
+		assertStatus(() -> auth.login(null), HttpStatus.UNAUTHORIZED, AcctMsg.A01);
+		verify(wpx, never()).verify(any(), any());
+		verify(userDao, never()).findById(anyString());
 		verify(tokenDao, never()).insert(any(), any(), any(), any());
 	}
 
-	/** 第 124 項裁示 A（過渡行為）：同步表查無比照停用，不發 token、也不比對密碼 */
+	/** 裁示 ⑨：WPX 沒驗過就不查本系統（D5A：判斷順序 WPX 先、本系統後） */
 	@Test
-	void 登入_同步表查無_比照停用A01() {
+	void 登入_WPX未通過_帳密錯A01_帳號無法使用A04_服務異常A05_皆不查本系統() {
+		when(wpx.verify(KEVIN, "bad")).thenReturn(wpxResult(WpxAuthClient.Outcome.BAD_CREDENTIAL, -11));
+		assertStatus(() -> auth.login(login(KEVIN, "bad")), HttpStatus.UNAUTHORIZED, AcctMsg.A01);
+		when(wpx.verify(KEVIN, "locked")).thenReturn(wpxResult(WpxAuthClient.Outcome.ACCOUNT_UNUSABLE, -3));
+		assertStatus(() -> auth.login(login(KEVIN, "locked")), HttpStatus.UNAUTHORIZED, AcctMsg.A04);
+		when(wpx.verify(KEVIN, "down")).thenReturn(wpxResult(WpxAuthClient.Outcome.SERVICE_ERROR, null));
+		assertStatus(() -> auth.login(login(KEVIN, "down")), HttpStatus.UNAUTHORIZED, AcctMsg.A05);
+		verify(userDao, never()).findById(anyString());
+		verify(userDao, never()).createOnFirstLogin(anyString(), any());
+		verify(userDao, never()).loginOk(anyString(), any());
+		verify(tokenDao, never()).insert(any(), any(), any(), any());
+	}
+
+	/** 裁示 ①B、D3A：本系統沒有帳號列 → 依資格建立（建立句本身含資格判斷）→ 重查後照常登入 */
+	@Test
+	void 登入_首次登入資格符合_自動建立後重查_發token() {
+		when(userDao.findById(NEWBIE)).thenReturn(null, user(NEWBIE, 1));
+		when(userDao.createOnFirstLogin(NEWBIE, NOW)).thenReturn(1);
+		LoginResult r = auth.login(login(NEWBIE, "pw"));
+		verify(userDao).createOnFirstLogin(NEWBIE, NOW);
+		verify(userDao, org.mockito.Mockito.times(2)).findById(NEWBIE);
+		verify(userDao).loginOk(NEWBIE, NOW);
+		verify(tokenDao).insert(anyString(), eq(NEWBIE), eq(NOW.plusHours(8)), eq(NOW));
+		assertThat(r.getMe().getUserId()).isEqualTo(NEWBIE);
+	}
+
+	@Test
+	void 登入_首次登入資格不符_A04_不發token() {
+		// 未設定的 findById 回 null、createOnFirstLogin 回 0（建立句因資格不符影響 0 筆）
+		assertStatus(() -> auth.login(login(NEWBIE, "pw")), HttpStatus.UNAUTHORIZED, AcctMsg.A04);
+		verify(userDao).createOnFirstLogin(NEWBIE, NOW);
+		verify(userDao, never()).loginOk(anyString(), any());
+		verify(tokenDao, never()).insert(any(), any(), any(), any());
+	}
+
+	@Test
+	void 登入_首次登入同時建立撞主鍵_重查後照常登入() {
+		when(userDao.findById(NEWBIE)).thenReturn(null, user(NEWBIE, 1));
+		when(userDao.createOnFirstLogin(NEWBIE, NOW)).thenThrow(new DuplicateKeyException("ORA-00001"));
+		LoginResult r = auth.login(login(NEWBIE, "pw"));
+		verify(tokenDao).insert(anyString(), eq(NEWBIE), eq(NOW.plusHours(8)), eq(NOW));
+		assertThat(r.getMe().getUserId()).isEqualTo(NEWBIE);
+	}
+
+	/** 裁示 D5A：WPX 驗過但本系統停用、或同步表查無 →「帳號無法使用」；已有帳號列不走建立 */
+	@Test
+	void 登入_WPX驗過但停用或同步表查無_A04() {
+		when(userDao.findById(TESTER)).thenReturn(user(TESTER, 0));
+		assertStatus(() -> auth.login(login(TESTER, "pw")), HttpStatus.UNAUTHORIZED, AcctMsg.A04);
 		AcctUser gone = user(HANK, 1);
 		gone.setInSync(0);
 		when(userDao.findById(HANK)).thenReturn(gone);
-		assertStatus(() -> auth.login(login(HANK, "pw")), HttpStatus.UNAUTHORIZED, AcctMsg.A01);
-		verify(hasher).dummyHash(any());
-		verify(hasher, never()).verify(any(), any());
+		assertStatus(() -> auth.login(login(HANK, "pw")), HttpStatus.UNAUTHORIZED, AcctMsg.A04);
+		verify(userDao, never()).createOnFirstLogin(anyString(), any());
+		verify(userDao, never()).loginOk(anyString(), any());
 		verify(tokenDao, never()).insert(any(), any(), any(), any());
 	}
 
 	@Test
-	void 登入_密碼錯累加失敗次數A01_已鎖定即使密碼正確也A02() {
-		when(hasher.verify(any(), any())).thenReturn(false);
-		assertStatus(() -> auth.login(login(KEVIN, "bad")), HttpStatus.UNAUTHORIZED, AcctMsg.A01);
-		verify(userDao).loginFail(KEVIN, AcctConst.LOGIN_MAX_FAIL, NOW);
-
-		AcctUser locked = user(TESTER, 1);
-		locked.setLockDate(NOW.minusMinutes(1));
-		when(userDao.findById(TESTER)).thenReturn(locked);
-		when(hasher.verify(any(), any())).thenReturn(true);
-		assertStatus(() -> auth.login(login(TESTER, "pw")), HttpStatus.UNAUTHORIZED, AcctMsg.A02);
-		verify(tokenDao, never()).insert(any(), any(), any(), any());
-	}
-
-	@Test
-	void 登入_查詢時未鎖定但成功更新影響0筆_A02且不發token() {
-		when(hasher.verify(any(), eq("PBKDF2$h"))).thenReturn(true);
+	void 登入_寫最後登入時間影響0筆_A04不發token() {
 		when(userDao.loginOk(KEVIN, NOW)).thenReturn(0);
-		assertStatus(() -> auth.login(login(KEVIN, "pw")), HttpStatus.UNAUTHORIZED, AcctMsg.A02);
+		assertStatus(() -> auth.login(login(KEVIN, "pw")), HttpStatus.UNAUTHORIZED, AcctMsg.A04);
 		verify(tokenDao, never()).insert(any(), any(), any(), any());
-		// 已做過一次真雜湊，不得再補 dummyHash（耗時會與其他路徑不同）
-		verify(hasher, never()).dummyHash(any());
-	}
-
-	@Test
-	void 登入_查詢時未鎖定但密碼錯且失敗計數影響0筆_A02() {
-		when(hasher.verify(any(), any())).thenReturn(false);
-		when(userDao.loginFail(KEVIN, AcctConst.LOGIN_MAX_FAIL, NOW)).thenReturn(0);
-		assertStatus(() -> auth.login(login(KEVIN, "bad")), HttpStatus.UNAUTHORIZED, AcctMsg.A02);
-		verify(hasher, never()).dummyHash(any());
-		verify(userDao, never()).loginOk(any(), any());
-	}
-
-	@Test
-	void 登入失敗計數與鎖定_同句UPDATE() {
-		assertThat(UserDao.UPDATE_LOGIN_FAIL).contains("LOGIN_FAIL_CNT = LOGIN_FAIL_CNT + 1")
-				.contains("CASE WHEN LOGIN_FAIL_CNT + 1 >= :maxFail THEN :now ELSE LOCK_DATE END").contains("LOCK_DATE IS NULL");
-		assertThat(UserDao.UPDATE_LOGIN_OK).contains("LOCK_DATE IS NULL");
-		assertThat(AcctConst.LOGIN_MAX_FAIL).isEqualTo(5);
 	}
 
 	// ------------------------------------------------------------
@@ -348,9 +374,12 @@ class AuthServiceTest {
 		u.setUserName(TestFixture.NAMES.get(id));
 		u.setInSync(1);
 		u.setEmail(id + "@example.com");
-		u.setPwdHash("PBKDF2$h");
 		u.setStatus(status);
 		return u;
+	}
+
+	static WpxAuthClient.Result wpxResult(WpxAuthClient.Outcome outcome, Integer code) {
+		return new WpxAuthClient.Result(outcome, code);
 	}
 
 	static LoginToken token(LocalDateTime lastAccess, LocalDateTime expire, LocalDateTime logout, int userStatus) {

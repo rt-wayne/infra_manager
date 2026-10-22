@@ -43,7 +43,7 @@
 
 | 項目 | 現況 |
 |---|---|
-| 維護畫面 | 使用者（含重設密碼、解鎖）、巡檢項目、資產分類、帳號類別開關：一律 DB 直接維護，無 API、無畫面、不寫管理軌跡（步驟見 `SETUP.md` 第 6 節）。一般人員（GENERAL）的權限也只能 DB 維護（角色權限設定頁對 GENERAL 唯讀）。角色指派、執行人對照、角色權限設定有畫面（見「畫面說明」`/admin/roles`、`/admin/executors`、`/admin/role-perms`）與後端 API（見 API 規格「系統管理——角色指派、執行人對照與角色權限設定」），每次變更寫系統管理軌跡、原因必填；DB 直接改名單只作備援，不留軌跡、不做在途檢查與「最後一位角色指派權限持有人」檢查。第一位系統管理員仍須以 DB 設定（沒有人持有 SYS_ROLE 時進不了畫面） |
+| 維護畫面 | 使用者（停用、預建資格外人員的帳號列）、巡檢項目、資產分類、帳號類別開關：一律 DB 直接維護，無 API、無畫面、不寫管理軌跡（步驟見 `SETUP.md` 第 6 節）。一般人員（GENERAL）的權限也只能 DB 維護（角色權限設定頁對 GENERAL 唯讀）。角色指派、執行人對照、角色權限設定有畫面（見「畫面說明」`/admin/roles`、`/admin/executors`、`/admin/role-perms`）與後端 API（見 API 規格「系統管理——角色指派、執行人對照與角色權限設定」），每次變更寫系統管理軌跡、原因必填；DB 直接改名單只作備援，不留軌跡、不做在途檢查與「最後一位角色指派權限持有人」檢查。第一位系統管理員仍須以 DB 設定（沒有人持有 SYS_ROLE 時進不了畫面） |
 | 帳號匯入、既有帳號轉入 | 無（IM_ACCT.SOURCE_CODE＝MIGRATE 為預留值，程式不寫入） |
 | 其他 | 改密碼、AD 登入、代理人、人員離職處理、系統管理軌跡查詢畫面（以 DB 查）、寄信重試與發件匣 |
 | 展延 | 無；要延長就重新提新增申請，或以「修改」調整已核准帳號的到期日（見 `BACKLOG.md` 已拍板不做） |
@@ -75,15 +75,18 @@
 
 > 登入改用 WPX 外部驗證、人員資料改讀同步表分批施工中，進度見 `BACKLOG.md` 第 124 項；本段為目前 master 上的行為（施工期間不打包到 UAT，UAT 仍是施工前版本）。
 
-- 以工號＋密碼登入。可登入條件：使用者 STATUS＝1 且有密碼雜湊。
-- 判斷順序：① 工號不存在／停用／同步表 `PX_SYNC_EMP` 查無（STATUS≠1 也算查無）／無雜湊 → A01 ② 已鎖定（LOCK_DATE 非空）→ A02，即使密碼正確 ③ 密碼錯 → 失敗次數＋1，達 5 次同一句寫入鎖定，該次仍回 A01 ④ 成功 → 失敗次數歸 0、記最後登入時間、發新 token。
-- ③、④ 的 UPDATE 都帶「未鎖定」條件：查詢時未鎖定、但驗密碼期間被其他請求鎖定者影響 0 筆，不論密碼對錯一律回 A02、不發 token（鎖定後的回應不洩漏密碼是否正確）。
-- 工號不存在、停用、同步表查無、無雜湊時仍做一次雜湊計算，回應時間與密碼錯相同，統一回 A01（同步表查無比照停用是第 124 項階段 7 改接 WPX 前的過渡行為，屆時換成「帳號無法使用」）。
+- 以工號＋公司帳號密碼登入。密碼由 WPX 的 VerifySecure 登入 API 驗證（元件 `WpxAuthClient`），本系統不存、不比對密碼，也不計失敗次數、不鎖定（連錯鎖定由 WPX 處理）。WPX 發的 token 本系統不保存，驗過後由本系統發自己的 token。
+- 判斷順序：
+  1. 工號空白或超過 30 字、密碼空白 → A01，不送 WPX。
+  2. 送 WPX 驗證：帳密錯（WPX Code -1、-11～-15）→ A01；留職停薪、鎖定、時段、分店或 IP 限制（-2～-10）→ A04；檢查層錯誤（-18～-27）、未列出的代碼、Code 0 但 Success 不是 true、連不上、本系統 WPX 設定不全 → A05。WPX 原始 Code 只寫 log，不回給使用者。
+  3. WPX 驗過才查本系統（先查本系統會讓停用帳號不必知道密碼就被告知無法使用）。本系統沒有此工號的帳號列 → 首次登入自動建立：同步表 `PX_SYNC_EMP` 查得到、且主要部門（主管的部門優先、其次部門代碼最小）名稱含「資訊部」才建立，只寫工號、STATUS＝1 與共用欄（CREATE_BY＝`SYSTEM`），只取得一般人員權限；資格判斷與建立在同一句 SQL。不符資格 → A04。兩人同時首次登入同一工號時，後到者撞主鍵後重查、照常登入。
+  4. 已有帳號列者不再看資格（調離資訊部照常登入；DBA 手動建帳號列即可讓資格外的人登入）。帳號停用（STATUS≠1）或同步表查無（STATUS≠1 也算查無）→ A04。
+  5. 寫最後登入時間（影響 0 筆＝帳號列已被刪 → A04）、發新 token。
+- 本系統拒絕（資格不符、停用、同步表查無）的原因只寫 log（工號＋原因），回應一律 A04。
 - token 有效條件：未登出、登入後 8 小時內、閒置不超過 480 分鐘（與 8 小時同長，等於不另設閒置限制）、使用者仍啟用、本人在同步表 `PX_SYNC_EMP` 查得到；任一不符 → A03，前端清 token 並導回登入頁。同步表查無時另記一行 log「token 有效但同步表查無 userId=…」（只記工號），是同步異常那天唯一的伺服器端線索；token 不註銷，同步恢復後 8 小時內仍可用。
 - 同一瀏覽器各分頁共用一份 token（localStorage）：已登入時開新分頁或點信中連結不必再登入；**關閉瀏覽器不會登出**，要結束須按登出或等 8 小時到期。
 - 一個分頁登入、登出、切換身分、切回，或因 401 清掉 token 時，同一瀏覽器的其他分頁自動整頁重新整理成新狀態（未送出的表單內容會不見）。從瀏覽器「上一頁快取」還原的頁面，只在 token 或身分跟離開時不同才重新整理。被連帶重新整理到登入頁的分頁不顯示逾時原因（BACKLOG 第 31 項）。
-- 同一人可同時多處登入。登出後 token 立即作廢。不提供改密碼，首次登入不強制改。
-- 解鎖、重設密碼以 DB 維護（`SETUP.md`）。
+- 同一人可同時多處登入。登出後 token 立即作廢。本系統不提供改密碼、解鎖（屬公司帳號，由 WPX 管理）。
 
 #### 2. 權限與資料範圍
 
@@ -663,9 +666,10 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 - 後端連不上時殼 jar 回 500，前端顯示 U09。前端收到 401 → 清 token、導向登入頁並顯示後端訊息。
 - **DB 存取**：一律經範本共用元件 `com.mpx.common.db.DbClient`（內部用 `NamedParameterJdbcTemplate`，具名參數 SQL）；連線資訊於執行期向「DB 連線資訊 API」取得，DB 別名寫在設定檔。`com.mpx.common.*` 與 `com.mpx.Application` 為範本共用程式，不屬本模組業務。
-- **交易**：業務層以 TransactionTemplate 包多句寫入；交易管理器 `LazyDataSourceTransactionManager` 第一次開交易才取 DataSource。登入失敗計數、最後存取時間等單句更新不開交易。
+- **交易**：業務層以 TransactionTemplate 包多句寫入；交易管理器 `LazyDataSourceTransactionManager` 第一次開交易才取 DataSource。最後登入時間、最後存取時間、首次登入自動建立等單句寫入不開交易。
 - **時間**：業務時間由應用程式 Clock（Asia/Taipei）產生並以參數綁定寫入，SQL 不用 SYSDATE；比較日期時去掉時分秒。
-- **密碼**：PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310,000、輸出 32 bytes，存成 `PBKDF2$310000$base64(salt)$base64(hash)`，常數時間比對。產生雜湊用 `tools\PwdHashTool.java`（`SETUP.md`）。
+- **密碼**：登入不比對本系統的密碼雜湊（改由 WPX 驗證，見「登入、登出」）。程式裡仍有雜湊元件 `PasswordHasher`（PBKDF2WithHmacSHA256）與 `tools\PwdHashTool.java`，登入流程已不使用。
+- **WPX 呼叫**：密碼以 WPX 公鑰 RSA-OAEP 加密、整包以本系統私鑰 SHA256withRSA 簽章；密碼、加密內容、簽章、WPX 回應本文與 WPX 發的 token 一律不寫 log、不保存，log 只記工號與 WPX 原始 Code。
 - **token**：32 bytes 亂數，base64url 回前端；DB 只存 SHA-256（16 進位小寫 64 碼）。驗證通過即更新最後存取時間（節流為每分鐘最多寫一次）。閒置上限（`AcctConst.TOKEN_IDLE_MINUTES = TOKEN_MAX_HOURS * 60`，要縮短時改成分鐘數字）、8 小時、5 次與雜湊參數皆為程式常數。log 不記密碼、token、雜湊值。
 - **API 不快取**：後端 `/api/**`（context 內路徑，即完整網址 `/infra_manager/api/**`）回應一律帶 `Cache-Control: no-store`（殼 jar 照抄給瀏覽器），避免按上一頁時讀到硬碟快取裡的舊身分，也不讓個資留在硬碟快取。Spring 找處理者之前就失敗的 405／406／415 與上傳超限 413 不帶（都是 POST 或前端不會發的請求）。
 - **安全標頭**：殼 jar `/infra_manager_web` 底下的所有回應（畫面、靜態檔、轉送後端的 API 回應、錯誤回應）一律帶 `Content-Security-Policy: default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'; worker-src 'self' blob:`（只准載入本站的程式、樣式、圖片與連線；HTML 的 style 屬性放行，因為附件以 blob 網址開新分頁時沿用本站 CSP，瀏覽器內建的 PDF／圖片檢視頁靠 style 屬性排版，被擋時 Edge 的 PDF 只剩約 150px 高、圖片不置中；背景執行緒（Web Worker）放行 blob 網址，因為帳號列表匯出 xlsx 的壓縮（`write-excel-file` 交給 `fflate`）在子檔超過約 160 KB 時以 blob 網址建背景執行緒，被擋時帳號一多就匯出失敗；`<style>` 區塊與行內程式仍不放行，頁面本身的程式仍只准本站）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`；後端回應若帶同名標頭以後端為準。Tomcat 在進入應用程式前就送出的回應不帶（開 `/infra_manager_web` 未加斜線時的 302 轉址、`/infra_manager_web` 以外路徑的 404），兩者都沒有可執行內容。不帶 HSTS（正式環境改走 HTTPS 後再加，見 BACKLOG 第 34 項）。前端若引入外站資源、行內程式、`<style>` 區塊或 data: 圖片，要同步放寬 CSP：改 `SecurityHeadersConfig` 的 `CSP`、`SecurityHeadersConfigTest` 的預期值（測試刻意寫死字串，CSP 被誤改時才抓得到）與本段的值，否則畫面會被瀏覽器擋下。
@@ -676,7 +680,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
   - 本段為依瀏覽器行為推論，瀏覽器版本未查證，未實測。
 - **前端狀態**：`/me` 與代碼表由 `composables/useSession.ts` 共用；代碼表快取到登出、401 或重新登入時清除（`resetSession`）。
 - **log**：後端寫 `/home/tomcat/log/infra_manager/`（檔名 `infra_manager.yyyy-MM-dd.log`）、殼 jar 寫 `/home/tomcat/log/infra_manager_web/`（檔名 `infra_manager_web.yyyy-MM-dd.log`）（Windows 為啟動所在磁碟的同路徑），保留 30 天。
-- **DB 共用硬規則**：RD_USER 裡另有 IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等表，是開發 Infra_Manager_Java 時建的、目前沒有任何系統在用（原 Infra_Manager 資料存 JSON 檔）；本模組不可建立、刪除、修改或在程式引用這些表（整併與清表見 BACKLOG 第 69 項）。重疊概念一律另建 IM_ACCT_ 前綴的新表。**人員**：關聯與停用狀態參照 `IM_ACCT_USER`（工號、STATUS）；姓名、Email、部門讀同步表 `PX_SYNC_EMP`／`PX_SYNC_DEPT_EMP`／`PX_SYNC_DEPT`（只認 STATUS＝1、不加 schema 前綴、不得 INNER JOIN）；登入與每個請求的 token 檢查都要求同步表查得到（施工中仍讀 `IM_ACCT_USER` 的密碼與鎖定欄，見 BACKLOG 第 124 項）。
+- **DB 共用硬規則**：RD_USER 裡另有 IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等表，是開發 Infra_Manager_Java 時建的、目前沒有任何系統在用（原 Infra_Manager 資料存 JSON 檔）；本模組不可建立、刪除、修改或在程式引用這些表（整併與清表見 BACKLOG 第 69 項）。重疊概念一律另建 IM_ACCT_ 前綴的新表。**人員**：關聯與停用狀態參照 `IM_ACCT_USER`（工號、STATUS）；姓名、Email、部門讀同步表 `PX_SYNC_EMP`／`PX_SYNC_DEPT_EMP`／`PX_SYNC_DEPT`（只認 STATUS＝1、不加 schema 前綴、不得 INNER JOIN）；登入與每個請求的 token 檢查都要求同步表查得到。`IM_ACCT_USER` 只讀寫工號、STATUS、最後登入時間與共用欄，其餘舊欄位已不讀，第 124 項完成時刪除。
 
 **後端主要程式**（`infra_manager\src\main\java\com\mpx\infra_manager\`）
 
@@ -684,9 +688,9 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 |---|---|
 | common | `AppConfig`（Clock、TransactionTemplate、啟用排程、載入業務設定）、`Identity`／`IdentityProvider`／`IdentityArgumentResolver`（取身分單一介面，Controller 宣告 Identity 參數即注入）、`TokenCodec`、`PasswordHasher`、`AcctConst`（代碼、時效、通知收件角色）、`AcctMsg`（錯誤文案）、`ApiException`、`GlobalExceptionHandler`（例外轉 `{message}`；multipart 超限轉 413 E15；其他 500 不外洩）、`NoStoreInterceptor`（context 內 `/api/**` 回應 no-store，由 `WebConfig` 註冊）、`DocSeqService`（取號）、`Texts`（顯示名、trim、LIKE 跳脫、欄寬檢查） |
 | controller | `AuthController`、`HomeController`、`AccountController`、`RequestController`、`AttachmentController`、`InspectionController`、`JobController`、`AdminController`（系統管理：角色指派、執行人對照與角色權限設定）；只轉呼叫 service，不寫權限邏輯 |
-| service | `AuthService`（登入、鎖定、登出、`/me`、切換身分）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`SmtpMailSender`（SMTP 寄出）／`LogMailSender`（SMTP 未設定時只寫 log）、`MailAllowList`（寄送名單）、`JobService`、`HomeService`、`InspectionService`、`CodeService`、`RoleAdminService`（角色指派與執行人對照維護：清單、候選人、指派、移除；兩個名單共用同一條驗證順序、全域鎖、HolderGuard、軌跡流程，差異集中在 Roster）、`RolePermAdminService`（角色權限設定：可見碼矩陣、一個角色的差異存檔 11 步驗證；取鎖、角色與原因檢查沿用 RoleAdminService）、`HolderGuard`（名單維護的「最後一位持有人」檢查：權限碼口徑與執行人口徑；第三頁每碼各自排除該格）、`AdminLogWriter`（名單維護軌跡與 CONTENT_JSON 組裝） |
+| service | `AuthService`（登入〔WPX 驗證、首次登入自動建立〕、登出、`/me`、切換身分）、`WpxAuthClient`（呼叫 WPX 登入 API、結果分三類）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`SmtpMailSender`（SMTP 寄出）／`LogMailSender`（SMTP 未設定時只寫 log）、`MailAllowList`（寄送名單）、`JobService`、`HomeService`、`InspectionService`、`CodeService`、`RoleAdminService`（角色指派與執行人對照維護：清單、候選人、指派、移除；兩個名單共用同一條驗證順序、全域鎖、HolderGuard、軌跡流程，差異集中在 Roster）、`RolePermAdminService`（角色權限設定：可見碼矩陣、一個角色的差異存檔 11 步驗證；取鎖、角色與原因檢查沿用 RoleAdminService）、`HolderGuard`（名單維護的「最後一位持有人」檢查：權限碼口徑與執行人口徑；第三頁每碼各自排除該格）、`AdminLogWriter`（名單維護軌跡與 CONTENT_JSON 組裝） |
 | dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`RoleAdminDao`（角色指派與執行人對照名單、全域互斥鎖、持有人數與執行人數、在途案件）、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
-| tools | `PwdHashTool`：從主控台讀密碼（不回顯、不收命令列參數）輸出 PWD_HASH 字串 |
+| tools | `PwdHashTool`：從主控台讀密碼（不回顯、不收命令列參數）輸出 PWD_HASH 字串（登入已不使用密碼雜湊） |
 
 **前端主要程式**（`infra_manager_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/infra_manager_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage，key `infra_manager_web.token`、`infra_manager_web.identityChanged`；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\accountExport.ts`（帳號列表匯出與共用儲存格文字）、`utils\perms.ts`、`utils\codes.ts`。
 
@@ -735,10 +739,10 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | DEPT_NAME | VARCHAR2(50 CHAR) | | 部門。本系統已不讀（`/me` 部門讀同步表主要部門），第 124 項完成時刪除 |
 | EMAIL | VARCHAR2(100) | | Email。本系統已不讀（收件 Email 讀同步表，同步表空白＝不收信、通知記 SKIP），第 124 項完成時刪除 |
 | TEL_NO | VARCHAR2(30) | | 分機／電話。本系統已不讀（申請人分機改由使用者在表單自填），第 124 項完成時刪除 |
-| PWD_HASH | VARCHAR2(200) | | 密碼雜湊；空＝不可登入 |
-| PWD_UPDATE_DATE | DATE | | 密碼最後設定時間 |
-| LOGIN_FAIL_CNT | NUMBER(2) | ✓ | 連續失敗次數，預設 0 |
-| LOCK_DATE | DATE | | 非空＝鎖定中 |
+| PWD_HASH | VARCHAR2(200) | | 密碼雜湊。本系統已不讀（登入改由 WPX 驗證），第 124 項完成時刪除 |
+| PWD_UPDATE_DATE | DATE | | 密碼最後設定時間。本系統已不讀，第 124 項完成時刪除 |
+| LOGIN_FAIL_CNT | NUMBER(2) | ✓ | 連續失敗次數，預設 0（首次登入自動建立時用預設值）。本系統已不讀寫（鎖定交給 WPX），第 124 項完成時刪除 |
+| LOCK_DATE | DATE | | 鎖定時間。本系統已不讀寫，第 124 項完成時刪除 |
 | LAST_LOGIN_DATE | DATE | | 最後成功登入 |
 
 **IM_ACCT_ROLE 角色**：ROLE_ID（PK）VARCHAR2(20)；ROLE_NAME VARCHAR2(30 CHAR) 必；ROLE_DESCR VARCHAR2(200 CHAR)；IS_SYSTEM NUMBER(1) 必（1＝不可刪除：GENERAL、SYS_ADMIN；預設 0）；SORT_SEQ NUMBER(3) 必（預設 0）。STATUS＝0 不計入權限。
@@ -1069,7 +1073,7 @@ END
 | 狀態碼 | 意義 |
 |---|---|
 | 400 | 驗證失敗（E01～E06、E10～E14、E17、E18、缺 versionNo 或必填 E02、欄位內容不正確、日期格式錯、不可切換為自己、新增申請不可指定帳號、巡檢時間不可晚於現在、角色權限存檔沒有任何變更） |
-| 401 | A01、A02（登入）、A03（其他 API） |
+| 401 | A01、A04、A05（登入）、A03（其他 API） |
 | 403 | P01：無權限碼、不在資料範圍、非原申請人重送、非該類別執行人 |
 | 404 | N01：單號／帳號／附件／巡檢單不存在、lookup 名稱不符、排程代碼不是 J01／J02／J03、切換對象或指派對象不存在、停用或同步表查無 |
 | 409 | E07 在途、E08 版本或狀態不符、E09 帳號狀態不符前提、E16 排程執行中、E19 巡檢項目已處理或非異常、E20 未切換身分、E21～E27 系統管理（名單已變動、在途案件無人接手、最後一位 SYS_ROLE、切換身分中、鎖逾時、權限設定已被調整） |
@@ -1080,7 +1084,7 @@ END
 
 | 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
 |---|---|---|---|---|---|
-| POST | `/auth/login` | 無 | userId、password | token、me | 401 A01、A02 |
+| POST | `/auth/login` | 無 | userId、password | token、me | 401 A01、A04、A05 |
 | POST | `/auth/logout` | 登入 | — | 200 空本文 | 401 |
 | GET | `/me` | 登入 | — | userId、userName（有效身分）、realUserId、realUserName、impersonating、canImpersonate（實際操作人有 SYS_IMPERSONATE 且未切換）、permissions[]、roleIds[]、execCatgIds[]、email、deptName（兩者皆為有效身分的資料；email 讀同步表 `PX_SYNC_EMP`；deptName＝同步表主要部門，呼叫 `/me` 當下查——主管的部門優先、其次部門代碼最小，全名空白用部門名，查無為 null）。不回分機（申請人分機由使用者在表單自填） | 401 |
 | GET | `/users` | 實際操作人 SYS_IMPERSONATE | — | [userId、userName、roleIds[]]（有效使用者：本系統啟用且同步表查得到、不看最後登入；不含自己） | 403 |
@@ -1226,8 +1230,10 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | E26 | 409 | 其他管理員正在調整名單，請稍後再試 |
 | E27 | 409 | 權限設定已被他人調整，請重新整理（角色權限存檔：added 的碼現在已授予、或 removed 的碼現在未授予） |
 | A01 | 401 | 帳號或密碼錯誤 |
-| A02 | 401 | 此帳號已鎖定，請聯絡系統管理員 |
+| A02 | 401 | 此帳號已鎖定，請聯絡系統管理員（登入已不再回；鎖定交給 WPX） |
 | A03 | 401 | 登入已逾時，請重新登入 |
+| A04 | 401 | 帳號無法使用 |
+| A05 | 401 | 登入服務異常，請聯絡管理者 |
 | P01 | 403 | 您沒有執行此操作的權限 |
 | N01 | 404 | 查無資料 |
 
@@ -1249,7 +1255,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | | `spring.mail.host`、`spring.mail.port`、`spring.mail.properties.mail.smtp.*` | SMTP 主機、port、連線／讀取／寫入逾時；host 留空＝不實際寄信、只寫 log |
 | `config\host.properties` | `rt-api.domain`、`db.connect.api.port`、`db.connect.api.path` | DB 連線資訊 API 的協定＋主機、port、路徑 |
 | | `db.connect.api.domain.path` | 由上面三個 key 組合，程式只讀這個；四個 key 都要保留（值可空） |
-| | `wpx.domain`、`wpx.api.port`、`wpx.api.path`、`wpx.api.domain.path` | WPX 登入 API 的協定＋主機、port、路徑與組合結果（程式只讀 `wpx.api.domain.path`；與 UAT 上 PX Track 同一組 key）。第 124 項施工中，元件已在、尚未接上登入；未設定時不影響啟動 |
+| | `wpx.domain`、`wpx.api.port`、`wpx.api.path`、`wpx.api.domain.path` | WPX 登入 API 的協定＋主機、port、路徑與組合結果（程式只讀 `wpx.api.domain.path`；與 UAT 上 PX Track 同一組 key）。登入用；未設定時仍可啟動，但登入一律回 A05 |
 | `config\database.properties` | `itflow.db.alias` | 本模組 23 張表所在 DB 的別名（連線資訊 API 認得的名稱）；所有 DAO 讀這個 key |
 | `config\environment.properties` | `infra.manager.attach.dir` | 附件根目錄絕對路徑（必填）；未設定或非絕對路徑時後端啟動失敗 |
 | | `infra.manager.job.enabled` | 是否啟用排程（關閉時手動 API 仍可用） |
@@ -1259,7 +1265,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | | `infra.manager.mail.allow-list` | 寄送名單（逗號分隔工號，半形或全形逗號皆可）；留空＝誰都不寄 |
 | | `infra.manager.mail.send-to-all` | true＝忽略寄送名單、寄給所有收件人（預設 false） |
 | | `infra.manager.mail.site-url` | 系統網址（使用者開的前端網址，含 context，例 `http://主機:8787/infra_manager_web/`），信末「前往系統」連結用；留空＝不放連結；不是 `http://`／`https://` 開頭、格式不正確或沒有主機（含空白、雙引號等）時視同留空、啟動記 WARN；`#` 之後、結尾 `index.html` 與斜線會去掉 |
-| | `infra.manager.wpx.app-id` | WPX 登錄的系統代號（測試環境與 PX Track 共用 `Test`，區分大小寫）。第 124 項施工中，以下四個 key 尚未接上登入 |
+| | `infra.manager.wpx.app-id` | WPX 登錄的系統代號（測試環境與 PX Track 共用 `Test`，區分大小寫）。登入用；未設定時登入一律回 A05 |
 | | `infra.manager.wpx.dbalias` | WPX 的 dbalias（預設 `APX`，測試與正式相同） |
 | | `infra.manager.wpx.private-key` | 本系統簽章私鑰檔（PKCS#8 PEM）的絕對路徑；檔案放 repo 與 jar 以外 |
 | | `infra.manager.wpx.timeout-seconds` | 呼叫 WPX 的連線與讀取逾時秒數（預設 10） |

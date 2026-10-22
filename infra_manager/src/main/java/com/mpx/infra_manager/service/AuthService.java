@@ -32,18 +32,26 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：/me 不再回 telNo（申請人分機改由使用者在表單自填）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 7 回合 1（登入改走 WPX；裁示 ①B、②A、③B、⑨、D3A、D4A、D5A、D9B）：
+//           登入不再比對本系統密碼雜湊、不再計失敗次數與鎖定；順序為 工號空白或超長／密碼空白 → A01（不送 WPX）→
+//           WPX 驗證（帳密錯 A01、帳號無法使用 A04、服務異常 A05）→ 查本系統帳號列 → 沒有就依資格自動建立
+//           （CREATE_BY＝SYSTEM；資格不符 A04；同工號並發建立撞主鍵時重查）→ 停用或同步表查無 A04 →
+//           寫最後登入時間、發 token。WPX 先驗、再查本系統（D5A：停用帳號不必知道密碼就被告知無法使用），
+//           所以拿掉防計時的假雜湊；本系統拒絕的原因只寫 log（工號＋原因），回應一律 A04
 // ============================================================
 
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -51,7 +59,6 @@ import com.mpx.infra_manager.common.AcctConst;
 import com.mpx.infra_manager.common.AcctMsg;
 import com.mpx.infra_manager.common.ApiException;
 import com.mpx.infra_manager.common.Identity;
-import com.mpx.infra_manager.common.PasswordHasher;
 import com.mpx.infra_manager.common.Texts;
 import com.mpx.infra_manager.common.TokenCodec;
 import com.mpx.infra_manager.dao.AdminLogDao;
@@ -78,20 +85,20 @@ public class AuthService {
 	private final UserDao userDao;
 	private final LoginTokenDao tokenDao;
 	private final AdminLogDao adminLogDao;
-	private final PasswordHasher passwordHasher;
+	private final WpxAuthClient wpxAuthClient;
 	private final TokenCodec tokenCodec;
 	private final TokenIdentityProvider identityProvider;
 	private final PermissionService permissionService;
 	private final TransactionTemplate tx;
 	private final Clock clock;
 
-	public AuthService(UserDao userDao, LoginTokenDao tokenDao, AdminLogDao adminLogDao, PasswordHasher passwordHasher,
+	public AuthService(UserDao userDao, LoginTokenDao tokenDao, AdminLogDao adminLogDao, WpxAuthClient wpxAuthClient,
 			TokenCodec tokenCodec, TokenIdentityProvider identityProvider, PermissionService permissionService,
 			TransactionTemplate tx, Clock clock) {
 		this.userDao = userDao;
 		this.tokenDao = tokenDao;
 		this.adminLogDao = adminLogDao;
-		this.passwordHasher = passwordHasher;
+		this.wpxAuthClient = wpxAuthClient;
 		this.tokenCodec = tokenCodec;
 		this.identityProvider = identityProvider;
 		this.permissionService = permissionService;
@@ -105,46 +112,71 @@ public class AuthService {
 
 	public LoginResult login(LoginForm form) {
 		String userId = form == null ? null : Texts.trimToNull(form.getUserId());
-		char[] pwd = form == null || form.getPassword() == null ? new char[0] : form.getPassword().toCharArray();
-		try {
-			AcctUser u = userId == null || userId.length() > USER_ID_MAX ? null : userDao.findById(userId);
-			// 同步表查無比照停用（否則登入成功、下一個請求就被 token 檢查踢回登入頁）
-			if (u == null || !Integer.valueOf(1).equals(u.getStatus()) || !TokenIdentityProvider.inSync(u.getInSync())
-					|| u.getPwdHash() == null) {
-				passwordHasher.dummyHash(pwd);
-				throw ApiException.unauthorized(AcctMsg.A01);
-			}
-			if (u.getLockDate() != null) {
-				passwordHasher.dummyHash(pwd);
-				throw ApiException.unauthorized(AcctMsg.A02);
-			}
-			LocalDateTime now = LocalDateTime.now(clock);
-			if (!passwordHasher.verify(pwd, u.getPwdHash())) {
-				// 查詢後才被鎖定 → 影響 0 筆，回 A02；與密碼正確時同代號，鎖定後回應不洩漏密碼對錯
-				if (userDao.loginFail(userId, AcctConst.LOGIN_MAX_FAIL, now) != 1) {
-					log.info("登入被拒（密碼錯誤，驗證期間帳號已鎖定）userId={}", userId);
-					throw ApiException.unauthorized(AcctMsg.A02);
-				}
-				log.info("登入失敗（密碼錯誤）userId={}", userId);
-				throw ApiException.unauthorized(AcctMsg.A01);
-			}
-			// 查詢後到此之間被其他請求鎖定（LOCK_DATE 已寫入）→ 影響 0 筆，不發 token
-			if (userDao.loginOk(userId, now) != 1) {
-				// log 註明密碼正確：回應與密碼錯時相同，但內部要能追查鎖定瞬間是否有人猜中
-				log.info("登入被拒（密碼正確，驗證期間帳號已鎖定）userId={}", userId);
-				throw ApiException.unauthorized(AcctMsg.A02);
-			}
-			String token = tokenCodec.newToken();
-			String hash = TokenCodec.sha256Hex(token);
-			tokenDao.insert(hash, userId, now.plusHours(AcctConst.TOKEN_MAX_HOURS), now);
-			log.info("登入成功 userId={}", userId);
-			LoginResult result = new LoginResult();
-			result.setToken(token);
-			result.setMe(me(identityProvider.build(hash, u, u)));
-			return result;
-		} finally {
-			Arrays.fill(pwd, '\0');
+		String pwd = form == null ? null : form.getPassword();
+		// 明顯無效的輸入不送 WPX（避免無謂地累加對方的錯誤次數）
+		if (userId == null || userId.length() > USER_ID_MAX || pwd == null || pwd.isEmpty()) {
+			throw ApiException.unauthorized(AcctMsg.A01);
 		}
+		// 先由 WPX 驗帳密，再查本系統（裁示 D5A）；WPX 分類與原始 Code 已由 WpxAuthClient 寫 log
+		WpxAuthClient.Result wpx = wpxAuthClient.verify(userId, pwd);
+		switch (wpx.outcome()) {
+		case SUCCESS:
+			break;
+		case BAD_CREDENTIAL:
+			throw ApiException.unauthorized(AcctMsg.A01);
+		case ACCOUNT_UNUSABLE:
+			throw ApiException.unauthorized(AcctMsg.A04);
+		default:
+			throw ApiException.unauthorized(AcctMsg.A05);
+		}
+		LocalDateTime now = LocalDateTime.now(clock);
+		AcctUser u = findOrCreate(userId, now);
+		if (u == null) {
+			log.info("登入被拒（WPX 驗證通過，本系統無帳號且不符自動建立資格）userId={}", userId);
+			throw ApiException.unauthorized(AcctMsg.A04);
+		}
+		if (!Integer.valueOf(1).equals(u.getStatus())) {
+			log.info("登入被拒（WPX 驗證通過，本系統帳號已停用）userId={}", userId);
+			throw ApiException.unauthorized(AcctMsg.A04);
+		}
+		// 同步表查無：放行的話下一個請求就會被 token 檢查踢回登入頁
+		if (!TokenIdentityProvider.inSync(u.getInSync())) {
+			log.info("登入被拒（WPX 驗證通過，同步表查無）userId={}", userId);
+			throw ApiException.unauthorized(AcctMsg.A04);
+		}
+		if (userDao.loginOk(userId, now) != 1) {
+			// 查詢後帳號列被刪除（DBA 手動操作）
+			log.info("登入被拒（WPX 驗證通過，寫入最後登入時間時帳號列已不存在）userId={}", userId);
+			throw ApiException.unauthorized(AcctMsg.A04);
+		}
+		String token = tokenCodec.newToken();
+		String hash = TokenCodec.sha256Hex(token);
+		tokenDao.insert(hash, userId, now.plusHours(AcctConst.TOKEN_MAX_HOURS), now);
+		log.info("登入成功 userId={}", userId);
+		LoginResult result = new LoginResult();
+		result.setToken(token);
+		result.setMe(me(identityProvider.build(hash, u, u)));
+		return result;
+	}
+
+	/**
+	 * 查本系統帳號列；沒有就依資格自動建立（裁示 ①B、D3A、D9B），建立後重查。資格不符回 null。
+	 * 已有帳號列者不再看資格（裁示 D4A：調離資訊部照常放行；DBA 預建的例外人員也走這條）。
+	 */
+	private AcctUser findOrCreate(String userId, LocalDateTime now) {
+		AcctUser u = userDao.findById(userId);
+		if (u != null) {
+			return u;
+		}
+		try {
+			if (userDao.createOnFirstLogin(userId, now) == 1) {
+				log.info("首次登入自動建立帳號 userId={}", userId);
+			}
+		} catch (DuplicateKeyException dup) {
+			// 同一工號同時首次登入：另一個請求已建好，重查即可
+			log.info("首次登入自動建立時帳號已由其他請求建立 userId={}", userId);
+		}
+		return userDao.findById(userId);
 	}
 
 	public void logout(Identity id) {

@@ -28,6 +28,11 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：FIND_BY_ID 不再讀 TEL_NO（申請人分機改自填）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 7 回合 1（登入改走 WPX；裁示 ①B、②A、③B、D3A、D9B）：FIND_BY_ID 拿掉 PWD_HASH、LOGIN_FAIL_CNT、LOCK_DATE；
+//           刪 UPDATE_LOGIN_FAIL（鎖定交給 WPX）；UPDATE_LOGIN_OK 只寫最後登入時間（不再歸 0 失敗次數、不看鎖定）；
+//           新增 MERGE_FIRST_LOGIN：本系統沒有帳號列、且符合資格（同步表查得到＋主要部門含「資訊部」）才建立，CREATE_BY＝SYSTEM
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -39,6 +44,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
 import com.mpx.common.db.DbClient;
+import com.mpx.infra_manager.common.AcctConst;
 import com.mpx.infra_manager.model.AcctUser;
 import com.mpx.infra_manager.model.CodeRow;
 import com.mpx.infra_manager.model.UserRoleRow;
@@ -48,7 +54,7 @@ public class UserDao {
 
 	/** 單一使用者：本系統列＋同步表姓名／Email；IN_SYNC＝同步表查得到（LEFT JOIN 已帶 STATUS＝1 條件，E 有列即查得到） */
 	public static final String FIND_BY_ID = """
-			SELECT U.USER_ID, U.PWD_HASH, U.LOGIN_FAIL_CNT, U.LOCK_DATE, U.LAST_LOGIN_DATE, U.STATUS,
+			SELECT U.USER_ID, U.LAST_LOGIN_DATE, U.STATUS,
 			       E.EMAIL, CASE WHEN E.EMP_ID IS NULL THEN 0 ELSE 1 END AS IN_SYNC,
 			""" + "       " + EmpSql.nameExpr("E", "U.USER_ID") + " AS USER_NAME\n" + """
 			  FROM IM_ACCT_USER U
@@ -59,20 +65,26 @@ public class UserDao {
 	/** 一人的主要部門（⑪：主管的部門優先、其次 DEPT_ID 最小；全名空或字串 'NULL' 用部門名）；查無為 NULL。只給 /me 用（逐人子查詢，不放進名單） */
 	public static final String FIND_PRIMARY_DEPT = "SELECT " + EmpSql.primaryDeptExpr(":userId") + " AS CODE FROM DUAL\n";
 
-	public static final String UPDATE_LOGIN_FAIL = """
-			UPDATE IM_ACCT_USER
-			   SET LOGIN_FAIL_CNT = LOGIN_FAIL_CNT + 1,
-			       LOCK_DATE = CASE WHEN LOGIN_FAIL_CNT + 1 >= :maxFail THEN :now ELSE LOCK_DATE END,
-			       UPDATE_DATE = :now, UPDATE_BY = :userId
-			 WHERE USER_ID = :userId
-			   AND LOCK_DATE IS NULL
+	/**
+	 * 首次登入自動建立（裁示 ①B、D3A、D9B）：本系統沒有帳號列、且資格符合才 INSERT，否則影響 0 筆。
+	 * 資格與建立在同一句判斷；兩人同時首次登入同一工號時，後到者撞主鍵丟 DuplicateKeyException，由呼叫端重查。
+	 * 只寫本系統自己的欄位（USER_ID、STATUS、共用欄），LOGIN_FAIL_CNT 用 DB 預設 0；英文名欄在已跑腳本 S1 的 DB 可空。
+	 */
+	public static final String MERGE_FIRST_LOGIN = """
+			MERGE INTO IM_ACCT_USER U
+			USING (SELECT :userId AS USER_ID FROM DUAL
+			""" + "        WHERE " + EmpSql.qualifiedCond(":userId") + ") S\n" + """
+			   ON (U.USER_ID = S.USER_ID)
+			 WHEN NOT MATCHED THEN
+			      INSERT (USER_ID, STATUS, CREATE_DATE, CREATE_BY)
+			      VALUES (S.USER_ID, 1, :now, :createBy)
 			""";
 
+	/** 登入成功：只寫最後登入時間（失敗次數與鎖定交給 WPX，裁示 ③B） */
 	public static final String UPDATE_LOGIN_OK = """
 			UPDATE IM_ACCT_USER
-			   SET LOGIN_FAIL_CNT = 0, LAST_LOGIN_DATE = :now, UPDATE_DATE = :now, UPDATE_BY = :userId
+			   SET LAST_LOGIN_DATE = :now, UPDATE_DATE = :now, UPDATE_BY = :userId
 			 WHERE USER_ID = :userId
-			   AND LOCK_DATE IS NULL
 			""";
 
 	/** 切換身分下拉：有效使用者（E3：本系統啟用且同步表查得到；E4：不看最後登入）＋啟用中角色，姓名讀同步表 */
@@ -113,12 +125,16 @@ public class UserDao {
 		return row == null ? null : row.getCode();
 	}
 
-	public int loginFail(String userId, int maxFail, LocalDateTime now) {
+	/**
+	 * 首次登入自動建立；建立回 1，已有帳號列或資格不符回 0。
+	 * 同一工號並發建立時後到者丟 {@link org.springframework.dao.DuplicateKeyException}（呼叫端重查即可）。
+	 */
+	public int createOnFirstLogin(String userId, LocalDateTime now) {
 		Map<String, Object> params = new HashMap<>();
 		params.put("userId", userId);
-		params.put("maxFail", maxFail);
 		params.put("now", DaoSupport.ts(now));
-		return dbClient.update(itflowDb, UPDATE_LOGIN_FAIL, params);
+		params.put("createBy", AcctConst.SYSTEM_USER);
+		return dbClient.update(itflowDb, MERGE_FIRST_LOGIN, params);
 	}
 
 	public int loginOk(String userId, LocalDateTime now) {

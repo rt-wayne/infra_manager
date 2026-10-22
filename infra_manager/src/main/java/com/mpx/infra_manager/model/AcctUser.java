@@ -17,23 +17,20 @@ package com.mpx.infra_manager.model;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：刪 telNo（不再讀 IM_ACCT_USER.TEL_NO，申請人分機改由使用者自填）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 7 回合 1（登入改走 WPX）：刪 pwdHash、loginFailCnt、lockDate（密碼與鎖定交給 WPX，不再讀這三欄）
 // ============================================================
 
 import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 
 public class AcctUser {
 
 	private String userId;
 	private String userName;
 	private String email;
-	@JsonIgnore
-	private String pwdHash;
-	private Integer loginFailCnt;
-	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-	private LocalDateTime lockDate;
 	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
 	private LocalDateTime lastLoginDate;
 	private Integer status;
@@ -70,30 +67,6 @@ public class AcctUser {
 
 	public void setEmail(String email) {
 		this.email = email;
-	}
-
-	public String getPwdHash() {
-		return pwdHash;
-	}
-
-	public void setPwdHash(String pwdHash) {
-		this.pwdHash = pwdHash;
-	}
-
-	public Integer getLoginFailCnt() {
-		return loginFailCnt;
-	}
-
-	public void setLoginFailCnt(Integer loginFailCnt) {
-		this.loginFailCnt = loginFailCnt;
-	}
-
-	public LocalDateTime getLockDate() {
-		return lockDate;
-	}
-
-	public void setLockDate(LocalDateTime lockDate) {
-		this.lockDate = lockDate;
 	}
 
 	public LocalDateTime getLastLoginDate() {
