@@ -17,9 +17,9 @@
 | 124 | 登入改用 WPX VerifySecure 外部驗證 API（本系統不再存密碼、鎖定交給 WPX、驗證成功但本系統無此人則自動建立，暫限資訊部），人員姓名／Email／部門改由全系統直接讀同步表 `PX_SYNC_EMP`；英文名一併拿掉（原第 67 項併入）、申請人分機改自填；裁示 ①～⑭、D0～D12、E1～E8 與 9 個階段施工計畫見詳情檔；正式環境尚未上線。使用者 2026-10-19～20 交代 | [backlog/124-登入改用外部驗證API.md](backlog/124-登入改用外部驗證API.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：第 124 項階段 4 開工——先把開工時的 HEAD 記進「本階段起點」，再做 `RoleAdminDao` 四個計數句（`COUNT_HOLDERS`、`COUNT_*`）改 E3 有效使用者條件、`PermDao.RCPT_SELECT` Email 讀同步表＋E3、`RolePermAdminView.vue:170` 補「首次登入者也會取得」（D7A）與 `AdminViews.spec.ts`；順手換掉 `SqlConstantScanTest` 既有 `contains("U.STATUS = 1")` 的子字串假通過（階段 3 審查 B3）。計畫見 `backlog/124-登入改用外部驗證API.md` 階段 4 列。階段 3 已完成並 commit
+- 下一步：第 124 項階段 4 收尾——同一則訊息平行派 `code-reviewer`（審查範圍 ddda78d..HEAD，後端＋前端）與 `test-runner`（後端 `./mvnw -o test`、前端 `npm test`）；必須修正等使用者點頭、建議改善登記第 128 項。回合 1 已做完計畫全部內容並 commit；D7A 文案位置改放一般人員說明（原計畫 `:170` 對一般人員不會出現）待使用者確認
 - 已改動（未 commit）：無（本機 `host.properties` 補 `wpx.*`、`environment.properties` 補 `infra.manager.wpx.*`，兩檔不進版控）
-- 本階段起點：（階段 4 開工時填）
+- 本階段起點：ddda78d
 - 卡住／待確認：無卡階段 4 的項目；詳情檔待確認 4～9（UAT NTP、切換執行者、正式 appId／HTTPS／key、離職是否消失、正式同步方式、正式 synonym）仍開放，不卡階段 4
 
 ## 已拍板待實作

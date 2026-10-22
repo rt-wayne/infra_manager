@@ -16,6 +16,10 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 1：RCPT_SELECT 拿掉 USER_EN_NAME（第 67 項併入；Email 改讀同步表與 E3 口徑留到階段 4）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 4 回合 1（裁示 E3、⑩）：RCPT_SELECT 收件人改為有效使用者（本系統啟用且同步表查得到），
+//           姓名與 Email 改讀同步表 PX_SYNC_EMP（不再讀 IM_ACCT_USER 的 USER_NAME、EMAIL——上線時要刪的欄）；四支收件人查詢共用此前綴
 // ============================================================
 
 import java.util.HashMap;
@@ -67,11 +71,13 @@ public class PermDao {
 			 ORDER BY CATG_ID
 			""";
 
+	/** 收件人：有效使用者（E3），姓名與 Email 讀同步表（Email 空白由 NotificationService 記 SKIP）；後接 AND 條件 */
 	static final String RCPT_SELECT = """
-			SELECT U.USER_ID, U.USER_NAME, U.EMAIL
+			SELECT U.USER_ID, E.EMAIL,
+			""" + "       " + EmpSql.nameExpr("E", "U.USER_ID") + " AS USER_NAME\n" + """
 			  FROM IM_ACCT_USER U
-			 WHERE U.STATUS = 1
-			""";
+			""" + "  " + EmpSql.joinEmp("E", "U.USER_ID") + "\n"
+			+ " WHERE " + EmpSql.activeUserCond("U") + "\n";
 
 	public static final String FIND_USERS_WITH_PERM = RCPT_SELECT + """
 			   AND EXISTS (SELECT 1 FROM

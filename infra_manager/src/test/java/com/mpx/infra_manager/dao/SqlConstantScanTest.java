@@ -78,6 +78,10 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-10-20
 // 變更說明: 第 124 項階段 3 回合 2：切換身分下拉與候選名單 SQL 讀同步表姓名、WHERE 用 E3 有效使用者片段；
 //           角色成員與執行人 SQL 另 LEFT JOIN 同步表取名＋USER_IN_SYNC 旗標、不過濾對象；候選名單不帶 DEPT_NAME
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: 第 124 項階段 4 回合 1：四個計數句與收件人前綴改用 E3 有效使用者片段、收件人姓名與 Email 讀同步表；
+//           既有 COUNT_* 斷言 contains("U.STATUS = 1") 會被 RU.STATUS = 1 假滿足（階段 3 審查 B3），改比對片段全文並以正規式擋單獨的 U.STATUS = 1
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -271,6 +275,37 @@ class SqlConstantScanTest {
 		}
 	}
 
+	/**
+	 * 第 124 項階段 4 回合 1：四個計數句與收件人前綴都用有效使用者片段（E3），且不再以「U.STATUS = 1」單獨判斷
+	 * （以正規式比對，避免被 RU.STATUS = 1 子字串假滿足）；收件人姓名與 Email 讀同步表
+	 */
+	@Test
+	void 計數句與收件人_有效使用者E3_收件人Email讀同步表() {
+		Pattern bareUserStatus = Pattern.compile("(?<![A-Z_])U\\.STATUS = 1(?! AND EXISTS \\(SELECT 1 FROM PX_SYNC_EMP)");
+		Map<String, String> sqls = new LinkedHashMap<>();
+		sqls.put("COUNT_HOLDERS", RoleAdminDao.COUNT_HOLDERS);
+		sqls.put("COUNT_EXECUTORS", RoleAdminDao.COUNT_EXECUTORS);
+		sqls.put("COUNT_ROLE_MEMBERS", RoleAdminDao.COUNT_ROLE_MEMBERS);
+		sqls.put("COUNT_ACTIVE_USERS", RoleAdminDao.COUNT_ACTIVE_USERS);
+		sqls.put("RCPT_SELECT", PermDao.RCPT_SELECT);
+		sqls.put("FIND_USERS_WITH_PERM", PermDao.FIND_USERS_WITH_PERM);
+		sqls.put("FIND_USERS_IN_ROLES", PermDao.FIND_USERS_IN_ROLES);
+		sqls.put("FIND_EXEC_USERS", PermDao.FIND_EXEC_USERS);
+		sqls.put("FIND_ACTIVE_USER", PermDao.FIND_ACTIVE_USER);
+		for (Map.Entry<String, String> e : sqls.entrySet()) {
+			assertThat(e.getValue()).as(e.getKey()).contains(EmpSql.activeUserCond("U"));
+			assertThat(bareUserStatus.matcher(e.getValue()).find()).as(e.getKey() + " 不得只判斷 U.STATUS = 1").isFalse();
+		}
+		assertThat(PermDao.RCPT_SELECT).contains(EmpSql.joinEmp("E", "U.USER_ID")).contains("E.EMAIL")
+				.contains(EmpSql.nameExpr("E", "U.USER_ID") + " AS USER_NAME")
+				// 上線時要刪的欄不再從 IM_ACCT_USER 讀
+				.doesNotContain("U.USER_NAME").doesNotContain("U.EMAIL");
+		for (String sql : List.of(PermDao.FIND_USERS_WITH_PERM, PermDao.FIND_USERS_IN_ROLES, PermDao.FIND_EXEC_USERS,
+				PermDao.FIND_ACTIVE_USER)) {
+			assertThat(sql).startsWith(PermDao.RCPT_SELECT);
+		}
+	}
+
 	/** 第 124 項階段 3 回合 2：名單 SQL 姓名讀同步表；有效使用者 E3（不看最後登入 E4）；候選名單只取工號與名字（⑬-2） */
 	@Test
 	void 名單SQL_姓名讀同步表_有效使用者E3_候選名單不帶部門() {
@@ -374,7 +409,7 @@ class SqlConstantScanTest {
 	void 名單維護_全域鎖_持有人數排除哨兵_在途查詢_狀態轉移帶現況() {
 		assertThat(RoleAdminDao.LOCK_GLOBAL).contains("FROM IM_ACCT_ROLE").contains("ROLE_ID = :generalRoleId")
 				.contains("FOR UPDATE WAIT " + AcctConst.ADMIN_LOCK_WAIT_SECONDS).doesNotContain("NOWAIT");
-		assertThat(RoleAdminDao.COUNT_HOLDERS).contains("U.STATUS = 1").contains("RP.PERM_ID = :permId")
+		assertThat(RoleAdminDao.COUNT_HOLDERS).contains("WHERE " + EmpSql.activeUserCond("U")).contains("RP.PERM_ID = :permId")
 				.contains("NOT (RP.ROLE_ID = NVL(:exclRoleId, '-') AND RP.PERM_ID = NVL(:exclPermId, '-'))")
 				.contains("NOT (RU.ROLE_ID = NVL(:exclRoleId, '-') AND RU.USER_ID = NVL(:exclUserId, '-'))")
 				.contains("RP.ROLE_ID = :generalRoleId").contains(PermDao.ACTIVE_ROLE_PERM);
@@ -404,8 +439,8 @@ class SqlConstantScanTest {
 				.contains("AND STATUS = :oldStatus").contains("UPDATE_DATE = :now, UPDATE_BY = :userId").doesNotContain("CREATE_");
 		assertThat(RoleAdminDao.INSERT_EXEC_MEMBER).contains("INSERT INTO IM_EXEC_MAP (CATG_ID, USER_ID, STATUS, CREATE_DATE, CREATE_BY)")
 				.doesNotContain("UPDATE_");
-		assertThat(RoleAdminDao.COUNT_EXECUTORS).contains("JOIN IM_ACCT_USER U ON U.USER_ID = M.USER_ID AND U.STATUS = 1")
-				.contains("M.CATG_ID = :catgId").contains("M.STATUS = 1").contains("M.USER_ID <> NVL(:exclUserId, '-')");
+		assertThat(RoleAdminDao.COUNT_EXECUTORS).contains("JOIN IM_ACCT_USER U ON U.USER_ID = M.USER_ID\n")
+				.contains("AND " + EmpSql.activeUserCond("U")).contains("M.CATG_ID = :catgId").contains("M.STATUS = 1").contains("M.USER_ID <> NVL(:exclUserId, '-')");
 		assertThat(RoleAdminDao.FIND_IN_FLIGHT_EXEC_BY_CATG).contains("R.REQ_STATE_CODE = :execState")
 				.contains("R.CURR_STAGE_ID = :execStage").contains("R.CATG_ID = :catgId")
 				.contains("JOIN IM_ACCT_APPR_STAGE S ON S.STAGE_ID = R.CURR_STAGE_ID").doesNotContain("PERM_ID");
@@ -419,9 +454,9 @@ class SqlConstantScanTest {
 		assertThat(RoleAdminDao.FIND_PERMS_BY_IDS).contains("FROM IM_ACCT_PERM").contains("STATUS = 1")
 				.contains("PERM_ID IN (:permIds)").contains("ORDER BY SORT_SEQ, PERM_ID").doesNotContain("PHASE_CODE");
 		assertThat(RoleAdminDao.COUNT_ROLE_MEMBERS).contains("RU.ROLE_ID AS CODE, COUNT(*) AS CNT")
-				.contains("JOIN IM_ACCT_USER U ON U.USER_ID = RU.USER_ID AND U.STATUS = 1").contains("RU.STATUS = 1")
-				.contains("GROUP BY RU.ROLE_ID");
-		assertThat(RoleAdminDao.COUNT_ACTIVE_USERS).contains("FROM IM_ACCT_USER").contains("STATUS = 1");
+				.contains("JOIN IM_ACCT_USER U ON U.USER_ID = RU.USER_ID\n").contains("WHERE RU.STATUS = 1")
+				.contains("AND " + EmpSql.activeUserCond("U")).contains("GROUP BY RU.ROLE_ID");
+		assertThat(RoleAdminDao.COUNT_ACTIVE_USERS).contains("FROM IM_ACCT_USER U").contains("WHERE " + EmpSql.activeUserCond("U"));
 		// 現況要含 STATUS＝0 與隱藏碼（決定 UPDATE 0→1 還是 INSERT；隱藏碼原樣保留），所以不過濾 STATUS、不 JOIN 權限表
 		assertThat(RoleAdminDao.FIND_ROLE_PERM_STATUSES).contains("PERM_ID AS CODE, STATUS").contains("FROM IM_ACCT_ROLE_PERM")
 				.contains("ROLE_ID = :roleId").doesNotContain("STATUS = 1").doesNotContain("JOIN");

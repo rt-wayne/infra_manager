@@ -32,6 +32,10 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 2（裁示 E3、⑬-2）：FIND_ROLE_MEMBERS、FIND_EXEC_MEMBERS 保留 LEFT JOIN IM_ACCT_USER 取停用狀態、
 //           另 LEFT JOIN 同步表取姓名並回 USER_IN_SYNC 旗標；FIND_CANDIDATES 只取工號與同步表姓名、口徑改 E3（不再取 DEPT_NAME）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 4 回合 1（裁示 E3、D7A）：COUNT_HOLDERS、COUNT_EXECUTORS、COUNT_ROLE_MEMBERS、COUNT_ACTIVE_USERS
+//           「使用者啟用中」改為有效使用者片段 EmpSql.activeUserCond（本系統 STATUS＝1 且同步表查得到）——離職者不再算持有人／執行人／成員數
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -157,7 +161,7 @@ public class RoleAdminDao {
 	public static final String COUNT_HOLDERS = """
 			SELECT COUNT(*) AS CNT
 			  FROM IM_ACCT_USER U
-			 WHERE U.STATUS = 1
+			""" + " WHERE " + EmpSql.activeUserCond("U") + "\n" + """
 			   AND EXISTS (SELECT 1 FROM
 			""" + PermDao.ACTIVE_ROLE_PERM + """
 			                WHERE RP.STATUS = 1
@@ -229,15 +233,15 @@ public class RoleAdminDao {
 			VALUES (:catgId, :targetId, 1, :now, :userId)
 			""";
 
-	/** 類別 :catgId 的啟用中執行人數（與 PermDao.FIND_EXEC_USERS 同口徑：使用者啟用中），可排除 :exclUserId 一人（不排除傳 null） */
+	/** 類別 :catgId 的啟用中執行人數（與 PermDao.FIND_EXEC_USERS 同口徑：有效使用者 E3），可排除 :exclUserId 一人（不排除傳 null） */
 	public static final String COUNT_EXECUTORS = """
 			SELECT COUNT(*) AS CNT
 			  FROM IM_EXEC_MAP M
-			  JOIN IM_ACCT_USER U ON U.USER_ID = M.USER_ID AND U.STATUS = 1
+			  JOIN IM_ACCT_USER U ON U.USER_ID = M.USER_ID
 			 WHERE M.CATG_ID = :catgId
 			   AND M.STATUS = 1
 			   AND M.USER_ID <> NVL(:exclUserId, '-')
-			""";
+			""" + "   AND " + EmpSql.activeUserCond("U") + "\n";
 
 	/** 停在關卡 6（待執行）且類別為 :catgId 的在途申請單；關卡 6 沒有 PERM_ID，處理人由執行人對照決定 */
 	public static final String FIND_IN_FLIGHT_EXEC_BY_CATG = """
@@ -269,21 +273,21 @@ public class RoleAdminDao {
 			 ORDER BY SORT_SEQ, PERM_ID
 			""";
 
-	/** 各角色的啟用中成員數（使用者也要啟用中，與 COUNT_HOLDERS 口徑一致）；沒有成員的角色不會出現，由 Service 補 0 */
+	/** 各角色的啟用中成員數（使用者也要是有效使用者 E3，與 COUNT_HOLDERS 口徑一致）；沒有成員的角色不會出現，由 Service 補 0 */
 	public static final String COUNT_ROLE_MEMBERS = """
 			SELECT RU.ROLE_ID AS CODE, COUNT(*) AS CNT
 			  FROM IM_ACCT_ROLE_USER RU
-			  JOIN IM_ACCT_USER U ON U.USER_ID = RU.USER_ID AND U.STATUS = 1
+			  JOIN IM_ACCT_USER U ON U.USER_ID = RU.USER_ID
 			 WHERE RU.STATUS = 1
+			""" + "   AND " + EmpSql.activeUserCond("U") + "\n" + """
 			 GROUP BY RU.ROLE_ID
 			""";
 
-	/** 啟用中使用者總數＝GENERAL 的成員數（所有啟用中使用者自動擁有） */
+	/** 有效使用者總數（E3）＝GENERAL 的成員數（所有有效使用者自動擁有；裁示 D7A：不含尚未首次登入的資格內人員） */
 	public static final String COUNT_ACTIVE_USERS = """
 			SELECT COUNT(*) AS CNT
-			  FROM IM_ACCT_USER
-			 WHERE STATUS = 1
-			""";
+			  FROM IM_ACCT_USER U
+			""" + " WHERE " + EmpSql.activeUserCond("U") + "\n";
 
 	/** 某角色在 IM_ACCT_ROLE_PERM 的全部列（含 STATUS＝0、含隱藏碼）；存檔時逐格核對現況與決定 UPDATE／INSERT，須在取鎖後查 */
 	public static final String FIND_ROLE_PERM_STATUSES = """

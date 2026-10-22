@@ -39,6 +39,9 @@
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 2（裁示 ⑬-2）：指派下拉只顯示名字、移除對象欄只有名字與「（已停用）」；假候選人不帶 deptName
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-22
+// 變更說明: BACKLOG 第 124 項階段 4 回合 1（裁示 D7A）：一般人員說明期望文字補「首次登入者也會取得」
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -589,7 +592,7 @@ describe('角色權限設定頁（唯讀）', () => {
     const w = await mountView()
     expect(w.find('.ro-note').exists()).toBe(false)
     await w.findAll('.role-item')[0].trigger('click')
-    expect(w.find('.ro-note').text()).toBe('一般人員權限由系統自動給所有啟用中使用者，調整請改 DB（見 SETUP）。')
+    expect(w.find('.ro-note').text()).toBe('一般人員權限由系統自動給所有啟用中使用者，首次登入者也會取得；調整請改 DB（見 SETUP）。')
     expect(w.find('.member-count').text()).toBe('全體啟用中使用者 13 人')
     expect(w.find('.role-descr').exists()).toBe(false)
     expect(checked(w)).toEqual(['ACC_APPLY'])

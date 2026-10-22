@@ -22,6 +22,10 @@
   修改日期: 2026-10-19
   變更說明: BACKLOG 第 89 項階段 6（使用者裁示）：拿掉「另有 N 個尚未上線的權限碼未顯示」提示——
             新功能上線、碼加進後端可見清單後自然出現可勾選；隱藏碼的既有授予存檔照樣不變（後端保證）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-22
+  變更說明: BACKLOG 第 124 項階段 4 回合 1（裁示 D7A）：一般人員說明補「首次登入者也會取得」——人數只算已登入過的有效使用者，
+            資格內尚未登入的人首次登入時自動建帳號、同樣取得一般人員權限
 -->
 <template>
   <main>
@@ -52,7 +56,7 @@
           </div>
           <p v-if="selected.roleDescr" class="hint role-descr">{{ selected.roleDescr }}</p>
           <p v-if="selected.readOnly" class="note-box ro-note">
-            一般人員權限由系統自動給所有啟用中使用者，調整請改 DB（見 SETUP）。
+            一般人員權限由系統自動給所有啟用中使用者，首次登入者也會取得；調整請改 DB（見 SETUP）。
           </p>
 
           <div v-for="g in groups" :key="g.code" class="perm-group" :data-group="g.code">
