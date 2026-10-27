@@ -126,8 +126,15 @@ DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓�
 2. 停 UAT 的舊版殼 jar 與後端。
 3. 跑腳本 R `db\infra_manager_124_2_name_snapshot.sql`：把 8 處「英文名 (中文名)」人名快照改成中文名。第 1 段先列要改的筆數，第 2 段改寫並 COMMIT（改寫是一個 PL/SQL 區塊，任何一句出錯，區塊會自己整段回滾並報錯，不論用 SQL*Plus 或 SQL Developer；輸出會逐欄列出改寫筆數），第 3 段核對：OLD_LEFT 全部 0 才算完成。字面像「X (Y)」但對不上任何人的值（LOOKS_OLD，例如之後改過中文名的人）照規則不改、列出筆數即可。可重跑；腳本 D 跑過後再跑會報錯結束、不改資料。
 4. 跑腳本 D `db\infra_manager_124_3_drop_cols.sql`：刪 `IM_ACCT_USER` 的 9 個舊欄並改寫 COMMENT。第 1 段會先確認人名快照已無「英文名 (中文名)」，沒跑腳本 R 就報錯結束、不刪任何欄。刪欄不可逆。檔尾第一句期望 7 欄：USER_ID、LAST_LOGIN_DATE、STATUS、CREATE_DATE、CREATE_BY、UPDATE_DATE、UPDATE_BY。可重跑（已刪的欄略過）。若報 ORA-00054，代表還有連線在改這張表，確認舊版已停後重跑。
-5. 確認 UAT 後端的 WPX 私鑰檔與 `infra.manager.wpx.*` 設定就位（見第 2 節），部署並啟動新版後端與殼 jar。**UAT 若還是改名前的 `im_acct_insp` 版本**（共用 config 目錄的鍵仍是 `im.acct.insp.*`、Apache 仍轉 `/im_acct_insp`），本步同時照第 8 節「改名部署步驟」第 5～10 步做：舊鍵不改的話新版會默默改用 jar 內開發機的值（排程關閉、附件目錄與私鑰路徑錯誤）。WPX 設定不全時後端會直接啟動失敗。jar 是在開發機打包的，裡面的 `config\environment.properties` 帶的是**開發機的私鑰路徑**，UAT 上一定讀不到：UAT 共用 config 目錄（第 8 節）的 `environment.properties` 要加 `infra.manager.wpx.private-key=<PX Track 私鑰檔的絕對路徑>`（PX Track 自己的設定寫的是相對路徑 `config/…`，本系統只收絕對路徑），`app-id`、`dbalias` 與 jar 內相同（`Test`、`APX`）可不加。位址 `wpx.api.domain.path` PX Track 已寫在共用 `host.properties`，不必再加；加之前先 `grep -n "wpx" <共用 config 目錄>/host.properties` 確認有這四個鍵。改完啟動後端，log 沒有「WPX 登入設定不正確」的 ERROR 才繼續。
-6. 驗收：本人用公司帳號登入成功、打錯密碼一次顯示「帳號或密碼錯誤」、不存在的工號顯示「帳號或密碼錯誤」；申請單、帳號歷史、巡檢、系統管理軌跡的人名只有中文名；手動觸發一次排程（第 7 節），回 200 且 `resultCode` 為 `SUCCESS` 即可——測試環境寄送名單上的人在同步表沒有 Email，通知紀錄會記 SKIP、收不到信，屬正常。兩種情況仍會看到「英文名 (中文名)」，屬正常、不必處理：帳號歷史裡緊急存取事件的「結果」文字（舊紀錄寫進說明文字的申請人、結案人，腳本 R 不改自由文字），以及第 3 步列在 LOOKS_OLD 的那幾筆。
+5. 確認 UAT 後端的 WPX 私鑰檔與 `infra.manager.wpx.*` 設定就位（見第 2 節），部署並啟動新版後端與殼 jar。**UAT 若還是改名前的 `im_acct_insp` 版本**（共用 config 目錄的鍵仍是 `im.acct.insp.*`、Apache 仍轉 `/im_acct_insp`），本步同時照第 8 節「改名部署步驟」第 5～9 步做（第 10 步通知使用者等本窗口第 6 步驗收通過後再做）：舊鍵不改的話新版會默默改用 jar 內開發機的值（排程關閉、附件目錄與私鑰路徑錯誤）。WPX 設定不全時後端會直接啟動失敗。jar 是在開發機打包的，裡面的 `config\environment.properties` 帶的是**開發機的私鑰路徑**，UAT 上一定讀不到：UAT 共用 config 目錄（第 8 節）的 `environment.properties` 要加 `infra.manager.wpx.private-key=<PX Track 私鑰檔的絕對路徑>`（PX Track 自己的設定寫的是相對路徑 `config/…`，本系統只收絕對路徑），`app-id`、`dbalias` 與 jar 內相同（`Test`、`APX`）可不加。位址 `wpx.api.domain.path` PX Track 已寫在共用 `host.properties`，不必加；先用 `grep -n "wpx" <共用 config 目錄>/host.properties` 確認 `wpx.domain`、`wpx.api.port`、`wpx.api.path`、`wpx.api.domain.path` 四個鍵都在，少了才補。啟動前再確認排程開關：`grep -c '^infra.manager.job.enabled=true' <共用 config 目錄>/environment.properties` 應印 `1`（沒寫的話沿用 jar 內開發機的 `false`，排程不會自動跑，而手動觸發不看這個開關，第 6 步的手動觸發照樣成功、看不出來）。改完啟動後端，log 沒有「WPX 登入設定不正確」的 ERROR 才繼續。
+6. 驗收：本人用公司帳號登入成功、打錯密碼一次顯示「帳號或密碼錯誤」、不存在的工號顯示「帳號或密碼錯誤」；申請單、帳號歷史、巡檢、系統管理軌跡的人名只有中文名；手動觸發一次排程（第 7 節），回 200 且 `resultCode` 為 `SUCCESS` 即可——寄送名單上的人在同步表沒有 Email 時通知紀錄會記 SKIP、收不到信，屬正常（開發機名單上的兩人在測試 DB 同步表都沒有 Email；UAT 名單以共用 config 為準）。另確認排程有自動跑：後端啟動滿 15 分鐘後、不手動觸發，執行下面這句要有資料（排程自動觸發的紀錄 RUN_BY 為空；J03 每 15 分鐘一次），沒有資料就回頭查第 5 步的排程開關：
+
+   ```sql
+   SELECT RUN_ID, START_DATE, RESULT_CODE FROM IM_ACCT_JOB_RUN
+    WHERE JOB_CODE = 'J03' AND RUN_BY IS NULL AND START_DATE > SYSDATE - 1/24;
+   ```
+
+   驗收全部通過後，才依第 8 節第 10 步通知使用者新網址。兩種情況仍會看到「英文名 (中文名)」，屬正常、不必處理：帳號歷史裡緊急存取事件的「結果」文字（舊紀錄寫進說明文字的申請人、結案人，腳本 R 不改自由文字），以及第 3 步列在 LOOKS_OLD 的那幾筆。
 
 全新環境（含尚未上線的正式環境）三支第 124 項腳本都不必跑，直接用 `db\` 兩個檔案建立就是最終結構。切換前發出的登入在切換後仍有效（登入紀錄表結構不變）。
 
@@ -417,13 +424,18 @@ unset TOKEN RESP
 
 ## 8. UAT 部署（經 Apache 轉發）
 
-UAT 上兩個 jar 由 tomcat 帳號以 `java -jar -Dserver.port=<port> <jar> --spring.config.name=application,database,host,environment,... --spring.config.additional-location=<共用 config 目錄>` 啟動，port 由啟動參數指定（會蓋過 `application.properties` 的 `server.port`）。殼 jar 不直連後端，而是經 Apache 轉發：
+UAT 上兩個 jar 由 tomcat 帳號以 `java -jar -Dserver.port=<port> <jar> --spring.config.name=application,database,host,environment,... --spring.config.additional-location=<共用 config 目錄>` 啟動，port 由啟動參數指定（會蓋過 `application.properties` 的 `server.port`）。使用者瀏覽器與殼 jar 都經 Apache 轉發（兩個不同的 vhost）：
 
 ```
+瀏覽器 → http://<web 站台主機>/infra_manager_web/...
+       → Apache（web vhost）：ProxyPass /infra_manager_web/ http://localhost:<殼 jar port>/infra_manager_web/
+       → 殼 jar（context-path /infra_manager_web）
 殼 jar → http://<Apache 主機>:<Apache port>/infra_manager/api/v1/...
-       → Apache：ProxyPass /infra_manager http://localhost:<後端 port>/infra_manager（前綴原樣保留）
+       → Apache（api vhost）：ProxyPass /infra_manager/ http://localhost:<後端 port>/infra_manager/（前綴原樣保留）
        → 後端 /infra_manager/api/v1/...（context-path /infra_manager）
 ```
+
+規則結尾一律帶 `/`（見下方「改名部署步驟」第 6 步）。
 
 - **後端必須有 context-path `/infra_manager`**：Apache 轉過去時不拿掉前綴，後端沒有前綴就一律回 404。前綴寫在後端 `application.properties` 的 `server.servlet.context-path=/infra_manager`，隨 jar 打包，啟動指令不用加任何參數。該檔不進 git，打包前先確認開發機（打包 jar 的機器）那份有這一行。
 - **不要把 context-path 寫進共用 config 目錄的設定檔**：該目錄所有 jar（含其他系統）都會讀，寫進去它們會一起多一段前綴而壞掉。反過來，共用目錄任何一個檔（不限 `application.properties`）若有這個 key，會蓋掉 jar 內的那一行。部署前兩項檢查：`grep -rn "context-path" <共用 config 目錄>` 應無輸出；`unzip -p <後端 jar> BOOT-INF/classes/application.properties | grep context-path` 應印出 `server.servlet.context-path=/infra_manager`。
@@ -473,19 +485,20 @@ jar 一律在開發機打包，再由專案擁有者人工交給 UAT 負責人�
    unzip -p $W BOOT-INF/classes/application.properties | grep -v '^[[:space:]]*[#!]' | cut -d= -f1 | grep -c -E 'im\.acct\.insp|im_acct_insp'
    unzip -p $B BOOT-INF/classes/application.properties | grep context-path
    ```
-5. **〔UAT〕共用 config 目錄的設定檔**（啟動參數 `--spring.config.additional-location` 指的目錄）。合併是**逐鍵**的：這裡的檔案有寫到的鍵才蓋過 jar 內的值，沒寫到的鍵仍用 jar 內那份（第 3 步已在開發機改好），不是整份檔案取代：
-   - `environment.properties`（有這個檔才改）：所有 `im.acct.insp.` 開頭的鍵改成 `infra.manager.` 開頭，值不變（例 `im.acct.insp.mail.from=…` → `infra.manager.mail.from=…`）。附件根目錄 `infra.manager.attach.dir` 的值可以維持原路徑，不用搬檔（DB 存的是相對路徑）。這裡若有 `infra.manager.mail.site-url`（改名前是 `im.acct.insp.mail.site-url`），值要改成新前端網址 `http://<主機>:<殼 jar port>/infra_manager_web/`，否則信末「前往系統」連結會指到舊網址；這裡沒有這個鍵，就用第 3 步打進 jar 的值。
+5. **〔UAT〕共用 config 目錄的設定檔**（啟動參數 `--spring.config.additional-location` 指的目錄）。合併是**逐鍵**的：這裡的檔案有寫到的鍵才蓋過 jar 內的值，沒寫到的鍵仍用 jar 內那份，不是整份檔案取代。**jar 內是開發機的值**（第 3 步只改了鍵名：排程關閉、附件目錄與私鑰是開發機路徑、寄送名單是開發機名單），所以下列鍵 UAT 一定要在這裡寫出：`infra.manager.attach.dir`、`infra.manager.job.enabled`、`infra.manager.wpx.private-key`、`infra.manager.mail.from`、`infra.manager.mail.allow-list`：
+   - `environment.properties`（有這個檔才改）：所有 `im.acct.insp.` 開頭的鍵改成 `infra.manager.` 開頭，值不變（例 `im.acct.insp.mail.from=…` → `infra.manager.mail.from=…`），再補上述必寫的鍵與第 6 節窗口第 5 步的私鑰路徑。附件根目錄 `infra.manager.attach.dir` 的值可以維持原路徑，不用搬檔（DB 存的是相對路徑）。這裡若有 `infra.manager.mail.site-url`（改名前是 `im.acct.insp.mail.site-url`），值要改成使用者平常開畫面的新網址（經 Apache web 站台時為 `http://<web 站台主機>/infra_manager_web/`；原值是 `${itflow.domain}/im_acct_insp_web/` 這種寫法時，只把結尾換成 `/infra_manager_web/`），否則信末「前往系統」連結會指到舊網址；這裡沒有這個鍵，就用第 3 步打進 jar 的值。
    - `host.properties`（有這個檔才改）：刪掉 `im.acct.insp.path`、`im.acct.insp.domain.path` 兩行，改成：
      ```
      infra.manager.path=/infra_manager/api/v1
      infra.manager.domain.path=${backend.api.domain}${backend.api.port}${infra.manager.path}
      ```
      `backend.api.domain`、`backend.api.port` 不變。
-   - 改完檢查：`grep -rnE "im\.acct\.insp|im_acct_insp" <共用 config 目錄>` 應無輸出（`#` 開頭的註解行可忽略；附件目錄等「值」裡出現舊目錄名可以不改）。鍵名有舊名的要一起改：點號寫法改成 `infra.manager.` 開頭；舊套件名寫法（例如 `logging.level.com.mpx.im_acct_insp`）改成 `com.mpx.infra_manager`，否則該設定會默默失效。`grep -rn "context-path" <共用 config 目錄>` 應無輸出（見上方第二點）。
+   - 改完檢查：`grep -rnE "im\.acct\.insp|im_acct_insp" <共用 config 目錄>` 應無輸出（`#` 開頭的註解行可忽略；附件目錄等「值」裡出現舊目錄名可以不改）。鍵名有舊名的要一起改：點號寫法改成 `infra.manager.` 開頭；舊套件名寫法（例如 `logging.level.com.mpx.im_acct_insp`）改成 `com.mpx.infra_manager`，否則該設定會默默失效。`grep -rn "context-path" <共用 config 目錄>` 應無輸出（見上方第二點）。`grep -rn "db.alias\|db.connect" <共用 config 目錄>` 若有輸出，確認不是別的系統寫的同名鍵蓋掉本系統 jar 內的 DB 別名 `itflow.db.alias`。
 6. **Apache 新增轉發規則**（改前先備份 vhost 檔；先用 `grep -ri "im_acct_insp" /etc/httpd/ | grep -i proxypass` 找出舊規則在哪個檔，舊規則有幾組就加幾組）：
    - 後端（api 的 vhost）：`ProxyPass /infra_manager/ http://localhost:<後端 port>/infra_manager/`，`ProxyPassReverse` 同一組值。
    - 殼 jar（web 的 vhost；使用者瀏覽器經 Apache 開畫面時才有這組舊規則）：`ProxyPass /infra_manager_web/ http://localhost:<殼 jar port>/infra_manager_web/`，`ProxyPassReverse` 同一組值。
-   - 兩邊結尾都要帶 `/`：Apache 只比對網址開頭字串，不帶 `/` 的 `/infra_manager` 也會吃到 `/infra_manager_web/...`。
+   - 兩邊結尾都要帶 `/`：Apache 只比對網址開頭字串，不帶 `/` 的 `/infra_manager` 也會吃到 `/infra_manager_web/...`。代價是網址少打最後的 `/`（`…/infra_manager_web`）會 404；要讓它自動補斜線，在 web vhost 加 `RedirectMatch ^/infra_manager_web$ /infra_manager_web/`。
+   - 新規則加在舊規則旁、同一個 `<VirtualHost>` 區塊內。Apache 依序比對、先比中先用，不要放到萬用規則 `ProxyPass /` 之後。
    - 加完 `sudo apachectl configtest` 看到 `Syntax OK` 再 `sudo systemctl reload httpd`。舊的 `/im_acct_insp`、`/im_acct_insp_web` 規則先留著，等第 9 步驗證通過後再移除。
 7. **建立新 log 目錄**：`/home/tomcat/log/infra_manager/`、`/home/tomcat/log/infra_manager_web/`，並給 tomcat 帳號寫入權限。舊 log 留在舊目錄 `/home/tomcat/log/im_acct_insp/`、`/home/tomcat/log/im_acct_insp_web/`，不用搬。
 8. **停掉舊版兩個 jar，改用新 jar 檔名啟動**：啟動指令照本節開頭的格式，只把 jar 換成 `infra_manager-0.0.1-SNAPSHOT.jar`、`infra_manager_web-0.0.1-SNAPSHOT.jar`，port 與其他參數不變。
@@ -493,8 +506,10 @@ jar 一律在開發機打包，再由專案擁有者人工交給 UAT 負責人�
    ```bash
    # 舊前綴：應回 404
    curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{}' http://localhost:<後端 port>/im_acct_insp/api/v1/auth/login
-   # 經殼 jar（新前綴）：應回 401 或 400
+   # 直連殼 jar（新前綴）：應回 401 或 400
    curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{}' http://localhost:<殼 jar port>/infra_manager_web/api/v1/auth/login
+   # 經 Apache web 站台（使用者瀏覽器實際走的路）：應回 401 或 400
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{}' http://<web 站台主機>/infra_manager_web/api/v1/auth/login
    ```
-   再確認新 log 目錄有當天的 `infra_manager.yyyy-MM-dd.log`、`infra_manager_web.yyyy-MM-dd.log`。全部通過後移除 Apache 舊的 `/im_acct_insp` 規則。
-10. **通知使用者**：系統網址改成 `http://<主機>:<殼 jar port>/infra_manager_web/`，舊網址與舊書籤會失效；換版後所有人都要重新登入一次（瀏覽器存登入狀態的位置換了名字）。
+   再確認新 log 目錄有當天的 `infra_manager.yyyy-MM-dd.log`、`infra_manager_web.yyyy-MM-dd.log`。全部通過後移除 Apache 舊的 `/im_acct_insp`、`/im_acct_insp_web` 兩組規則（含 `ProxyPassReverse`），再 `sudo apachectl configtest` 與 `sudo systemctl reload httpd`。
+10. **通知使用者**（與第 6 節切換窗口併做時，等窗口第 6 步驗收通過後才通知）：系統網址的 `/im_acct_insp_web/` 改成 `/infra_manager_web/`（經 Apache web 站台時為 `http://<web 站台主機>/infra_manager_web/`），舊網址與舊書籤會失效；換版後所有人都要重新登入一次（瀏覽器存登入狀態的位置換了名字）。
