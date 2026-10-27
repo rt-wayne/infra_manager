@@ -10,7 +10,7 @@
 | JDK | 25 | 後端與殼 jar（`JAVA_HOME` 指向 JDK 25） |
 | Maven | 不需安裝 | 兩個 jar 都附 Maven Wrapper（`mvnw`／`mvnw.cmd`，固定 Maven 3.9.16） |
 | Node.js | 24 以上 | 前端（`infra_manager_web\infra_manager_web_frontend\.nvmrc`） |
-| Oracle | 19c | schema RD_USER，須已有本模組 23 張表與初始資料（建表與初始資料 SQL 在 `db\`，用法見第 6 節；只有第一階段 21 張表的環境先跑第 6 節的升級腳本） |
+| Oracle | 19c | schema RD_USER，須已有本模組 23 張表、初始資料與 AP_USER 的 synonym／授權（SQL 在 `db\`，用法見第 6 節；只有第一階段 21 張表的環境先跑第 6 節的升級腳本） |
 | DB 連線資訊 API | — | 後端執行期向它取得 DB 連線資訊，須能連到 |
 
 ## 2. 設定檔
@@ -101,20 +101,24 @@ DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓�
 
 ### 執行前共通注意
 
-- **字元集**：DB 字元集須為 AL32UTF8（Big5 系字元集存不了罕用的人名用字，會無聲變成問號）。SQL*Plus 只用來執行下方 `db\` 兩個檔案，在 cmd 視窗執行，執行前在同一個視窗先下 `set NLS_LANG=.AL32UTF8`。下方各段含中文值的語句（例如巡檢項目名稱、資產分類名稱）一律用 SQL Developer 執行，不要貼進 cmd 的 SQL*Plus——cmd 預設是 Big5 代碼頁，中文會無聲變成亂碼、不會報錯。
+- **字元集**：DB 字元集須為 AL32UTF8（Big5 系字元集存不了罕用的人名用字，會無聲變成問號）。SQL*Plus 只用來執行下方 `db\` 的 SQL 檔，在 cmd 視窗執行，執行前在同一個視窗先下 `set NLS_LANG=.AL32UTF8`。下方各段含中文值的語句（例如巡檢項目名稱、資產分類名稱）一律用 SQL Developer 執行，不要貼進 cmd 的 SQL*Plus——cmd 預設是 Big5 代碼頁，中文會無聲變成亂碼、不會報錯。
 - **一次只執行一個操作**：下面每個操作各自一個區塊，只複製你要做的那一塊，**不要把整節貼進去一起執行**。
 - **關 autocommit**：每句 INSERT／UPDATE 都應**影響 1 筆**（例外在該段註明），確認筆數無誤再 COMMIT，異常就 ROLLBACK。核對完立即 COMMIT 或 ROLLBACK——交易沒結束前，被改到的那個人登入會卡住。
 - 替換 `【】` 後的實際值不要存回本檔、不要 commit 進版控。
 - **SQL 歷史**：SQL Developer 預設會保留執行過的語句（「SQL 歷史記錄」，F8），第 1 段與建新環境的初始管理者 INSERT 含工號；正式環境操作後，在 SQL 歷史記錄視窗清除歷史，或刪 `%APPDATA%\SQL Developer\SqlHistory\` 下對應的檔案。
 
-### 建新環境：執行 `db\` 兩個 SQL 檔
+### 建新環境：依序執行 `db\` 四個 SQL 檔
 
-正式環境一律用 `db\` 兩個檔案在空 schema 建，**不要從測試 DB 匯出或複製**（測試 DB 有真實員工的測試帳號與測試單據）。依序執行：
+正式環境一律用 `db\` 下列四個檔案在空 schema 建，**不要從測試 DB 匯出或複製**（測試 DB 有真實員工的測試帳號與測試單據）。四個檔都以表的擁有者 RD_USER 執行，依序：
 
 1. `db\infra_manager_create_table.sql`：在空 schema 建 23 張表、索引、5 個序列與欄位 COMMENT（需 CREATE TABLE、CREATE SEQUENCE 權限與表空間配額）。本檔沒有遇錯即停，且 DDL 每句自動提交：中途失敗時，先 DROP 已建立的表與序列（或請 DBA 清空 schema）再從頭重跑，否則已存在的表會報 ORA-00955。
 2. `db\infra_manager_init_data.sql`：代碼表 116 筆初始資料（檔首 `WHENEVER SQLERROR EXIT ROLLBACK`，遇錯即停並回滾）。
+3. `db\infra_manager_phase2_emg.sql`：補緊急存取兩張表的 PUBLIC synonym 與授權給 AP_USER（表與索引會印「已存在，略過」，詳見下方「既有環境升級到第二階段緊急存取」）。
+4. `db\infra_manager_grant.sql`：第一階段 21 張表與 5 個序列的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER（21 張表各 SELECT／INSERT／UPDATE／DELETE，照抄測試 DB；序列各 SELECT）。建表檔沒有 synonym 與授權，少了這步殼 jar 讀表會 ORA-00942。需 RD_USER 有 CREATE PUBLIC SYNONYM 權限、AP_USER 已存在（正式 DB 未查，沒有的話會以 ORA-01031、ORA-01917 停下，請 DBA 處理後從頭重跑）。可重跑，檔尾兩句查詢期望各 26 列，期望值寫在該段註解。
 
-**既有環境升級到第二階段緊急存取**（已照上面建好 21 張表的測試、正式環境）：以 RD_USER 執行 `db\infra_manager_phase2_emg.sql`（SQL Developer 用「執行指令碼」F5；SQL*Plus 同樣先 `set NLS_LANG=.AL32UTF8`）。本檔可重跑：表與索引已存在就印「已存在，略過」，COMMENT 重覆執行無害；本檔也會建兩張新表的 PUBLIC synonym 並授權給殼 jar 連線帳號 AP_USER（`IM_EMG_ACCESS` 授 SELECT／INSERT／UPDATE、`IM_EMG_AFFECT_ACCT` 授 SELECT／INSERT；比照第一階段的 PUBLIC synonym 建法，RD_USER 自己有 CREATE PUBLIC SYNONYM 權限）。檔尾五句查詢會列出兩張表、三個 IND_ 索引（主鍵索引已排除）、兩表欄數（30、11）及無 COMMENT 欄位數（期望 0）、兩個 PUBLIC synonym、AP_USER 的 5 筆授權供核對，期望值寫在該段註解。檔頭設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑。全新環境用建表檔建完表後**仍須跑本檔**：建表檔沒有 synonym 與授權，本檔重跑時表與索引會印「已存在，略過」，只補上這兩張表的 synonym 與 GRANT；第一階段 21 張表的 synonym 與授權建法仍未記載（見 `BACKLOG.md` 第 48 項）。
+第 3、4 步不需另外的連線設定：兩檔檔頭都設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑。
+
+**既有環境升級到第二階段緊急存取**（已照上面建好 21 張表的測試、正式環境）：以 RD_USER 執行 `db\infra_manager_phase2_emg.sql`（SQL Developer 用「執行指令碼」F5；SQL*Plus 同樣先 `set NLS_LANG=.AL32UTF8`）。本檔可重跑：表與索引已存在就印「已存在，略過」，COMMENT 重覆執行無害；本檔也會建兩張新表的 PUBLIC synonym 並授權給殼 jar 連線帳號 AP_USER（`IM_EMG_ACCESS` 授 SELECT／INSERT／UPDATE、`IM_EMG_AFFECT_ACCT` 授 SELECT／INSERT；比照第一階段的 PUBLIC synonym 建法，RD_USER 自己有 CREATE PUBLIC SYNONYM 權限）。檔尾五句查詢會列出兩張表、三個 IND_ 索引（主鍵索引已排除）、兩表欄數（30、11）及無 COMMENT 欄位數（期望 0）、兩個 PUBLIC synonym、AP_USER 的 5 筆授權供核對，期望值寫在該段註解。檔頭設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑。全新環境用建表檔建完表後**仍須跑本檔**：建表檔沒有 synonym 與授權，本檔重跑時表與索引會印「已存在，略過」，只補上這兩張表的 synonym 與 GRANT；第一階段 21 張表與 5 個序列的 synonym 與授權在 `db\infra_manager_grant.sql`（上方第 4 步）。
 
 **既有環境升級到角色權限維護介面**（角色指派、執行人對照、角色權限設定三個畫面）：以 RD_USER 執行 `db\infra_manager_89_role_admin.sql`（執行方式同上）。本檔只更新 IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM 四張表的 COMMENT、不動結構、不需 GRANT（AP_USER 對相關表本來就有四種權限，2026-10-19 於測試 DB 實查；正式環境執行後用檔尾第三句再核對一次，少了 INSERT 或 UPDATE 就要補 GRANT）；資料只改一個值：SYS_ADMIN 的角色說明拿掉「角色指派與執行人對照第一階段以 DB 維護」，且只在說明仍是初始舊字時才改。可重跑；全新環境用建表檔與初始資料檔建完不必跑（兩檔已同步）。檔尾四句查詢的期望值寫在該段註解。
 
@@ -136,7 +140,7 @@ DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓�
 
    驗收全部通過後，才依第 8 節第 10 步通知使用者新網址。兩種情況仍會看到「英文名 (中文名)」，屬正常、不必處理：帳號歷史裡緊急存取事件的「結果」文字（舊紀錄寫進說明文字的申請人、結案人，腳本 R 不改自由文字），以及第 3 步列在 LOOKS_OLD 的那幾筆。
 
-全新環境（含尚未上線的正式環境）三支第 124 項腳本都不必跑，直接用 `db\` 兩個檔案建立就是最終結構。切換前發出的登入在切換後仍有效（登入紀錄表結構不變）。
+全新環境（含尚未上線的正式環境）三支第 124 項腳本都不必跑，直接照上方「建新環境」四個檔建立就是最終結構。切換前發出的登入在切換後仍有效（登入紀錄表結構不變）。
 
 建完補第一位系統管理員。**這一步只能用 DB 設定**：角色指派畫面需要 SYS_ROLE，新環境還沒有任何人持有，進不了畫面；第一位設好、登入後，其他人的角色與執行人改用畫面指派。**用 SQL Developer 另開一個連線**執行（不要接在跑 init_data 檔的 SQL*Plus 連線裡——該檔的遇錯即停設定整個連線都有效，之後任何一句打錯都會直接結束 SQL*Plus 並回滾）：
 
