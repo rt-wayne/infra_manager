@@ -32,7 +32,7 @@
 - 測試環境若要用 baseDate 手動跑排程，把 `infra.manager.job.allow-base-date` 設為 true；正式環境保持 false。J03（緊急存取逾期通知）預設每 15 分鐘跑一次，不想在本機跑就把 `infra.manager.job.j03.cron` 設為 `-`。
 - 寄信：
   - `application.properties` 的 `spring.mail.host` 與 `environment.properties` 的 `infra.manager.mail.from` 都有值才會實際寄出，否則只寫 log。
-  - 誰收得到信由 `infra.manager.mail.allow-list`（逗號分隔工號，半形或全形逗號皆可）決定，留空＝誰都不寄。測試環境填 `2410305`，因為測試 DB 有同事的真實 Email。
+  - 誰收得到信由 `infra.manager.mail.allow-list`（逗號分隔工號，半形或全形逗號皆可）決定，留空＝誰都不寄。測試環境填 `2410305,2606459`，因為測試 DB 有同事的真實 Email（Email 讀同步表 `PX_SYNC_EMP`，這兩人在測試 DB 的同步表沒有 Email，實際收不到信）。
   - 正式環境才設 `infra.manager.mail.send-to-all=true`，寄給所有收件人。
   - `infra.manager.mail.site-url` 填使用者在瀏覽器開的前端網址（含 context），信末才會有「前往系統」連結，例 `http://主機:8787/infra_manager_web/`。直接從瀏覽器網址列複製也可以（`#` 之後、結尾的 `index.html` 會自動去掉）。留空＝不放連結；不是 `http://` 或 `https://` 開頭、沒有主機名稱，或網址含空白、雙引號等不合法字元，也視同留空，啟動 log 會有 WARN。
   - 改完要重啟後端。啟動 log 會有一行「寄信：SMTP 實際寄出；寄送名單 N 人」或「寄信：SMTP 未設定…只寫 log」，可據此確認。若出現 WARN「SMTP 已啟用但寄送名單是空的…」，代表名單空又沒開 `send-to-all`，所有通知都不會寄出。
@@ -126,7 +126,7 @@ DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓�
 2. 停 UAT 的舊版殼 jar 與後端。
 3. 跑腳本 R `db\infra_manager_124_2_name_snapshot.sql`：把 8 處「英文名 (中文名)」人名快照改成中文名。第 1 段先列要改的筆數，第 2 段改寫並 COMMIT（改寫是一個 PL/SQL 區塊，任何一句出錯，區塊會自己整段回滾並報錯，不論用 SQL*Plus 或 SQL Developer；輸出會逐欄列出改寫筆數），第 3 段核對：OLD_LEFT 全部 0 才算完成。字面像「X (Y)」但對不上任何人的值（LOOKS_OLD，例如之後改過中文名的人）照規則不改、列出筆數即可。可重跑；腳本 D 跑過後再跑會報錯結束、不改資料。
 4. 跑腳本 D `db\infra_manager_124_3_drop_cols.sql`：刪 `IM_ACCT_USER` 的 9 個舊欄並改寫 COMMENT。第 1 段會先確認人名快照已無「英文名 (中文名)」，沒跑腳本 R 就報錯結束、不刪任何欄。刪欄不可逆。檔尾第一句期望 7 欄：USER_ID、LAST_LOGIN_DATE、STATUS、CREATE_DATE、CREATE_BY、UPDATE_DATE、UPDATE_BY。可重跑（已刪的欄略過）。若報 ORA-00054，代表還有連線在改這張表，確認舊版已停後重跑。
-5. 確認 UAT 後端的 WPX 私鑰檔與 `infra.manager.wpx.*` 設定就位（見第 2 節），部署並啟動新版後端與殼 jar。WPX 設定不全時後端會直接啟動失敗。jar 是在開發機打包的，裡面的 `config\environment.properties` 帶的是**開發機的私鑰路徑**，UAT 上一定讀不到：UAT 共用 config 目錄（第 8 節）的 `environment.properties` 要加 `infra.manager.wpx.private-key=<PX Track 私鑰檔的絕對路徑>`（PX Track 自己的設定寫的是相對路徑 `config/…`，本系統只收絕對路徑），`app-id`、`dbalias` 與 jar 內相同（`Test`、`APX`）可不加。位址 `wpx.api.domain.path` PX Track 已寫在共用 `host.properties`，不必再加；加之前先 `grep -n "wpx" <共用 config 目錄>/host.properties` 確認有這四個鍵。改完啟動後端，log 沒有「WPX 登入設定不正確」的 ERROR 才繼續。
+5. 確認 UAT 後端的 WPX 私鑰檔與 `infra.manager.wpx.*` 設定就位（見第 2 節），部署並啟動新版後端與殼 jar。**UAT 若還是改名前的 `im_acct_insp` 版本**（共用 config 目錄的鍵仍是 `im.acct.insp.*`、Apache 仍轉 `/im_acct_insp`），本步同時照第 8 節「改名部署步驟」第 5～10 步做：舊鍵不改的話新版會默默改用 jar 內開發機的值（排程關閉、附件目錄與私鑰路徑錯誤）。WPX 設定不全時後端會直接啟動失敗。jar 是在開發機打包的，裡面的 `config\environment.properties` 帶的是**開發機的私鑰路徑**，UAT 上一定讀不到：UAT 共用 config 目錄（第 8 節）的 `environment.properties` 要加 `infra.manager.wpx.private-key=<PX Track 私鑰檔的絕對路徑>`（PX Track 自己的設定寫的是相對路徑 `config/…`，本系統只收絕對路徑），`app-id`、`dbalias` 與 jar 內相同（`Test`、`APX`）可不加。位址 `wpx.api.domain.path` PX Track 已寫在共用 `host.properties`，不必再加；加之前先 `grep -n "wpx" <共用 config 目錄>/host.properties` 確認有這四個鍵。改完啟動後端，log 沒有「WPX 登入設定不正確」的 ERROR 才繼續。
 6. 驗收：本人用公司帳號登入成功、打錯密碼一次顯示「帳號或密碼錯誤」、不存在的工號顯示「帳號或密碼錯誤」；申請單、帳號歷史、巡檢、系統管理軌跡的人名只有中文名；手動觸發一次排程（第 7 節），回 200 且 `resultCode` 為 `SUCCESS` 即可——測試環境寄送名單上的人在同步表沒有 Email，通知紀錄會記 SKIP、收不到信，屬正常。兩種情況仍會看到「英文名 (中文名)」，屬正常、不必處理：帳號歷史裡緊急存取事件的「結果」文字（舊紀錄寫進說明文字的申請人、結案人，腳本 R 不改自由文字），以及第 3 步列在 LOOKS_OLD 的那幾筆。
 
 全新環境（含尚未上線的正式環境）三支第 124 項腳本都不必跑，直接用 `db\` 兩個檔案建立就是最終結構。切換前發出的登入在切換後仍有效（登入紀錄表結構不變）。
@@ -214,7 +214,7 @@ UPDATE IM_ACCT_USER
  WHERE USER_ID = '【工號】';
 ```
 
-**3. 解鎖**：本系統已不鎖定帳號，不必做。登入連錯是由 WPX 鎖住公司帳號，依公司帳號流程找 WPX 窗口解鎖。
+**3. 解鎖**：本系統已不鎖定帳號，不必做。公司帳號被 WPX 鎖定時（登入顯示「帳號無法使用」，後端 log 的 WPX 原始 Code 為 -3～-5），依公司帳號流程找 WPX 窗口解鎖。WPX 連錯密碼會不會自動鎖定未查證。
 
 **4. 讓某人已登入的畫面立即失效**（例：公司帳號密碼外洩、人員異動當下要立刻踢出。改密碼由公司帳號流程處理，本系統不經手；改了密碼**不會**登出本系統已登入的畫面）
 
@@ -346,7 +346,7 @@ echo "$RESP" | tail -n 1
 - 最後印出 `200` 就是成功，token 已存進變數 `TOKEN`，下一步直接用；要確認有沒有存到，用 `echo ${#TOKEN}` 看長度（應為 43），不要把 token 本身印出來。不是 200 時用 `echo "$RESP"` 看錯誤訊息。
 - 印出 `000`＝連不上後端（沒啟動或位址錯），這時 `$RESP` 也沒有內容。
 - 印出 `404`＝網址前綴和後端的 `server.servlet.context-path` 對不上（網址少了 `/infra_manager`、仍用舊前綴 `/im_acct_insp`，或後端沒設 context-path）。
-- 密碼是公司帳號密碼，由 WPX 驗證。登入失敗都回 401，訊息三種：「帳號或密碼錯誤」（工號不存在或密碼錯）、「帳號無法使用」（公司帳號被鎖定或停用，或本系統停用、不符首次登入資格）、「登入服務異常，請聯絡管理者」（WPX 連不上或回應異常，看後端 log 的 WPX 原始 Code）。連錯會由 WPX 鎖住公司帳號，影響範圍不只本系統，測試時不要反覆送錯密碼。
+- 密碼是公司帳號密碼，由 WPX 驗證。登入失敗都回 401，訊息三種：「帳號或密碼錯誤」（工號不存在或密碼錯）、「帳號無法使用」（公司帳號被鎖定或停用，或本系統停用、不符首次登入資格）、「登入服務異常，請聯絡管理者」（WPX 連不上或回應異常，看後端 log 的 WPX 原始 Code）。WPX 連錯密碼可能會鎖住公司帳號（未查證），萬一被鎖，影響範圍不只本系統，測試時不要反覆送錯密碼。
 - 回 400「請求內容格式錯誤」＝密碼含 Tab 之類的控制字元，組出的 JSON 格式不合法、後端拒收，請找開發人員協助。
 
 **2. 觸發排程**
@@ -482,7 +482,11 @@ jar 一律在開發機打包，再由專案擁有者人工交給 UAT 負責人�
      ```
      `backend.api.domain`、`backend.api.port` 不變。
    - 改完檢查：`grep -rnE "im\.acct\.insp|im_acct_insp" <共用 config 目錄>` 應無輸出（`#` 開頭的註解行可忽略；附件目錄等「值」裡出現舊目錄名可以不改）。鍵名有舊名的要一起改：點號寫法改成 `infra.manager.` 開頭；舊套件名寫法（例如 `logging.level.com.mpx.im_acct_insp`）改成 `com.mpx.infra_manager`，否則該設定會默默失效。`grep -rn "context-path" <共用 config 目錄>` 應無輸出（見上方第二點）。
-6. **Apache 新增轉發規則**：`ProxyPass /infra_manager http://localhost:<後端 port>/infra_manager`；原本若有 `/im_acct_insp` 的 `ProxyPassReverse`，也比照新增一條 `/infra_manager` 的。舊的 `/im_acct_insp` 規則先留著，等第 9 步驗證通過後再移除。
+6. **Apache 新增轉發規則**（改前先備份 vhost 檔；先用 `grep -ri "im_acct_insp" /etc/httpd/ | grep -i proxypass` 找出舊規則在哪個檔，舊規則有幾組就加幾組）：
+   - 後端（api 的 vhost）：`ProxyPass /infra_manager/ http://localhost:<後端 port>/infra_manager/`，`ProxyPassReverse` 同一組值。
+   - 殼 jar（web 的 vhost；使用者瀏覽器經 Apache 開畫面時才有這組舊規則）：`ProxyPass /infra_manager_web/ http://localhost:<殼 jar port>/infra_manager_web/`，`ProxyPassReverse` 同一組值。
+   - 兩邊結尾都要帶 `/`：Apache 只比對網址開頭字串，不帶 `/` 的 `/infra_manager` 也會吃到 `/infra_manager_web/...`。
+   - 加完 `sudo apachectl configtest` 看到 `Syntax OK` 再 `sudo systemctl reload httpd`。舊的 `/im_acct_insp`、`/im_acct_insp_web` 規則先留著，等第 9 步驗證通過後再移除。
 7. **建立新 log 目錄**：`/home/tomcat/log/infra_manager/`、`/home/tomcat/log/infra_manager_web/`，並給 tomcat 帳號寫入權限。舊 log 留在舊目錄 `/home/tomcat/log/im_acct_insp/`、`/home/tomcat/log/im_acct_insp_web/`，不用搬。
 8. **停掉舊版兩個 jar，改用新 jar 檔名啟動**：啟動指令照本節開頭的格式，只把 jar 換成 `infra_manager-0.0.1-SNAPSHOT.jar`、`infra_manager_web-0.0.1-SNAPSHOT.jar`，port 與其他參數不變。
 9. **驗證**：跑本節上方「驗證」的兩條 curl（已是新前綴 `/infra_manager`），結果對照上表；另確認舊前綴已失效、經殼 jar 可通：

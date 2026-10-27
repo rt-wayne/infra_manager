@@ -67,15 +67,15 @@
 | 實際操作人 | 真正按下按鈕的登入者；切換身分時是切換前的本人 |
 | 代理身分 | 系統管理員切換身分後扮演的使用者；切換期間權限與資料範圍完全等同此人 |
 | 有效身分 | 切換中＝代理身分，否則＝實際操作人；權限、資料範圍、業務欄位一律用有效身分 |
-| 顯示名 | 同步表 `PX_SYNC_EMP` 的中文姓名（去頭尾空白），空白時顯示工號（`Texts.displayName`）。各表 *_NAME 快照欄自第 124 項階段 3 起存此格式（更早寫入的快照仍是舊的「英文名 (中文名)」，UAT 切換窗口由腳本 R 改成中文名；字面對不上現有使用者的不改，測試 DB 試算有 12 筆，為同一位使用者改過中文名前寫入，裁示維持原樣） |
+| 顯示名 | 同步表 `PX_SYNC_EMP` 的中文姓名（去頭尾空白），空白時顯示工號（`Texts.displayName`）。各表 *_NAME 快照欄也存此格式（第 124 項前寫入的「英文名 (中文名)」已由腳本 R 改成中文名；字面對不上任何使用者的 12 筆維持原格式，是同一位使用者改過中文名之前寫入的） |
 
 ### 功能清單
 
 #### 1. 登入、登出
 
-> 登入改用 WPX 外部驗證、人員資料改讀同步表分批施工中，進度見 `BACKLOG.md` 第 124 項；本段為目前 master 上的行為（施工期間不打包到 UAT，UAT 仍是施工前版本）。
+> 本段為 master 上的行為。UAT 於 2026-10-27 起切換到此版本（測試 DB 已改完結構，UAT 停機待新版上線），上線驗收見 `BACKLOG.md` 第 124 項。
 
-- 以工號＋公司帳號密碼登入。密碼由 WPX 的 VerifySecure 登入 API 驗證（元件 `WpxAuthClient`），本系統不存、不比對密碼，也不計失敗次數、不鎖定（連錯鎖定由 WPX 處理）。WPX 發的 token 本系統不保存，驗過後由本系統發自己的 token。
+- 以工號＋公司帳號密碼登入。密碼由 WPX 的 VerifySecure 登入 API 驗證（元件 `WpxAuthClient`），本系統不存、不比對密碼，也不計失敗次數、不鎖定。WPX 連錯密碼會不會鎖住公司帳號未查證（WPX 交付文件只列出 -3～-5 三種鎖定狀態碼，沒寫連錯幾次會鎖），本系統登入端點目前也沒有次數限制（見 `BACKLOG.md` 第 125 項，暫停）。WPX 發的 token 本系統不保存，驗過後由本系統發自己的 token。
 - 判斷順序：
   1. 工號空白或超過 30 字、密碼空白 → A01，不送 WPX。
   2. 送 WPX 驗證：帳密錯（WPX Code -1、-11～-15）→ A01；留職停薪、鎖定、時段、分店或 IP 限制（-2～-10）→ A04；檢查層錯誤（-18～-27）、未列出的代碼、Code 0 但 Success 不是 true、連不上 → A05（本系統 WPX 設定不全時後端根本不會啟動，見「環境設定」）。WPX 原始 Code 只寫 log，不回給使用者。
@@ -186,7 +186,7 @@
 - 未切換時呼叫切回 → 409 E20。代理身分被停用（STATUS 變 0）或在同步表查無時自動視為切回（不寫軌跡）。登出即結束切換。
 - 軌跡：切換寫 IMPERSONATE、切回寫 IMPERSONATE_END（RESULT_CODE＝SUCCESS）；無權限者嘗試切換 → 403 並寫一筆 DENY。
 - 操作人顯示（三種位置格式不同）：
-  - **帳號歷史**：「{實際操作人}（以 {代理身分} 身分）」，例「何嘉浤（以 許永成 身分）」（人名只有中文名，讀同步表；第 124 項前寫入的「英文名 (中文名)」快照由切換窗口的腳本 R 改成中文名；緊急存取事件的結果文字是自由文字，舊紀錄裡寫的申請人、結案人維持「英文名 (中文名)」，腳本 R 不改）；排程事件顯示「系統排程」（`labels.ts` histActorText）。
+  - **帳號歷史**：「{實際操作人}（以 {代理身分} 身分）」，例「何嘉浤（以 許永成 身分）」（人名只有中文名，讀同步表；第 124 項前寫入的「英文名 (中文名)」快照已由腳本 R 改成中文名；緊急存取事件的結果文字是自由文字，舊紀錄裡寫的申請人、結案人維持「英文名 (中文名)」，腳本 R 不改）；排程事件顯示「系統排程」（`labels.ts` histActorText）。
   - **巡檢填寫人、異常處理人**：「{代理身分}（實際操作人：{實際操作人}）」，例「李凱鈞（實際操作人：何嘉浤）」（`labels.ts` personText）。
   - **通知本文、待辦**：申請人只顯示有效身分（申請單 APPLY_BY 本來就記有效身分），不帶實際操作人。
 
@@ -716,7 +716,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 ### 資料結構
 
-23 張表、47 個索引（PK 23＋一般 24）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（23 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對）；系統管理相關四張表（IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM，說明由畫面維護與軌跡內容）的 COMMENT 另有既有環境升級腳本 `db/infra_manager_89_role_admin.sql`（改 COMMENT、不動結構、不需 GRANT——AP_USER 對相關表已有四種權限；資料只改 SYS_ADMIN 角色說明一個值，仍是初始舊字時才改；可重跑；建表檔與初始資料檔同步，新環境不必跑）；第 124 項（登入改用 WPX、人員資料讀同步表）有三支既有環境升級腳本：`db/infra_manager_124_1_prep.sql`（腳本 S1，英文名欄改可空，測試 DB 已執行）、`db/infra_manager_124_2_name_snapshot.sql`（腳本 R，8 處「英文名 (中文名)」人名快照改中文名）、`db/infra_manager_124_3_drop_cols.sql`（腳本 D，刪 `IM_ACCT_USER` 9 個舊欄並重寫 COMMENT），R、D 只在 UAT 切換窗口依序跑、測試 DB 尚未執行，建表檔與初始資料檔已是最終結構、新環境三支都不必跑，命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
+23 張表、47 個索引（PK 23＋一般 24）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（23 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對）；系統管理相關四張表（IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM，說明由畫面維護與軌跡內容）的 COMMENT 另有既有環境升級腳本 `db/infra_manager_89_role_admin.sql`（改 COMMENT、不動結構、不需 GRANT——AP_USER 對相關表已有四種權限；資料只改 SYS_ADMIN 角色說明一個值，仍是初始舊字時才改；可重跑；建表檔與初始資料檔同步，新環境不必跑）；第 124 項（登入改用 WPX、人員資料讀同步表）有三支既有環境升級腳本：`db/infra_manager_124_1_prep.sql`（腳本 S1，英文名欄改可空，測試 DB 已執行）、`db/infra_manager_124_2_name_snapshot.sql`（腳本 R，8 處「英文名 (中文名)」人名快照改中文名）、`db/infra_manager_124_3_drop_cols.sql`（腳本 D，刪 `IM_ACCT_USER` 9 個舊欄並重寫 COMMENT），測試 DB 已於 2026-10-27 依序執行 R、D 並核對，建表檔與初始資料檔已是最終結構、新環境三支都不必跑，命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
 
 **慣例**
 
@@ -735,7 +735,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | USER_ID（PK） | VARCHAR2(30) | ✓ | 工號＝登入帳號，數字字串最多 7 碼；對應同步表 `PX_SYNC_EMP.EMP_ID` |
 | LAST_LOGIN_DATE | DATE | | 最後成功登入 |
 
-建表檔 `db/infra_manager_create_table.sql` 已是上表的最終結構。**既有環境（測試 DB，開發機與 UAT 共用）在第 124 項 UAT 切換窗口跑腳本 D（`db/infra_manager_124_3_drop_cols.sql`）之前**，本表另有 9 個舊欄：USER_EN_NAME（英文名，已由 `db/infra_manager_124_1_prep.sql` 改可空）、USER_NAME、DEPT_NAME、EMAIL、TEL_NO、PWD_HASH、PWD_UPDATE_DATE、LOGIN_FAIL_CNT（必填，預設 0）、LOCK_DATE；本系統程式不讀也不寫這 9 欄（掃描測試強制），首次登入自動建立時由 DB 預設值補 LOGIN_FAIL_CNT。
+建表檔 `db/infra_manager_create_table.sql` 即上表結構。測試 DB 已於 2026-10-27 以腳本 D（`db/infra_manager_124_3_drop_cols.sql`）刪除 9 個舊欄（英文名、姓名、部門、Email、分機、密碼雜湊、密碼設定時間、失敗次數、鎖定時間），結構與建表檔相同；舊欄的資料只留在切換前的 DBA 備份。掃描測試禁止程式再引用這 9 欄。
 
 **IM_ACCT_ROLE 角色**：ROLE_ID（PK）VARCHAR2(20)；ROLE_NAME VARCHAR2(30 CHAR) 必；ROLE_DESCR VARCHAR2(200 CHAR)；IS_SYSTEM NUMBER(1) 必（1＝不可刪除：GENERAL、SYS_ADMIN；預設 0）；SORT_SEQ NUMBER(3) 必（預設 0）。STATUS＝0 不計入權限。
 
