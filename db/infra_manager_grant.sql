@@ -15,8 +15,11 @@
 --       infra_manager_phase2_emg.sql → 本檔。已有 synonym 與授權的測試 DB 跑了也無害。
 -- 可重跑：synonym 先查 ALL_SYNONYMS，已存在就印「已存在，略過」；GRANT 本身可重覆執行。
 --       跑到一半失敗直接從頭再跑即可。
--- 前提：以表的擁有者（RD_USER）執行，需 CREATE PUBLIC SYNONYM 權限（測試 DB 2026-10-13 已確認具備；
---       正式 DB 未查，沒有的話 CREATE 會以 ORA-01031 停下，請 DBA 授權或代建）。
+-- 前提：以表的擁有者（RD_USER）登入執行，需 CREATE PUBLIC SYNONYM 權限（測試 DB 2026-10-13 已確認具備；
+--       正式 DB 未查，沒有的話 CREATE 會以 ORA-01031 停下：請 DBA 授 CREATE PUBLIC SYNONYM 給 RD_USER 後，
+--       由 RD_USER 重跑。不要由 DBA 用自己的帳號代跑——synonym 會指向 DBA 帳號，檔首預檢會擋下）。
+--       檔首預檢：登入帳號必須等於目前 schema（擋 ALTER SESSION SET CURRENT_SCHEMA 代跑），且該帳號擁有
+--       下方 21 張表與 5 個序列（擋用別的帳號登入、或建表中途失敗表不齊），任一不符就報錯結束、什麼都不建。
 --       被授權帳號 AP_USER 須已存在，否則 GRANT 以 ORA-01917 停下。
 --       SQL*Plus 執行前先 set NLS_LANG=.AL32UTF8（本檔只有輸出訊息含中文）；SQL Developer 請用「執行指令碼」（F5）。
 -- 注意：本檔不含任何帳密、主機位址。被授權帳號 AP_USER 是殼 jar 的連線帳號名，不是機密。
@@ -25,6 +28,32 @@
 SET DEFINE OFF
 SET SERVEROUTPUT ON
 WHENEVER SQLERROR EXIT FAILURE
+
+-- ===== 預檢：必須以表的擁有者登入、且 21 張表與 5 個序列都在（不符就報錯結束，什麼都不建）
+-- synonym 指向 USER（登入帳號）：用別的帳號登入，會建出 26 個指向錯誤 schema 的 PUBLIC synonym，
+-- 改用 RD_USER 重跑時撞 ORA-00955，得先逐一 DROP；用 ALTER SESSION SET CURRENT_SCHEMA 代跑時 GRANT 會成功、
+-- 檔尾第一句也照樣列 26 列，看似通過，上線才報 ORA-00980。兩者都在這裡擋下。
+DECLARE
+  v_cnt NUMBER;
+BEGIN
+  IF USER <> SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') THEN
+    RAISE_APPLICATION_ERROR(-20001, '請以表的擁有者（RD_USER）登入執行，不要用 ALTER SESSION SET CURRENT_SCHEMA 代跑'
+      || '（目前登入 ' || USER || '、schema ' || SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') || '）');
+  END IF;
+  SELECT COUNT(*) INTO v_cnt FROM USER_OBJECTS
+   WHERE (OBJECT_TYPE = 'TABLE' AND OBJECT_NAME IN (
+          'IM_ACCT', 'IM_ACCT_ADMIN_LOG', 'IM_ACCT_APPR_STAGE', 'IM_ACCT_ATTACH', 'IM_ACCT_CATG', 'IM_ACCT_HIST',
+          'IM_ACCT_JOB_RUN', 'IM_ACCT_LOGIN_TOKEN', 'IM_ACCT_NOTIFY_LOG', 'IM_ACCT_PERM', 'IM_ACCT_REQ', 'IM_ACCT_ROLE',
+          'IM_ACCT_ROLE_PERM', 'IM_ACCT_ROLE_USER', 'IM_ACCT_USER', 'IM_ASSET_CLASS', 'IM_DOC_SEQ', 'IM_EXEC_MAP',
+          'IM_INSP', 'IM_INSP_ITEM', 'IM_INSP_RESULT'))
+      OR (OBJECT_TYPE = 'SEQUENCE' AND OBJECT_NAME IN (
+          'SEQ_IM_ACCT_ADMIN_LOG', 'SEQ_IM_ACCT_ATTACH', 'SEQ_IM_ACCT_HIST', 'SEQ_IM_ACCT_JOB_RUN', 'SEQ_IM_ACCT_NOTIFY_LOG'));
+  IF v_cnt <> 26 THEN
+    RAISE_APPLICATION_ERROR(-20002, '目前登入帳號 ' || USER || ' 只找到 ' || v_cnt || ' 個（應為 21 張表＋5 個序列＝26）：'
+      || '請以表的擁有者（RD_USER）登入，且先完整執行 infra_manager_create_table.sql');
+  END IF;
+END;
+/
 
 -- ===== PUBLIC SYNONYM（已存在就略過）
 -- synonym 指向用 USER（目前連線帳號）而不寫死 schema 名；若同名 PUBLIC synonym 已存在但指向別的 schema，
@@ -104,7 +133,7 @@ GRANT SELECT ON SEQ_IM_ACCT_NOTIFY_LOG TO AP_USER;
 
 -- ===== 執行後自我檢查（唯讀）
 -- 名單寫死成 IN 清單、不用 LIKE 'IM\_%'：同一 schema 可能有其他模組的 IM_ 開頭表（測試 DB 就有）。
--- 期望：第一句 26 列（21 張表＋5 個序列的 PUBLIC synonym，TABLE_OWNER 皆為執行本檔的帳號）；
+-- 期望：第一句 26 列（21 張表＋5 個序列的 PUBLIC synonym，TABLE_OWNER 皆為 RD_USER）；
 --       第二句 26 列：21 張表 PRIV_CNT 皆 4、PRIVS 皆 DELETE,INSERT,SELECT,UPDATE；5 個序列 PRIV_CNT 皆 1、PRIVS 皆 SELECT。
 --       少列＝該物件沒有 synonym 或沒授權到；緊急存取兩表不在本清單，見 infra_manager_phase2_emg.sql 檔尾。
 -- 以下解除遇錯即停：互動式 SQL*Plus 用 @ 執行本檔後，同一連線再打錯指令才不會直接結束 SQL*Plus。
