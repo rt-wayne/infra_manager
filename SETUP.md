@@ -37,9 +37,9 @@
   - `infra.manager.mail.site-url` 填使用者在瀏覽器開的前端網址（含 context），信末才會有「前往系統」連結，例 `http://主機:8787/infra_manager_web/`。直接從瀏覽器網址列複製也可以（`#` 之後、結尾的 `index.html` 會自動去掉）。留空＝不放連結；不是 `http://` 或 `https://` 開頭、沒有主機名稱，或網址含空白、雙引號等不合法字元，也視同留空，啟動 log 會有 WARN。
   - 改完要重啟後端。啟動 log 會有一行「寄信：SMTP 實際寄出；寄送名單 N 人」或「寄信：SMTP 未設定…只寫 log」，可據此確認。若出現 WARN「SMTP 已啟用但寄送名單是空的…」，代表名單空又沒開 `send-to-all`，所有通知都不會寄出。
 - WPX 登入（登入一律交給 WPX 驗證，以下設定**必填**：位址、appId、私鑰任一未設定，或私鑰不是絕對路徑、讀不到、格式不對，後端會啟動失敗，log 有一行 ERROR「WPX 登入設定不正確，後端無法啟動：」後接原因。啟動時不連 WPX，WPX 暫時連不上時照常啟動，登入回「登入服務異常，請聯絡管理者」）：
-  - `config\host.properties` 加 `wpx.domain`（協定＋主機）、`wpx.api.port`（例 `:8777`）、`wpx.api.path`（留空）、`wpx.api.domain.path=${wpx.domain}${wpx.api.port}${wpx.api.path}`，四個都要保留。位址向 WPX 窗口或 UAT 負責人取得（UAT 上 PX Track 的 `host.properties` 已有同一組值）。
-  - `config\environment.properties` 加 `infra.manager.wpx.app-id`（測試環境填 `Test`）、`infra.manager.wpx.dbalias=APX`、`infra.manager.wpx.private-key`（私鑰檔絕對路徑，Windows 用 `/`）、`infra.manager.wpx.timeout-seconds=10`。
-  - 私鑰檔是 PKCS#8 PEM（開頭 `-----BEGIN PRIVATE KEY-----`）。**不要放在 `src\main\resources\` 底下**（會被打包進 jar），也不要放進 repo；放在主機上只有執行帳號讀得到的目錄。測試環境與 PX Track 共用同一把測試私鑰：UAT 指向 PX Track 已放好的那個檔案即可；開發機用 WPX 交付包的 `pxgo.private.pkcs8.pem`（向專案負責人取得）。
+  - `config\host.properties` 加 `wpx.domain`（協定＋主機）、`wpx.api.port`（例 `:8777`）、`wpx.api.path`（留空）、`wpx.api.domain.path=${wpx.domain}${wpx.api.port}${wpx.api.path}`，四個都要保留。位址照同主機上 PX Track 的 `host.properties`（UAT、正式主機都已有同一組值），查不到再向 WPX 窗口或主機負責人取得。
+  - `config\environment.properties` 加 `infra.manager.wpx.app-id`（測試環境填 `Test`；正式環境照正式主機上 PX Track 的 appId）、`infra.manager.wpx.dbalias=APX`、`infra.manager.wpx.private-key`（私鑰檔絕對路徑，Windows 用 `/`）、`infra.manager.wpx.timeout-seconds=10`。
+  - 私鑰檔是 PKCS#8 PEM（開頭 `-----BEGIN PRIVATE KEY-----`）。**不要放在 `src\main\resources\` 底下**（會被打包進 jar），也不要放進 repo；放在主機上只有執行帳號讀得到的目錄。本系統與 PX Track 共用私鑰：UAT 指向 PX Track 已放好的測試私鑰、正式主機指向 PX Track 已放好的正式私鑰即可，不另外產生金鑰；開發機用 WPX 交付包的 `pxgo.private.pkcs8.pem`（向專案負責人取得）。
   - 確認開發機連得上 WPX 測試環境（不用任何真實帳號，送一個假工號，期望回「查無使用者」）：在 `infra_manager\` 目錄開 cmd 視窗執行
     ```
     set WPX_LIVE_BASE_URL=<wpx.api.domain.path 的值>

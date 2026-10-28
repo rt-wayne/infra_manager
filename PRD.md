@@ -1246,7 +1246,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | | `spring.mail.host`、`spring.mail.port`、`spring.mail.properties.mail.smtp.*` | SMTP 主機、port、連線／讀取／寫入逾時；host 留空＝不實際寄信、只寫 log |
 | `config\host.properties` | `rt-api.domain`、`db.connect.api.port`、`db.connect.api.path` | DB 連線資訊 API 的協定＋主機、port、路徑 |
 | | `db.connect.api.domain.path` | 由上面三個 key 組合，程式只讀這個；四個 key 都要保留（值可空） |
-| | `wpx.domain`、`wpx.api.port`、`wpx.api.path`、`wpx.api.domain.path` | WPX 登入 API 的協定＋主機、port、路徑與組合結果（程式只讀 `wpx.api.domain.path`；與 UAT 上 PX Track 同一組 key）。登入用，必填：未設定時後端啟動失敗 |
+| | `wpx.domain`、`wpx.api.port`、`wpx.api.path`、`wpx.api.domain.path` | WPX 登入 API 的協定＋主機、port、路徑與組合結果（程式只讀 `wpx.api.domain.path`；測試、正式環境都與同主機上 PX Track 同一組值）。登入用，必填：未設定時後端啟動失敗 |
 | `config\database.properties` | `itflow.db.alias` | 本模組 23 張表所在 DB 的別名（連線資訊 API 認得的名稱）；所有 DAO 讀這個 key |
 | `config\environment.properties` | `infra.manager.attach.dir` | 附件根目錄絕對路徑（必填）；未設定或非絕對路徑時後端啟動失敗 |
 | | `infra.manager.job.enabled` | 是否啟用排程（關閉時手動 API 仍可用） |
@@ -1256,7 +1256,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | | `infra.manager.mail.allow-list` | 寄送名單（逗號分隔工號，半形或全形逗號皆可）；留空＝誰都不寄 |
 | | `infra.manager.mail.send-to-all` | true＝忽略寄送名單、寄給所有收件人（預設 false） |
 | | `infra.manager.mail.site-url` | 系統網址（使用者開的前端網址，含 context，例 `http://主機:8787/infra_manager_web/`），信末「前往系統」連結用；留空＝不放連結；不是 `http://`／`https://` 開頭、格式不正確或沒有主機（含空白、雙引號等）時視同留空、啟動記 WARN；`#` 之後、結尾 `index.html` 與斜線會去掉 |
-| | `infra.manager.wpx.app-id` | WPX 登錄的系統代號（測試環境與 PX Track 共用 `Test`，區分大小寫）。必填：未設定時後端啟動失敗 |
+| | `infra.manager.wpx.app-id` | WPX 登錄的系統代號（測試、正式環境都與 PX Track 共用：測試環境為 `Test`，正式環境照正式主機上 PX Track 的設定；區分大小寫）。必填：未設定時後端啟動失敗 |
 | | `infra.manager.wpx.dbalias` | WPX 的 dbalias（預設 `APX`，測試與正式相同） |
 | | `infra.manager.wpx.private-key` | 本系統簽章私鑰檔（PKCS#8 PEM）的絕對路徑；檔案放 repo 與 jar 以外。必填：未設定、不是絕對路徑、檔案讀不到或格式不對時，後端啟動失敗並記一行 ERROR「WPX 登入設定不正確，後端無法啟動：…」（啟動時只檢查本機設定、不連 WPX；WPX 連不上時照常啟動，登入回 A05） |
 | | `infra.manager.wpx.timeout-seconds` | 呼叫 WPX 的連線與讀取逾時秒數（預設 10） |
