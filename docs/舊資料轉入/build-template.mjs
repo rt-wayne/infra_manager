@@ -3,7 +3,7 @@
 // 修改日期: 2026-10-28
 // 變更說明: 新增：產生舊資料轉入 Excel 範本（BACKLOG 第 133 項階段 1，範本格式改 B：直接產生 .xlsx）
 //           用法（專案根目錄）：node "docs/舊資料轉入/build-template.mjs"
-//           產出：同目錄 舊資料轉入範本.xlsx（四個工作表：填寫說明、帳號、申請單、代碼對照）
+//           產出：同目錄 舊資料轉入範本.xlsx
 //           套件：借用前端已安裝的 write-excel-file（不另裝套件）；它沒有下拉選單功能，
 //           以其「feature」擴充介面在工作表 XML 插入 <dataValidations>（裁示 ②A）
 //           代碼中文文字依 labels.ts、IM_ACCT_CATG、IM_ASSET_CLASS（初始資料），改代碼時兩邊一起改
@@ -11,6 +11,11 @@
 // 修改日期: 2026-10-28
 // 變更說明: 階段 1 收尾審查必須修正：(1) 工號、卡號、電話 8 欄第 2 列起預設文字格式（keepZero；原 text 屬性沒有作用，移除）；
 //           (2) 原新增申請人工號改「△ 知道就填」，查不到留空、不硬填別人（裁示 A）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-28
+// 變更說明: 使用者確認舊資料沒有申請單：刪「申請單」工作表與代碼對照的申請類型欄，剩三個工作表（填寫說明、帳號、代碼對照）；
+//           帳號表第 1 欄「帳號對照編號」改名「列編號」，用途改為第 2 階段回報錯誤時指出哪一列（裁示 A）；
+//           帳號表欄位位置不變，已交給彙整人的舊版範本填的內容可直接沿用
 // ============================================================
 import { fileURLToPath } from 'node:url'
 
@@ -49,8 +54,7 @@ const CODE_COLUMNS = [
   { key: 'YN', header: '是否', width: 7, values: ['是', '否'] },
   { key: 'LEVEL', header: '權限範圍', width: 18, values: ['唯讀', '操作', '管理員（完全控制）'] },
   { key: 'ASSET', header: '資產分類', width: 30, values: ASSET.map((a) => a[0]) },
-  { key: null, header: '資產分類的管控說明（參考用）', width: 62, values: ASSET.map((a) => a[1]) },
-  { key: 'REQ_TYPE', header: '申請類型', width: 12, values: ['新增', '修改', '停用', '重新啟用'] }
+  { key: null, header: '資產分類的管控說明（參考用）', width: 62, values: ASSET.map((a) => a[1]) }
 ]
 
 /** 下拉選單 key → 代碼對照工作表的絕對範圍，例如 '代碼對照'!$A$2:$A$9 */
@@ -65,7 +69,7 @@ function listRange(key) {
 // keepZero：工號、卡號、電話這類數字字串欄，第 2 列起預設文字格式，避免 Excel 吃掉開頭的 0
 // 或把超過 15 位的卡號轉成科學記號（第 133 項階段 1 審查必須修正 1）
 const ACCT_FIELDS = [
-  { header: '帳號對照編號', mark: 'req', width: 13, need: '＊ 必填', desc: '彙整人自己編的編號，只用來讓申請單對到帳號，不會顯示在系統上；同一份檔案內不可重複', example: 'A001' },
+  { header: '列編號', mark: 'req', width: 10, need: '＊ 必填', desc: '彙整人自己編的流水號，不會轉進系統；轉入前檢查發現錯誤時，用它指出是哪一列（排序、刪列後也對得上）。同一份檔案內不可重複', example: 'A001' },
   { header: '帳號類別', mark: 'req', width: 15, list: 'CATG', need: '＊ 必填', desc: '下拉選單選擇（8 種，見「代碼對照」）', example: '主機帳號' },
   { header: '帳號名稱（門禁卡填卡號）', name: '帳號名稱', mark: 'req', width: 20, keepZero: true, need: '＊ 必填', desc: '登入用的帳號；機房門禁卡填卡號（上限 100 字）', example: 'oracle' },
   { header: '所屬系統／設備名稱（門禁卡免填）', name: '所屬系統／設備名稱', mark: 'cond', width: 23, need: '△ 門禁卡以外必填', desc: '帳號屬於哪個系統或哪台設備（上限 100 字）；門禁卡免填，系統自動帶「機房門禁管制系統」', example: '財務 Oracle 主機' },
@@ -84,38 +88,6 @@ const ACCT_FIELDS = [
   { header: '權限範圍', mark: 'opt', width: 18, list: 'LEVEL', need: '選填', desc: '唯讀／操作／管理員（完全控制）；門禁卡不填（系統固定為門禁通行權）', example: '唯讀' },
   { header: '存取對象', mark: 'opt', width: 24, need: '選填', desc: '這個帳號可以存取哪些資料或功能（上限 200 字）；門禁卡不填', example: '財務模組報表' },
   { header: '申請原因', mark: 'opt', width: 32, need: '選填', desc: '最近一次申請的原因（上限 500 字）', example: '月結報表查詢' },
-  { header: '備註（不轉入）', mark: 'none', width: 26 }
-]
-
-// 申請內容 13 欄：欄位意思與帳號表同名欄位相同，說明表只列一列合併說明
-const CONTENT_FROM_ACCT = ['帳號名稱', '所屬系統／設備名稱', '實際使用人／保管人', '有效期限類型', '到期日', '門禁權限範圍',
-  '是否特權帳號', '資產分類', '使用人所屬單位', '使用人聯絡方式', '使用人 Email', '權限範圍', '存取對象']
-// 申請內容裡「新增、修改、重新啟用時必填」的欄（其餘選填）
-const CONTENT_COND = new Set(['帳號名稱', '所屬系統／設備名稱', '實際使用人／保管人', '有效期限類型', '到期日', '門禁權限範圍'])
-const CONTENT_FIELDS = CONTENT_FROM_ACCT.map((name) => {
-  const a = ACCT_FIELDS.find((f) => (f.name || f.header) === name)
-  return {
-    header: '申請內容－' + a.header,
-    mark: CONTENT_COND.has(name) ? 'cond' : 'opt',
-    width: a.width,
-    keepZero: a.keepZero,
-    list: a.list,
-    contentRow: true
-  }
-})
-
-const REQ_FIELDS = [
-  { header: '帳號對照編號', mark: 'req', width: 13, need: '＊ 必填', desc: '這張單是哪個帳號的；必須在「帳號」工作表找得到', example: 'A001' },
-  { header: '申請類型', mark: 'req', width: 12, list: 'REQ_TYPE', need: '＊ 必填', desc: '新增／修改／停用／重新啟用', example: '新增' },
-  { header: '申請人工號', mark: 'req', width: 13, keepZero: true, need: '＊ 必填', desc: '送出這張單的人；轉入後，這個人在「我的申請單」會看到這張單。申請類型是「新增」時，應與帳號表的「原新增申請人工號」相同', example: '1234567' },
-  { header: '申請單位', mark: 'req', width: 14, need: '＊ 必填', desc: '申請人當時所屬的單位（上限 50 字）', example: '資訊處' },
-  { header: '申請日期', mark: 'req', width: 12, need: '＊ 必填', desc: '送出申請的日期', example: '2025/03/01' },
-  { header: '結案日期', mark: 'req', width: 12, need: '＊ 必填', desc: '核准完成的日期；不可早於申請日期', example: '2025/03/05' },
-  { header: '申請原因（停用單填停用原因）', name: '申請原因', mark: 'req', width: 29, need: '＊ 必填', desc: '為什麼申請（上限 500 字）；停用單填停用原因', example: '月結報表查詢' },
-  { header: '執行人工號', mark: 'opt', width: 13, keepZero: true, need: '選填', desc: '實際去開帳號、改權限或停用的人', example: '7654321' },
-  { header: '執行說明', mark: 'opt', width: 24, need: '選填', desc: '執行時的補充說明（上限 500 字）', example: '已建立並通知使用人' },
-  { header: '複驗人工號', mark: 'opt', width: 13, keepZero: true, need: '選填', desc: '資訊治理複驗通過的人', example: '' },
-  ...CONTENT_FIELDS,
   { header: '備註（不轉入）', mark: 'none', width: 26 }
 ]
 
@@ -158,15 +130,14 @@ function dataSheet(sheet, fields, headerHeight) {
 }
 
 // ---------- 工作表 1：填寫說明 ----------
-const SPAN = 5
-const line = (text, style = {}) => [{ value: text, columnSpan: SPAN, ...style }, null, null, null, null]
+const SPAN = 4
+const line = (text, style = {}) => [{ value: text, columnSpan: SPAN, ...style }, null, null, null]
 const blank = () => [null]
 const sect = (text) => [{ value: text, fontWeight: 'bold', fontSize: 12, textColor: '#1F4E78' }]
 const warn = (text) => line(text, { textColor: RED })
 const top = { wrap: true, alignVertical: 'top' }
 const needStyle = (mark) => (MARK_COLOR[mark] ? { textColor: MARK_COLOR[mark] } : {})
-const fieldRow = (sheet, name, mark, need, desc, example) => [
-  { value: sheet, ...top },
+const fieldRow = (name, mark, need, desc, example) => [
   { value: name, ...top },
   { value: need, ...top, ...needStyle(mark) },
   { value: desc, ...top },
@@ -177,49 +148,41 @@ const guide = [
   [{ value: '帳號權限管理系統　舊資料轉入範本', fontWeight: 'bold', fontSize: 14, height: 24 }],
   blank(),
   sect('一、這份表要做什麼'),
-  line('把系統上線前就已經存在的帳號、以及這些帳號的申請紀錄，轉進帳號權限管理系統。轉入後：'),
+  line('把系統上線前就已經存在的帳號，轉進帳號權限管理系統。轉入後：'),
   line('・「帳號」工作表的每一列，會出現在系統的「帳號列表」。'),
   line('・每位同仁在「我曾申請新增的帳號」，會看到「原新增申請人工號」是自己的帳號。'),
-  line('・每位同仁在「我的申請單」，會看到「申請單」工作表裡「申請人工號」是自己的單。'),
+  line('・舊資料沒有申請單，所以轉入的帳號不會出現在任何人的「我的申請單」；上線後新送的單照常顯示。'),
   blank(),
   sect('二、怎麼填'),
-  line('1. 一個帳號填一列在「帳號」工作表，自己編一個「帳號對照編號」（例如 A001、A002⋯），同一份檔案內不可重複。'),
-  line('2. 帳號有申請紀錄才填「申請單」工作表，一張單一列，用「帳號對照編號」對到帳號。沒有申請紀錄的帳號，申請單可以不填。'),
-  line('3. 欄位標題的符號：＊（紅色）＝必填；△（橘色）＝視情況必填，條件見下方欄位說明；沒有符號＝選填。'),
-  line('4. 有下拉選單的欄位請用選單選，不要自己打字（打錯字轉入時會對不到）。日期請填 2026/12/31 這種格式。'),
-  line('5. 工號請填與登入系統相同的工號。工號、卡號、電話照原樣打，開頭的 0 會保留。'),
-  line('6. 「備註（不轉入）」欄是給彙整人自己記錄用，不會轉進系統。'),
+  line('1. 一個帳號填一列在「帳號」工作表，自己編一個「列編號」（例如 A001、A002⋯），同一份檔案內不可重複。'),
+  line('2. 欄位標題的符號：＊（紅色）＝必填；△（橘色）＝視情況必填，條件見下方欄位說明；沒有符號＝選填。'),
+  line('3. 有下拉選單的欄位請用選單選，不要自己打字（打錯字轉入時會對不到）。日期請填 2026/12/31 這種格式。'),
+  line('4. 工號請填與登入系統相同的工號。工號、卡號、電話照原樣打，開頭的 0 會保留。'),
+  line('5. 「備註（不轉入）」欄是給彙整人自己記錄用，不會轉進系統。'),
   blank(),
   sect('三、不要填進來的資料'),
-  line('・被退件的申請單。'),
-  line('・還沒核准完成的申請單（上線後請申請人在系統上重新送件）。'),
-  line('・已經刪除、不再存在的帳號，以及它的申請單。'),
+  line('・已經刪除、不再存在的帳號。'),
   blank(),
   sect('四、容易出錯的地方'),
   warn('・到期日已經過了的帳號：轉入後隔天，系統排程會把它改成「已逾期」並寄出逾期通知信；7 天內會到期的帳號會寄到期提醒信。'),
   warn('・「原新增申請人工號」查不到就留空，不要填目前使用人或自己：填了誰，誰就會在「我曾申請新增的帳號」看到這個帳號、收到它的到期信。'),
   warn('　留空的帳號只在帳號列表看得到，到期信也不會寄給申請人。'),
-  warn('・「申請單」的帳號對照編號，必須在「帳號」工作表找得到，否則這張單無法轉入。'),
   warn('・機房門禁卡：帳號名稱填卡號；所屬系統、資產分類、使用人聯絡方式、權限範圍、存取對象都不用填（系統自動帶固定值）；門禁權限範圍必填。'),
   blank(),
   sect('五、欄位說明'),
-  ['工作表', '欄位', '必填', '說明', '範例'].map((v) => ({ value: v, fontWeight: 'bold', backgroundColor: HEAD_BG, bottomBorderStyle: 'thin' })),
-  ...ACCT_FIELDS.filter((f) => f.mark !== 'none').map((f) => fieldRow('帳號', f.name || f.header, f.mark, f.need, f.desc, f.example)),
-  ...REQ_FIELDS.filter((f) => f.mark !== 'none' && !f.contentRow).map((f) => fieldRow('申請單', f.name || f.header, f.mark, f.need, f.desc, f.example)),
-  fieldRow('申請單', `申請內容－（共 ${CONTENT_FIELDS.length} 欄）`, 'cond', '△ 新增、修改、重新啟用時填；停用不填',
-    '這張單當時申請的內容。每一欄的意思、必填規則都和「帳號」工作表的同名欄位相同（例如門禁卡不填所屬系統、門禁權限範圍必填）。記不清楚當時內容時，照帳號表現在的內容填即可', ''),
-  fieldRow('兩張表', '備註（不轉入）', 'none', '不需要', '彙整人自己的紀錄（例如問了誰、還缺什麼），不會轉進系統', '待確認到期日')
+  ['欄位', '必填', '說明', '範例'].map((v) => ({ value: v, fontWeight: 'bold', backgroundColor: HEAD_BG, bottomBorderStyle: 'thin' })),
+  ...ACCT_FIELDS.filter((f) => f.mark !== 'none').map((f) => fieldRow(f.name || f.header, f.mark, f.need, f.desc, f.example)),
+  fieldRow('備註（不轉入）', 'none', '不需要', '彙整人自己的紀錄（例如問了誰、還缺什麼），不會轉進系統', '待確認到期日')
 ]
 
-// ---------- 工作表 4：代碼對照 ----------
+// ---------- 工作表 3：代碼對照 ----------
 const codeRows = Math.max(...CODE_COLUMNS.map((c) => c.values.length))
 const codeData = [CODE_COLUMNS.map((c) => ({ value: c.header, fontWeight: 'bold', backgroundColor: HEAD_BG, bottomBorderStyle: 'thin' }))]
 for (let r = 0; r < codeRows; r++) codeData.push(CODE_COLUMNS.map((c) => (c.values[r] === undefined ? null : c.values[r])))
 
 const sheets = [
-  { sheet: '填寫說明', data: guide, columns: [{ width: 10 }, { width: 27 }, { width: 22 }, { width: 70 }, { width: 28 }], validations: [] },
+  { sheet: '填寫說明', data: guide, columns: [{ width: 27 }, { width: 22 }, { width: 80 }, { width: 28 }], validations: [] },
   dataSheet('帳號', ACCT_FIELDS, 33),
-  dataSheet('申請單', REQ_FIELDS, 48),
   { sheet: CODE_SHEET, data: codeData, columns: CODE_COLUMNS.map((c) => ({ width: c.width })), stickyRowsCount: 1, validations: [] }
 ]
 
