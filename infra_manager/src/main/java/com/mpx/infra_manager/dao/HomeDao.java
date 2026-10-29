@@ -26,6 +26,10 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-29
+// 變更說明: BACKLOG 第 148 項：首頁卡片依個人過濾——帳號四張以 :acctApplyBy（原新增申請人）、緊急存取兩張以 :emgApplyBy（申請人）
+//           各自可選過濾（綁 NULL 時看全部，由 Service 依 ACC_EXPIRY_ALL／EMG_VIEW_ALL 決定）；巡檢兩張不過濾
 // ============================================================
 
 import java.time.LocalDate;
@@ -43,14 +47,23 @@ import com.mpx.infra_manager.model.HomeStats;
 @Repository
 public class HomeDao {
 
-	/** 首頁卡片（共用計算函式，第二階段統計頁可沿用）：帳號四張、巡檢兩張、緊急存取兩張 */
+	/** 帳號四張卡的個人過濾：綁 NULL 看全部，否則只算原新增申請人是我的帳號（同「我曾申請新增的帳號」口徑） */
+	public static final String ACCT_MINE_COND = "(:acctApplyBy IS NULL OR A.APPLY_BY = :acctApplyBy)";
+	/** 緊急存取兩張卡的個人過濾：綁 NULL 看全部，否則只算申請人是我的單（同緊急存取清單口徑） */
+	public static final String EMG_MINE_COND = "(:emgApplyBy IS NULL OR E.APPLY_BY = :emgApplyBy)";
+
+	/** 首頁卡片（共用計算函式，第二階段統計頁可沿用）：帳號四張、巡檢兩張、緊急存取兩張；帳號與緊急存取可依個人過濾 */
 	public static final String FIND_STATS = """
-			SELECT (SELECT COUNT(*) FROM IM_ACCT A WHERE A.ACCT_STATE_CODE <> 'DELETED') AS ACCT_TOTAL,
-			       (SELECT COUNT(*) FROM IM_ACCT A WHERE A.ACCT_STATE_CODE = 'REVIEW') AS ACCT_REVIEWING,
+			SELECT (SELECT COUNT(*) FROM IM_ACCT A WHERE A.ACCT_STATE_CODE <> 'DELETED' AND """ + ACCT_MINE_COND + """
+			       ) AS ACCT_TOTAL,
+			       (SELECT COUNT(*) FROM IM_ACCT A WHERE A.ACCT_STATE_CODE = 'REVIEW' AND """ + ACCT_MINE_COND + """
+			       ) AS ACCT_REVIEWING,
 			       (SELECT COUNT(*) FROM IM_ACCT A WHERE
 			""" + AcctDao.EXPIRING_COND + """
+			           AND """ + ACCT_MINE_COND + """
 			       ) AS ACCT_EXPIRING,
-			       (SELECT COUNT(*) FROM IM_ACCT A WHERE A.IS_PRIV = 1 AND A.ACCT_STATE_CODE <> 'DELETED') AS ACCT_PRIV,
+			       (SELECT COUNT(*) FROM IM_ACCT A WHERE A.IS_PRIV = 1 AND A.ACCT_STATE_CODE <> 'DELETED' AND """ + ACCT_MINE_COND + """
+			       ) AS ACCT_PRIV,
 			       (SELECT COUNT(*) FROM IM_INSP I
 			         WHERE I.STATUS = 1 AND I.INSP_DATE >= :monthStart AND I.INSP_DATE < :nextMonthStart) AS INSP_THIS_MONTH,
 			       (SELECT COUNT(*) FROM IM_INSP_RESULT R JOIN IM_INSP I ON I.INSP_ID = R.INSP_ID
@@ -58,9 +71,11 @@ public class HomeDao {
 			           AND I.INSP_DATE >= :monthStart AND I.INSP_DATE < :nextMonthStart) AS INSP_EXCPT_THIS_MONTH,
 			       (SELECT COUNT(*) FROM IM_EMG_ACCESS E WHERE
 			""" + EmgDao.UNDECIDED_COND + """
+			           AND """ + EMG_MINE_COND + """
 			       ) AS EMG_UNDECIDED,
 			       (SELECT COUNT(*) FROM IM_EMG_ACCESS E WHERE
 			""" + EmgDao.RETURNED_COND + """
+			           AND """ + EMG_MINE_COND + """
 			       ) AS EMG_RETURNED
 			  FROM DUAL
 			""";
@@ -83,12 +98,18 @@ public class HomeDao {
 		this.itflowDb = itflowDb;
 	}
 
-	public HomeStats findStats(LocalDate today) {
+	/**
+	 * @param acctApplyBy 帳號四張只算此人原新增申請的帳號；null 看全部
+	 * @param emgApplyBy  緊急存取兩張只算此人申請的單；null 看全部
+	 */
+	public HomeStats findStats(LocalDate today, String acctApplyBy, String emgApplyBy) {
 		LocalDate monthStart = today.withDayOfMonth(1);
 		Map<String, Object> params = new HashMap<>();
 		params.put("today", DaoSupport.ts(today));
 		params.put("monthStart", DaoSupport.ts(monthStart));
 		params.put("nextMonthStart", DaoSupport.ts(monthStart.plusMonths(1)));
+		params.put("acctApplyBy", acctApplyBy);
+		params.put("emgApplyBy", emgApplyBy);
 		List<HomeStats> rows = dbClient.query(itflowDb, FIND_STATS, params, HomeStats.class);
 		return rows.isEmpty() ? new HomeStats() : rows.get(0);
 	}

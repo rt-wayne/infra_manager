@@ -99,18 +99,23 @@ export interface Codes {
   stages: Stage[]
 }
 
-/** GET /home/stats */
+/** GET /home/stats（範圍由後端依權限決定，前端只照旗標顯示） */
 export interface HomeStats {
+  /** 帳號四張：acctAll 為 true 看全部（ACC_EXPIRY_ALL），否則只算我原新增申請的帳號 */
   acctTotal: number
   acctReviewing: number
   acctExpiring: number
   acctPriv: number
-  inspThisMonth: number
-  inspExcptThisMonth: number
-  /** 緊急存取待補核准（尚未處理，含逾期；看全部，不依登入者過濾） */
+  /** 巡檢兩張看全部；inspVisible 為 false 時為 null（沒有巡檢權限也不是看全部的主管） */
+  inspThisMonth: number | null
+  inspExcptThisMonth: number | null
+  /** 緊急存取待補核准（尚未處理，含逾期）；emgAll 為 true 看全部（EMG_VIEW_ALL），否則只算我申請的單 */
   emgUndecided: number
   /** 緊急存取異常待追蹤（已退回、尚未結案） */
   emgReturned: number
+  acctAll: boolean
+  emgAll: boolean
+  inspVisible: boolean
 }
 
 /** GET /home/expiring 一列（鈴鐺；含已逾期，daysLeft 已過為負數） */

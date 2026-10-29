@@ -13,6 +13,10 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-29
+// 變更說明: BACKLOG 第 148 項：FIND_STATS 帳號四張與緊急存取兩張各帶可選的個人過濾、巡檢不過濾；
+//           stats 依 ACC_EXPIRY_ALL／EMG_VIEW_ALL 決定綁 NULL 或有效身分工號、巡檢區依 INSP_VIEW 或任一看全部
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -109,12 +113,57 @@ class AccountAndHomeServiceTest {
 		assertThat(AcctDao.FIND_LIST).contains("A.ACCT_STATE_CODE <> 'DELETED'").contains(AcctDao.EXPIRING_COND);
 		assertThat(AcctDao.COUNT_EXPIRING).contains(AcctDao.EXPIRING_COND).doesNotContain(":keyword");
 		assertThat(AcctDao.EXPIRING_COND).contains("A.EXPIRY_DATE <= :today + 30").contains("A.ACCT_STATE_CODE = 'EXPIRED'");
-		assertThat(com.mpx.infra_manager.dao.HomeDao.FIND_STATS).contains(AcctDao.EXPIRING_COND)
-				// S8：緊急存取兩張卡共用計數條件；數字看全部，不依登入者過濾
+		String stats = com.mpx.infra_manager.dao.HomeDao.FIND_STATS;
+		assertThat(stats).contains(AcctDao.EXPIRING_COND)
+				// S8：緊急存取兩張卡共用計數條件
 				.contains(com.mpx.infra_manager.dao.EmgDao.UNDECIDED_COND).contains("AS EMG_UNDECIDED")
-				.contains(com.mpx.infra_manager.dao.EmgDao.RETURNED_COND).contains("AS EMG_RETURNED")
-				.doesNotContain(":userId").doesNotContain(":applyBy");
+				.contains(com.mpx.infra_manager.dao.EmgDao.RETURNED_COND).contains("AS EMG_RETURNED");
+		// 第 148 項：帳號四張、緊急存取兩張各帶可選的個人過濾（綁 NULL＝看全部）；巡檢兩張不過濾
+		assertThat(stats.split("AS INSP_THIS_MONTH")[0]).containsOnlyOnce("AS ACCT_TOTAL")
+				.satisfies(acct -> assertThat(acct.split(com.mpx.infra_manager.dao.HomeDao.ACCT_MINE_COND, -1)).hasSize(5));
+		assertThat(stats.split(com.mpx.infra_manager.dao.HomeDao.EMG_MINE_COND, -1)).hasSize(3);
+		String insp = stats.substring(stats.indexOf("AS ACCT_PRIV"), stats.indexOf("AS INSP_EXCPT_THIS_MONTH"));
+		assertThat(insp).doesNotContain(":acctApplyBy").doesNotContain(":emgApplyBy");
 		assertThat(com.mpx.infra_manager.dao.HomeDao.FIND_EXPIRING).contains(AcctDao.EXPIRING_COND);
+	}
+
+	@Test
+	void 首頁卡片_依權限決定看全部或只看自己_巡檢區依權限顯示() {
+		when(fx.homeDao.findStats(any(), any(), any())).thenAnswer(inv -> {
+			com.mpx.infra_manager.model.HomeStats s = new com.mpx.infra_manager.model.HomeStats();
+			s.setInspThisMonth(7L);
+			s.setInspExcptThisMonth(2L);
+			return s;
+		});
+		// 一般人（只有 GENERAL）：帳號與緊急存取都綁自己的工號；沒有 INSP_VIEW → 巡檢數字清空、區塊不顯示
+		com.mpx.infra_manager.model.HomeStats tester = fx.homeService.stats(id(TESTER));
+		verify(fx.homeDao).findStats(TODAY, TESTER, TESTER);
+		assertThat(tester.isAcctAll()).isFalse();
+		assertThat(tester.isEmgAll()).isFalse();
+		assertThat(tester.isInspVisible()).isFalse();
+		assertThat(tester.getInspThisMonth()).isNull();
+		assertThat(tester.getInspExcptThisMonth()).isNull();
+		// 巡檢人員（KEVIN：GOV＋INSP_STAFF）：帳號與緊急存取仍只看自己，巡檢區看全部
+		com.mpx.infra_manager.model.HomeStats kevin = fx.homeService.stats(id(KEVIN));
+		verify(fx.homeDao).findStats(TODAY, KEVIN, KEVIN);
+		assertThat(kevin.isInspVisible()).isTrue();
+		assertThat(kevin.getInspThisMonth()).isEqualTo(7L);
+		// 資訊主管（GARY：IT_HEAD）：兩區都看全部（綁 NULL）
+		com.mpx.infra_manager.model.HomeStats gary = fx.homeService.stats(id(GARY));
+		verify(fx.homeDao).findStats(TODAY, null, null);
+		assertThat(gary.isAcctAll()).isTrue();
+		assertThat(gary.isEmgAll()).isTrue();
+		assertThat(gary.isInspVisible()).isTrue();
+		// 主管沒有 INSP_VIEW 也看得到巡檢區（裁示 ③A）；只有其中一個「看全部」時另一區照樣只看自己
+		com.mpx.infra_manager.model.HomeStats mgr = fx.homeService.stats(TestFixture.idWith(MICHAEL, java.util.Set.of("ACC_EXPIRY_ALL"), List.of()));
+		verify(fx.homeDao).findStats(TODAY, null, MICHAEL);
+		assertThat(mgr.isAcctAll()).isTrue();
+		assertThat(mgr.isEmgAll()).isFalse();
+		assertThat(mgr.isInspVisible()).isTrue();
+		assertThat(mgr.getInspExcptThisMonth()).isEqualTo(2L);
+		// 切換身分：以代理身分（有效身分）為「我」
+		fx.homeService.stats(TestFixture.impersonate(TestFixture.HANK, TESTER));
+		verify(fx.homeDao, org.mockito.Mockito.times(2)).findStats(TODAY, TESTER, TESTER);
 	}
 
 	@Test

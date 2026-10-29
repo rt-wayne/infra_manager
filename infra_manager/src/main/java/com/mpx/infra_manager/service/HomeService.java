@@ -16,6 +16,11 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-29
+// 變更說明: BACKLOG 第 148 項：卡片依個人——帳號四張有 ACC_EXPIRY_ALL 看全部、否則只算我（有效身分）原新增申請的帳號；
+//           緊急存取兩張有 EMG_VIEW_ALL 看全部、否則只算我申請的單；巡檢兩張看全部，但只給有 INSP_VIEW 或上述任一「看全部」者
+//           （沒有的人兩個數字回 null、inspVisible＝false，前端整區不顯示）。程式不判斷角色名稱（使用者 2026-10-29 裁示 ②A）
 // ============================================================
 
 import java.time.Clock;
@@ -59,7 +64,19 @@ public class HomeService {
 	}
 
 	public HomeStats stats(Identity id) {
-		return homeDao.findStats(LocalDate.now(clock));
+		boolean acctAll = perm.can(id, AcctConst.PERM_ACC_EXPIRY_ALL);
+		boolean emgAll = perm.can(id, AcctConst.PERM_EMG_VIEW_ALL);
+		// 巡檢區：有巡檢權限的人，或任一區看全部的主管（主管沒有 INSP_VIEW 也要維持原本看得到）
+		boolean inspVisible = acctAll || emgAll || perm.can(id, AcctConst.PERM_INSP_VIEW);
+		HomeStats s = homeDao.findStats(LocalDate.now(clock), acctAll ? null : id.getUserId(), emgAll ? null : id.getUserId());
+		s.setAcctAll(acctAll);
+		s.setEmgAll(emgAll);
+		s.setInspVisible(inspVisible);
+		if (!inspVisible) {
+			s.setInspThisMonth(null);
+			s.setInspExcptThisMonth(null);
+		}
+		return s;
 	}
 
 	public List<ExpiringAcct> expiring(Identity id) {

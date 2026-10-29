@@ -164,7 +164,7 @@
 | 申請單明細、附件下載與網頁開啟 | 登入 | 「可看申請單」者 |
 | 待辦 | 登入 | 我此刻能處理的 |
 | 鈴鐺 | 登入 | 逐筆與我相關者 |
-| 首頁卡片 | 登入 | 全部，只回聚合數字 |
+| 首頁卡片 | 登入 | 只回聚合數字；帳號四張有 ACC_EXPIRY_ALL 看全部、否則只算我原新增申請的；緊急存取兩張有 EMG_VIEW_ALL 看全部、否則只算我申請的；巡檢兩張看全部，只給有 INSP_VIEW 或上述任一看全部者 |
 | 代碼、資產分類說明 | 登入 | 全部 |
 | 切換身分名單 | 實際操作人有 SYS_IMPERSONATE | 啟用中、不含自己 |
 | 巡檢 | INSP_VIEW | 全部 |
@@ -467,10 +467,10 @@
 
 #### 11. 首頁、鈴鐺、待辦
 
-**首頁八張卡片**（所有登入者，只回數字，數字看全部、不依登入者過濾），分三個區塊：
-- 帳號權限管理：帳號總數（不含已刪除）、待審核（帳號狀態審核中）、30 天內到期（到期提醒範圍，含已逾期；有 ACC_LIST_FULL 點擊進帳號列表到期篩選，否則進無權限頁）、特權帳號（不含已刪除）。
-- 緊急存取：待補核准（尚未處理，含逾期）、異常待追蹤（已退回、尚未結案）。兩張都可點：有 EMG_VIEW_ALL 進緊急存取清單並套好篩選（「未處理（含逾期）」／「已退回」，日期全部，筆數與卡片一致）；沒有就進無權限頁，因為清單只會列他自己的單，筆數對不上。
-- 機房巡檢：本月巡檢次數、本月發現異常項目數（本月巡檢中異常且未處理的項目數）。
+**首頁八張卡片**（所有登入者，只回數字；範圍由後端依權限碼決定、不看角色名稱，回應附 acctAll／emgAll／inspVisible 三個旗標供前端顯示），分三個區塊：
+- 帳號權限管理：帳號總數（不含已刪除）、待審核（帳號狀態審核中）、30 天內到期（到期提醒範圍，含已逾期；有 ACC_LIST_FULL 點擊進帳號列表到期篩選，否則進無權限頁）、特權帳號（不含已刪除）。有 ACC_EXPIRY_ALL（初始資料：資訊主管、Infra 主管、資訊治理主管）看全部；其他人四張只算「原新增申請人是我（有效身分）」的帳號（同「我曾申請新增的帳號」口徑；舊資料轉入的帳號沒有申請人、不算進任何人），卡片標題前加「我的」。
+- 緊急存取：待補核准（尚未處理，含逾期）、異常待追蹤（已退回、尚未結案）。有 EMG_VIEW_ALL 看全部；其他人只算我申請的單，標題前加「我的」。兩張都可點、人人可進緊急存取清單並套好篩選（「未處理（含逾期）」／「已退回」，日期全部）；清單本身依 EMG_VIEW_ALL 決定全部或本人，所以筆數與卡片一致。
+- 機房巡檢：本月巡檢次數、本月發現異常項目數（本月巡檢中異常且未處理的項目數），數字一律看全部（巡檢是共同業務）。只給有 INSP_VIEW 的人、或帳號／緊急存取任一區看全部的人（主管沒有巡檢權限也維持看得到）；其他人兩個數字回 null、整區不顯示。
 
 **頁首鈴鐺**（多類別通知面板）：徽章數＝各類別筆數合計；每個類別只在有項目時顯示整節（SA §7.2：與登入者無關的事項連筆數都不顯示）；全部為空時不顯示徽章，仍可點開，面板顯示「目前沒有與您相關的通知」。
 - 類別「30 天內到期或已逾期」（到期帳號）：到期提醒範圍內，逐筆判斷與我相關才列：我有 ACC_EXPIRY_ALL；或我是原新增申請人；或我是該類別執行人。有 ACC_LIST_FULL 且有項目時顯示「查看全部到期清單」。點單筆：有 ACC_LIST_FULL → 帳號列表到期篩選；否則開唯讀帳號明細彈窗（不顯示異動按鈕）。
@@ -602,7 +602,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | 路徑 | 畫面 | 進入條件 | 重點 |
 |---|---|---|---|
 | `/login` | 登入 | 無 | 工號、密碼；錯誤顯示後端訊息；已登入導向首頁 |
-| `/` | 首頁 | 登入 | 8 卡片，分帳號權限管理、緊急存取、機房巡檢三區 |
+| `/` | 首頁 | 登入 | 最多 8 卡片，分帳號權限管理、緊急存取、機房巡檢三區；範圍與巡檢區是否顯示照後端旗標（見「首頁八張卡片」），不是看全部時卡片標題加「我的」 |
 | `/todo` | 待辦簽核 | 登入 | 核准／退件／回報／複驗彈窗 |
 | `/accounts` | 帳號列表 | ACC_LIST_FULL | 橫幅 U14（點擊套用到期篩選）；關鍵字（帳號單號、帳號名稱、使用人）、類別頁籤（含數量，8 類都顯示）、狀態（含數量，預設全部不含已刪除）、資產分類可同時套用；列顯示特權標籤與 U11；帳號掛審查異常旗標時狀態欄旁顯示紅色「審查異常」標籤，滑鼠移上顯示原因；操作按鈕依可做的申請類型。有 ACC_EXPORT 時工具列有「匯出 Excel」：匯出目前篩選結果（所有分頁，含「未分類」篩選），一律排除已刪除（SA v0.5 第 8.2 節）；狀態篩選選「已刪除」時停用並顯示「已刪除的帳號不提供匯出，請改選其他狀態」，沒有資料時停用並顯示「目前沒有可匯出的帳號」；檔名 `帳號權限清單_YYYYMMDD.xlsx`（本機日期）、工作表「帳號權限清單」，標題列粗體並凍結；欄位只有畫面 8 欄（單號、類別、帳號名稱、所屬系統、使用人、資產分類、到期日、狀態；SA 寫「欄位依規格 6.2」但原始規格書缺件，見 BACKLOG 第 16 項，由使用者 2026-10-16 裁示），儲存格文字同畫面（`utils\accountExport.ts` 與畫面共用），類別格加「、特權」，狀態格加「、審查異常」與「、待複驗」或「、申請處理中」；匯出失敗 toast「匯出失敗，請稍後再試」 |
 | `/requests` | 帳號申請單列表 | ACC_SELF_SERVICE | 三區塊：① 對既有帳號提出異動（完整名稱輸入＋U05；查無 U06；在途不顯示操作）② 我的申請單（狀態篩選；已退件顯示原因與「重新送出」；標題列收合鈕，預設展開）③ 我曾申請新增的帳號（在途只有查看、歷史；標題列收合鈕，預設收合）。收合只藏內容不卸載（資料照常載入、篩選與頁碼保留），狀態不記住、每次進頁回預設 |
@@ -1090,7 +1090,7 @@ END
 | 方法 | 路徑 | 權限 | 回應 |
 |---|---|---|---|
 | GET | `/codes` | 登入 | categories[catgId、catgName、catgDescr、enabled、suggestExpiry、sortSeq]、assetClasses[assetClassId、assetTypeCode、assetClassName、reviewTrigger、selectable、ctrlDescr、sortSeq]、stages[stageId、stageName、stageTypeCode、permId] |
-| GET | `/home/stats` | 登入 | acctTotal、acctReviewing、acctExpiring、acctPriv、inspThisMonth、inspExcptThisMonth、emgUndecided（緊急存取尚未處理，含逾期）、emgReturned（緊急存取已退回未結案）；數字看全部，不依登入者過濾 |
+| GET | `/home/stats` | 登入 | acctTotal、acctReviewing、acctExpiring、acctPriv、inspThisMonth、inspExcptThisMonth、emgUndecided（緊急存取尚未處理，含逾期）、emgReturned（緊急存取已退回未結案）、acctAll、emgAll、inspVisible；帳號四張無 ACC_EXPIRY_ALL 只算 APPLY_BY＝有效身分、緊急存取兩張無 EMG_VIEW_ALL 只算 APPLY_BY＝有效身分、巡檢兩張 inspVisible 為 false 時 null |
 | GET | `/home/expiring` | 登入 | [acctId、acctName、catgId、catgName、acctStateCode、expiryDate、daysLeft]（不含 applyBy） |
 | GET | `/todos` | 登入 | [source（ACCT_REQ）、reqId、title、reqTypeCode、catgId、catgName、acctName、isPriv、applyBy、applyByName、stageId、stageName、submitDate、actionKind（APPROVE、EXEC、VERIFY）、versionNo、verifyRejectCnt、verifyRejectReason] |
 
