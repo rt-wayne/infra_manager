@@ -57,6 +57,10 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-20
 // 變更說明: BACKLOG 第 124 項階段 3 回合 1：期望顯示名改只有中文名（TestFixture.NAMES 改）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-29
+// 變更說明: 簽核流程調整：不符合審查條件（非審查條件碼、非特權、非門禁卡）於關卡 4 核准後跳過關卡 5 資訊主管——
+//           跳過案（H02／未分類、非特權）進待執行／關卡 6、發 TO_EXEC、歷史加註免簽；不跳過案（H01 非特權、H02 特權、門禁卡）進關卡 5
 // ============================================================
 
 import static com.mpx.infra_manager.support.TestFixture.ALAN;
@@ -1040,6 +1044,75 @@ class RequestServiceTest {
 		approve(TERRY);
 		approve(CATHY);
 		approve(GARY);
+	}
+
+	// ------------------------------------------------------------
+	// 跳過關卡 5（資訊主管）：關卡 4 核准時，不符合審查條件（審查條件碼、特權帳號、門禁卡皆否）直接進關卡 6
+	// ------------------------------------------------------------
+
+	@Test
+	void 非審查條件_關卡4核准後跳過資訊主管_直接待執行並發TO_EXEC_歷史加註免簽() {
+		AcctReqForm f = dbForm();
+		f.setAssetClassId("H02");
+		f.setIsPriv(0);
+		svc.submit(id(KEVIN), f, FILE);
+		approve(ALEX);
+		approve(TERRY);
+		assertState(AcctConst.RS_REVIEW, 4, 2);
+		approve(CATHY);
+		assertState(AcctConst.RS_EXEC, 6, 3);
+		verify(fx.notificationService, times(2)).requestEvent(eq(AcctConst.EV_NEXT_STAGE), eq(FIRST_ID), anyString());
+		verify(fx.notificationService).requestEvent(eq(AcctConst.EV_TO_EXEC), eq(FIRST_ID), anyString());
+		AcctHist last = fx.hists.get(fx.hists.size() - 1);
+		assertThat(last.getActionCode()).isEqualTo(AcctConst.ACT_APPROVE);
+		assertThat(last.getStageId()).isEqualTo(4);
+		assertThat(last.getResultDescr()).isEqualTo("「資訊治理」核准；資訊主管免簽（非審查條件）");
+	}
+
+	@Test
+	void 未分類且非特權_也跳過資訊主管() {
+		AcctReqForm f = dbForm();
+		f.setAssetClassId(null);
+		f.setIsPriv(0);
+		svc.submit(id(KEVIN), f, FILE);
+		approve(ALEX);
+		approve(TERRY);
+		approve(CATHY);
+		assertState(AcctConst.RS_EXEC, 6, 3);
+	}
+
+	@Test
+	void 審查條件碼非特權_不跳過_關卡4核准進資訊主管() {
+		AcctReqForm f = dbForm();
+		f.setIsPriv(0);
+		svc.submit(id(KEVIN), f, FILE);
+		approve(ALEX);
+		approve(TERRY);
+		approve(CATHY);
+		assertState(AcctConst.RS_REVIEW, 5, 3);
+		assertThat(fx.hists.get(fx.hists.size() - 1).getResultDescr()).isEqualTo("「資訊治理」核准");
+		verify(fx.notificationService, never()).requestEvent(eq(AcctConst.EV_TO_EXEC), eq(FIRST_ID), anyString());
+	}
+
+	@Test
+	void 非審查條件碼但勾特權_不跳過資訊主管() {
+		AcctReqForm f = dbForm();
+		f.setAssetClassId("H02");
+		f.setIsPriv(1);
+		svc.submit(id(KEVIN), f, FILE);
+		approve(ALEX);
+		approve(TERRY);
+		approve(CATHY);
+		assertState(AcctConst.RS_REVIEW, 5, 3);
+	}
+
+	@Test
+	void 門禁卡_不跳過資訊主管() {
+		svc.submit(id(KEVIN), doorForm(), FILE);
+		approve(ALEX);
+		approve(TERRY);
+		approve(CATHY);
+		assertState(AcctConst.RS_REVIEW, 5, 3);
 	}
 
 	void approve(String userId) {

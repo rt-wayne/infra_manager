@@ -35,6 +35,9 @@
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：申請人分機改自填——新增與重送都空白且可編輯（不從 /me 帶入）；
 //           「同申請人」聯絡方式改驗自填的分機；makeMe 不再帶 telNo
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-29
+// 變更說明: 簽核流程調整：預覽在非審查條件（H02、未分類、非特權）時關卡 5 資訊主管標免簽，選審查條件碼、勾特權、門禁卡即恢復
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -418,6 +421,30 @@ describe('RequestFormView', () => {
     expect(w.findAll('.approval-step').map(s => s.find('.step-role').text())).toEqual(
       ['申請人送出', '機房管理員', 'Infra 主管', '資訊治理', '資訊主管', '執行人', '資訊治理複驗']
     )
+    w.unmount()
+  })
+
+  it('簽核路徑預覽：非審查條件時資訊主管標免簽；審查條件碼、特權、門禁卡任一即恢復', async () => {
+    const w = await mountForm()
+    const skipped = () => w.findAll('.approval-step.skipped').map(s => s.find('.step-role').text())
+    // 未分類、非特權、主機帳號：跳過
+    expect(skipped()).toEqual(['資訊主管'])
+    expect(w.find('.step-skip').text()).toBe('免簽（非審查條件）')
+    expect(w.findAll('.approval-step')).toHaveLength(7)
+    await w.find('#assetClassId').setValue('H02')
+    expect(skipped()).toEqual(['資訊主管'])
+    await w.find('#assetClassId').setValue('H01')
+    expect(skipped()).toEqual([])
+    expect(w.find('.step-skip').exists()).toBe(false)
+    // 非審查條件碼但勾特權：不跳過
+    await w.find('#assetClassId').setValue('H02')
+    await w.find('#isPriv').setValue(true)
+    expect(skipped()).toEqual([])
+    await w.find('#isPriv').setValue(false)
+    expect(skipped()).toEqual(['資訊主管'])
+    // 門禁卡：不跳過
+    await w.find('#catgId').setValue('DOOR')
+    expect(skipped()).toEqual([])
     w.unmount()
   })
 

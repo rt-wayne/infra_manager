@@ -14,6 +14,9 @@
    修改日期: 2026-10-29
    變更說明: 側欄層級調整：區塊標題（.nav-title）15px → 18px 加粗轉白；標題以下的子項目縮排（.nav-title ~ .nav-item，
              首頁與待辦簽核在第一個標題之前、不縮排）；移除英文副標後刪 .sidebar .brand small
+   AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+   修改日期: 2026-10-29
+   變更說明: 簽核路徑預覽加免簽樣式：.approval-step.skipped（灰底虛線框、序號灰、關卡名刪除線）與 .step-skip 灰字
    ============================================================ */
 
 /* ---------- 外框 ---------- */
@@ -149,6 +152,10 @@ input:disabled, select:disabled, textarea:disabled { background: #f1f5f9; color:
   border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .step-role { font-weight: 700; color: var(--navy); min-width: 150px; }
 .step-names { color: var(--gray); font-size: 17px; min-width: 0; }
+.approval-step.skipped { background: #f5f6f7; border-style: dashed; }
+.approval-step.skipped .step-num { background: #9aa5b1; }
+.approval-step.skipped .step-role { color: var(--gray); text-decoration: line-through; }
+.step-skip { color: var(--gray); font-size: 17px; }
 .approval-arrow { color: var(--gray); text-align: center; line-height: 1; }
 .priv-banner { background: #fbe9e9; border: 1px solid #e3b3b3; color: #a13d3d; border-radius: 8px;
   padding: 10px 14px; font-weight: 700; margin-bottom: 10px; }

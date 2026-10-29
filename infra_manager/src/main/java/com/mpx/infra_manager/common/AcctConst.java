@@ -70,6 +70,9 @@ package com.mpx.infra_manager.common;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 7 回合 2：刪 LOGIN_MAX_FAIL（登入改走 WPX，連錯鎖定交給 WPX）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-29
+// 變更說明: 加 STAGE_HEAD_DECIDE（關卡 4 核准時判斷是否跳過關卡 5 資訊主管；不符合審查條件即跳過）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -131,6 +134,8 @@ public final class AcctConst {
 	public static final int STAGE_SUBMIT = 1;
 	public static final int STAGE_FIRST_APPR = 2;
 	public static final int STAGE_LAST_APPR = 5;
+	/** 此關核准時判斷是否跳過關卡 5（資訊主管）：申請內容不符合審查條件（ReviewRule.matches）就直接進關卡 6 */
+	public static final int STAGE_HEAD_DECIDE = 4;
 	public static final int STAGE_EXEC = 6;
 	public static final int STAGE_VERIFY = 7;
 

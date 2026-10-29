@@ -73,6 +73,11 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-29
+// 變更說明: 簽核流程調整（使用者裁示 ①A ②A ③A ④A ⑥A）：關卡 4 核准時，申請內容不符合審查條件
+//           （ReviewRule.matches：審查條件碼、特權帳號、門禁卡皆否）就跳過關卡 5 資訊主管，直接待執行／關卡 6、
+//           發 TO_EXEC；所有申請類型適用，在途單於關卡 4 核准時自然套用；歷史 APPROVE 說明加註「；資訊主管免簽（非審查條件）」
 // ============================================================
 
 import java.nio.file.Path;
@@ -406,9 +411,14 @@ public class RequestService {
 		Map<Integer, ApprStage> stages = codeService.stageMap();
 		int cur = checkApprover(id, r, stages, form == null ? null : form.getVersionNo());
 		int v = r.getVersionNo();
-		boolean last = cur == AcctConst.STAGE_LAST_APPR;
+		// 不符合審查條件的申請，關卡 4 核准後跳過關卡 5 資訊主管（關卡 2～5 不改內容，此時判斷即為最終內容）
+		boolean skipHead = cur == AcctConst.STAGE_HEAD_DECIDE
+				&& !ReviewRule.matches(codeService.findAssetClass(r.getAssetClassId()), r.getCatgId(), r.getIsPriv());
+		boolean last = cur == AcctConst.STAGE_LAST_APPR || skipHead;
 		String newState = last ? AcctConst.RS_EXEC : AcctConst.RS_REVIEW;
 		int newStage = last ? AcctConst.STAGE_EXEC : cur + 1;
+		String note = "「" + CodeService.stageName(stages, cur) + "」核准"
+				+ (skipHead ? "；" + CodeService.stageName(stages, AcctConst.STAGE_LAST_APPR) + "免簽（非審查條件）" : "");
 		LocalDateTime now = LocalDateTime.now(clock);
 		// 交易：帶條件 UPDATE 申請單 → INSERT 歷史 APPROVE（spec §5）
 		tx.executeWithoutResult(s -> {
@@ -417,10 +427,9 @@ public class RequestService {
 			}
 			int self = selfAction(AcctConst.ACT_APPROVE, id.getUserId(), r.getApplyBy(), cur,
 					acctHistDao.findSelfCheckActs(reqId));
-			acctHistDao.insert(hist(id, r, AcctConst.ACT_APPROVE, cur, "「" + CodeService.stageName(stages, cur) + "」核准",
-					self, now));
+			acctHistDao.insert(hist(id, r, AcctConst.ACT_APPROVE, cur, note, self, now));
 		});
-		log.info("申請單核准 reqId={} stage={}", reqId, cur);
+		log.info("申請單核准 reqId={} stage={} skipHead={}", reqId, cur, skipHead);
 		notificationService.requestEvent(last ? AcctConst.EV_TO_EXEC : AcctConst.EV_NEXT_STAGE, reqId, id.getRealUserId());
 		return result(reqId, newState, newStage, v + 1);
 	}

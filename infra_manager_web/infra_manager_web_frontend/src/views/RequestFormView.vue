@@ -54,6 +54,10 @@
   修改日期: 2026-10-29
   變更說明: 本人確認文字改「此帳號/門禁卡為唯一識別」（原「此帳號為唯一識別」）；
             門禁卡的「使用人 Email」欄從帳號資訊區移到使用人資訊區（取代該區原本的提示行，欄位本身不變）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-29
+  變更說明: 簽核流程調整（裁示 ⑤A）：不符合審查條件（審查條件碼、特權、門禁卡皆否）時，簽核路徑預覽照列 7 關、
+            關卡 5 資訊主管加灰字「免簽（非審查條件）」，隨資產分類與特權勾選即時切換；資產分類下方提示補簽核規則
 -->
 <template>
   <main>
@@ -144,7 +148,7 @@
             </option>
           </optgroup>
         </select>
-        <div class="hint">⚠️ 標記（{{ triggerIds }}）為審查條件碼，帳號生效後列入定期權限審查。</div>
+        <div class="hint">⚠️ 標記（{{ triggerIds }}）為審查條件碼，帳號生效後列入定期權限審查，簽核須經資訊主管；非審查條件碼、非特權帳號、非門禁卡的申請免經資訊主管簽核。</div>
         <div v-if="assetIsTrigger" class="hint warn asset-review-hint">⚠️ 此分類碼為審查條件碼，帳號生效後將寫入審查日期，列入定期權限審查。</div>
       </div>
 
@@ -236,11 +240,12 @@
       <h3>{{ secTitle('preview') }}</h3>
       <div class="approval-preview" :class="{ priv: form.isPriv }">
         <div v-if="form.isPriv" class="priv-banner">⚠️ 此為特權帳號，以下每一關簽核請特別審慎確認權限範圍與必要性</div>
-        <template v-for="(s, i) in preview" :key="i">
+        <template v-for="(s, i) in preview" :key="s.stageId">
           <div v-if="i > 0" class="approval-arrow">↓</div>
-          <div class="approval-step">
+          <div class="approval-step" :class="{ skipped: s.skipped }">
             <span class="step-num">{{ i + 1 }}</span>
-            <span class="step-role">{{ s }}</span>
+            <span class="step-role">{{ s.name }}</span>
+            <span v-if="s.skipped" class="step-skip">免簽（非審查條件）</span>
           </div>
         </template>
       </div>
@@ -293,7 +298,7 @@ import type { ReqTypeCode } from '../types/account'
 import type { AssetClass, Category } from '../types/common'
 import type { Attachment } from '../types/request'
 import { ATTACH_ACCEPT, MSG_DOC_READ_FAIL, checkAttachFile, fileSizeText, readAttachFile } from '../utils/attach'
-import { buildPreview, isReviewTriggerAsset, suggestExpiryOf } from '../utils/codes'
+import { buildPreview, isReviewTriggerAsset, meetsReviewRule, suggestExpiryOf } from '../utils/codes'
 import { dateOnly, fmtDate } from '../utils/date'
 import {
   ACCESS_LEVEL_OPTIONS,
@@ -394,7 +399,9 @@ const assetGroups = computed(() => {
   if (other.length) groups.push({ label: '其他', items: other })
   return groups.filter(g => g.items.length > 0)
 })
-const preview = computed(() => buildPreview(codes.value))
+/** 不符合審查條件（審查條件碼、特權、門禁卡皆否）時，後端於關卡 4 核准後跳過關卡 5 資訊主管 */
+const headSkipped = computed(() => !meetsReviewRule(codes.value, form.assetClassId, form.catgId, !!form.isPriv))
+const preview = computed(() => buildPreview(codes.value, headSkipped.value))
 const sections = computed(() => ['basic', 'acct', 'holder', 'scope', 'attach', 'expiry', 'preview'].filter(k => k !== 'expiry' || !contentLocked.value))
 
 function secTitle(key: string): string {
