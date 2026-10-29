@@ -19,10 +19,10 @@
 
 | 目錄 | 檔案 | 必填重點 |
 |---|---|---|
-| `infra_manager\src\main\resources\` | `application.properties` | `spring.application.name=infra_manager`；`server.port`；`server.servlet.context-path=/infra_manager`（少了這行，殼 jar 轉送會回 404）；要實際寄信填 `spring.mail.host=mail.pxmart.com.tw` |
+| `infra_manager\src\main\resources\` | `application.properties` | `spring.application.name=infra_manager`；`server.port`；`server.servlet.context-path=/infra_manager`（少了這行，殼 jar 轉送會回 404） |
 | `infra_manager\src\main\resources\` | `config\host.properties` | DB 連線資訊 API 的三個 key；四個 key 都要保留（值可空）。WPX 登入的 `wpx.*` 四個 key 同樣規則，見下方「WPX 登入」 |
 | `infra_manager\src\main\resources\` | `config\database.properties` | 取消 `itflow.db.alias` 的註解並填入 DB 別名 |
-| `infra_manager\src\main\resources\` | `config\environment.properties` | `infra.manager.attach.dir` 填附件根目錄絕對路徑；寄信的寄件人與寄送名單見下方 |
+| `infra_manager\src\main\resources\` | `config\environment.properties` | `infra.manager.attach.dir` 填附件根目錄絕對路徑；寄信的 SMTP 主機、寄件人與寄送名單見下方 |
 | `infra_manager_web\infra_manager_web\src\main\resources\` | `application.properties` | `spring.application.name=infra_manager_web`；`server.port`；`server.servlet.context-path=/infra_manager_web`；`spring.servlet.multipart.enabled` 保持關閉 |
 | `infra_manager_web\infra_manager_web\src\main\resources\` | `config\host.properties` | 後端 API 的三個 key；四個 key 都要保留。`backend.api.domain` 只寫協定＋主機、不帶 port；`infra.manager.path` 含後端前綴，填 `/infra_manager/api/v1`；`infra.manager.domain.path` 填 `${backend.api.domain}${backend.api.port}${infra.manager.path}` |
 
@@ -31,7 +31,8 @@
 - 附件根目錄在 Windows 要用 `/` 或 `\\`（例 `D:/home/infra_manager/attach`）；寫成單一 `\` 會被當跳脫字元，變成相對路徑而啟動失敗。目錄須讓執行帳號可讀寫。
 - 測試環境若要用 baseDate 手動跑排程，把 `infra.manager.job.allow-base-date` 設為 true；正式環境保持 false。J03（緊急存取逾期通知）預設每 15 分鐘跑一次，不想在本機跑就把 `infra.manager.job.j03.cron` 設為 `-`。
 - 寄信：
-  - `application.properties` 的 `spring.mail.host` 與 `environment.properties` 的 `infra.manager.mail.from` 都有值才會實際寄出，否則只寫 log。
+  - 寄信設定都在 `environment.properties`：SMTP 的 `spring.mail.host`（`mail.pxmart.com.tw`）、`spring.mail.port`（`25`）、`spring.mail.properties.mail.smtp.connectiontimeout`／`timeout`／`writetimeout`（各 `15000`），以及寄件人 `infra.manager.mail.from`。`spring.mail.host` 與 `infra.manager.mail.from` 都有值才會實際寄出，否則只寫 log；後端啟動 log 會印「寄信：SMTP 實際寄出」或「SMTP 未設定」，可用來確認。
+  - **既有開發機升級（2026-10-29 起的版本）**：上面五個 `spring.mail.*` 鍵原本放在 `application.properties`，請搬到 `environment.properties`，值不變。不搬也照樣寄信（兩個檔都會打包進 jar），只是之後改值的人會找錯檔。UAT 與正式環境不用動：共用 config 目錄是逐鍵蓋值，不看鍵原本在 jar 裡的哪個檔。
   - 誰收得到信由 `infra.manager.mail.allow-list`（逗號分隔工號，半形或全形逗號皆可）決定，留空＝誰都不寄。測試環境填 `2410305,2606459`，因為測試 DB 有同事的真實 Email（Email 讀同步表 `PX_SYNC_EMP`，這兩人在測試 DB 的同步表沒有 Email，實際收不到信）。
   - 正式環境才設 `infra.manager.mail.send-to-all=true`，寄給所有收件人。
   - `infra.manager.mail.site-url` 填使用者在瀏覽器開的前端網址（含 context），信末才會有「前往系統」連結，例 `http://主機:8787/infra_manager_web/`。直接從瀏覽器網址列複製也可以（`#` 之後、結尾的 `index.html` 會自動去掉）。留空＝不放連結；不是 `http://` 或 `https://` 開頭、沒有主機名稱，或網址含空白、雙引號等不合法字元，也視同留空，啟動 log 會有 WARN。

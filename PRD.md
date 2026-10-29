@@ -1243,7 +1243,6 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | | `server.servlet.context-path` | 網址前綴，固定 `/infra_manager`（API 根 `/infra_manager/api/v1`）；UAT 的 Apache 轉發保留此前綴，少了會回 404 |
 | | `spring.servlet.multipart.max-file-size`、`spring.servlet.multipart.max-request-size` | 附件單檔與請求上限（未設定時程式預設 10MB／11MB） |
 | | `server.tomcat.max-swallow-size` | 讓超大附件能正常回 413，而不是被 Tomcat 直接斷線 |
-| | `spring.mail.host`、`spring.mail.port`、`spring.mail.properties.mail.smtp.*` | SMTP 主機、port、連線／讀取／寫入逾時；host 留空＝不實際寄信、只寫 log |
 | `config\host.properties` | `rt-api.domain`、`db.connect.api.port`、`db.connect.api.path` | DB 連線資訊 API 的協定＋主機、port、路徑 |
 | | `db.connect.api.domain.path` | 由上面三個 key 組合，程式只讀這個；四個 key 都要保留（值可空） |
 | | `wpx.domain`、`wpx.api.port`、`wpx.api.path`、`wpx.api.domain.path` | WPX 登入 API 的協定＋主機、port、路徑與組合結果（程式只讀 `wpx.api.domain.path`；測試、正式環境都與同主機上 PX Track 同一組值）。登入用，必填：未設定時後端啟動失敗 |
@@ -1252,6 +1251,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | | `infra.manager.job.enabled` | 是否啟用排程（關閉時手動 API 仍可用） |
 | | `infra.manager.job.j01.cron`、`infra.manager.job.j02.cron`、`infra.manager.job.j03.cron` | J01、J02、J03 觸發時間（Spring 六欄 cron，Asia/Taipei；設 `-` 可單獨停用該支） |
 | | `infra.manager.job.allow-base-date` | 是否允許手動執行時指定 baseDate（測試環境用） |
+| | `spring.mail.host`、`spring.mail.port`、`spring.mail.properties.mail.smtp.*` | SMTP 主機、port、連線／讀取／寫入逾時；host 留空＝不實際寄信、只寫 log |
 | | `infra.manager.mail.from` | 寄件人；留空＝不實際寄信、只寫 log |
 | | `infra.manager.mail.allow-list` | 寄送名單（逗號分隔工號，半形或全形逗號皆可）；留空＝誰都不寄 |
 | | `infra.manager.mail.send-to-all` | true＝忽略寄送名單、寄給所有收件人（預設 false） |
