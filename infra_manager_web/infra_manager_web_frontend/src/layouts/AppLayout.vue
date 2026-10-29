@@ -44,11 +44,14 @@
   修改日期: 2026-10-19
   變更說明: BACKLOG 第 89 項階段 6：「系統管理」區塊改為持有 SYS_ROLE／SYS_EXECUTOR 其一即顯示；
             「角色指派」「角色權限設定」仍依 SYS_ROLE，新增「執行人對照」依 SYS_EXECUTOR
+  AI版本  : Claude Fable 5 (claude-fable-5)
+  修改日期: 2026-10-29
+  變更說明: 側欄拿掉英文副標「Facility & Account Management」（登入頁同步，系統名稱只留中文）
 -->
 <template>
   <div class="app">
     <aside class="sidebar">
-      <div class="brand">機房與帳號權限管理系統<small>Facility &amp; Account Management</small></div>
+      <div class="brand">機房與帳號權限管理系統</div>
       <RouterLink class="nav-item" to="/">🏠 首頁</RouterLink>
       <RouterLink class="nav-item" to="/todo">
         <span>✅ 待辦簽核</span><span v-if="todoCount !== null" class="nav-badge">{{ todoCount }}</span>

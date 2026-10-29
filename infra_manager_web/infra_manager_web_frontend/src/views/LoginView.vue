@@ -12,11 +12,14 @@
   AI版本  : Claude Opus 5.5 (claude-opus-5-5)
   修改日期: 2026-10-22
   變更說明: BACKLOG 第 124 項階段 7：登入改走 WPX，後端登入錯誤改為 A01、A04、A05 三種（A02 鎖定已刪）；本檔程式未改，照舊顯示後端 message
+  AI版本  : Claude Fable 5 (claude-fable-5)
+  修改日期: 2026-10-29
+  變更說明: 拿掉英文副標「Facility & Account Management」（與左側導覽同步，系統名稱只留中文）
 -->
 <template>
   <main class="login-page">
     <form class="module-card login-card" @submit.prevent="submit">
-      <div class="login-brand">機房與帳號權限管理系統<small>Facility &amp; Account Management</small></div>
+      <div class="login-brand">機房與帳號權限管理系統</div>
       <div v-if="message" class="note-box warn login-msg" role="alert">{{ message }}</div>
       <div class="field">
         <label for="loginUserId">工號</label>
@@ -81,7 +84,6 @@ onMounted(() => {
 .login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .login-card { width: 440px; max-width: 100%; padding: 28px 30px; }
 .login-brand { font-size: 22px; font-weight: 700; color: var(--navy); margin-bottom: 18px; line-height: 1.4; }
-.login-brand small { display: block; font-size: 15px; font-weight: 400; color: var(--gray); margin-top: 2px; }
 .login-msg { margin: 0 0 14px; }
 .field input { width: 100%; }
 .login-btn { width: 100%; margin-top: 6px; }

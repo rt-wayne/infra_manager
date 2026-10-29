@@ -10,6 +10,10 @@
    AI版本  : Claude Opus 5.5 (claude-opus-5-5)
    修改日期: 2026-10-16
    變更說明: 必填欄位醒目提醒：加 .req-mark（標籤後的紅色「*」）與 .req-legend（表單上方「* 為必填欄位」）
+   AI版本  : Claude Fable 5 (claude-fable-5)
+   修改日期: 2026-10-29
+   變更說明: 側欄層級調整：區塊標題（.nav-title）15px → 18px 加粗轉白；標題以下的子項目縮排（.nav-title ~ .nav-item，
+             首頁與待辦簽核在第一個標題之前、不縮排）；移除英文副標後刪 .sidebar .brand small
    ============================================================ */
 
 /* ---------- 外框 ---------- */
@@ -17,8 +21,8 @@
 .sidebar { width: 200px; flex-shrink: 0; background: var(--navy); color: #cfe0ee; padding: 16px 0; }
 .sidebar .brand { font-size: 18px; font-weight: 700; color: #fff; padding: 0 16px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, .12); margin-bottom: 8px; line-height: 1.4; }
-.sidebar .brand small { display: block; font-weight: 400; color: #9db6cc; font-size: 14px; margin-top: 3px; }
-.nav-title { font-size: 15px; color: #8fa9bf; padding: 12px 16px 4px; letter-spacing: 1px; }
+.nav-title { font-size: 18px; font-weight: 700; color: #e4eef7; padding: 12px 16px 4px; letter-spacing: 1px; }
+.nav-title ~ .nav-item { padding-left: 25px; }
 .nav-item { display: flex; align-items: center; justify-content: space-between; gap: 6px;
   min-height: 48px; padding: 6px 14px 6px 13px; color: #cfe0ee; font-size: 18px; text-decoration: none;
   border-left: 3px solid transparent; line-height: 1.35; }

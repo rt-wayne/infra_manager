@@ -50,6 +50,10 @@
   修改日期: 2026-10-22
   變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：申請人分機改由使用者自行填寫（拿掉唯讀、不再從 /me 帶入，/me 已不回分機；
             重送也是空白，原單不存分機）；照舊不送出、不儲存，只當「同申請人」帶入聯絡方式的來源
+  AI版本  : Claude Fable 5 (claude-fable-5)
+  修改日期: 2026-10-29
+  變更說明: 本人確認文字改「此帳號/門禁卡為唯一識別」（原「此帳號為唯一識別」）；
+            門禁卡的「使用人 Email」欄從帳號資訊區移到使用人資訊區（取代該區原本的提示行，欄位本身不變）
 -->
 <template>
   <main>
@@ -118,10 +122,6 @@
               <option v-for="o in DOOR_SCOPE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
             </select>
           </div>
-          <div class="field">
-            <label for="holderEmail">使用人 Email</label>
-            <input id="holderEmail" v-model="form.holderEmail" type="text" placeholder="請填寫使用人 Email" :disabled="contentLocked" />
-          </div>
         </div>
         <div class="hint">ⓘ 機房為兩道門的縱深管制：同一張卡先刷過第一道門（測試區），再刷過第二道門才是正式機房。這是同一張卡、同一次申請，差別只在這張卡被授權可以刷開幾道門。</div>
         <div v-if="doorAdd" class="hint">ⓘ 卡號無法在申請時預先填寫——須待執行人實際刷過卡鐘、讀出卡號後才會確定，因此「帳號名稱」此類別不需填寫，將於執行完畢回報時登記。</div>
@@ -171,7 +171,13 @@
         <label for="holderCntct">使用人聯絡方式</label>
         <input id="holderCntct" v-model="form.holderCntct" type="text" placeholder="請填寫使用人的分機、電話或 Email（外部廠商請務必填寫）" :disabled="contentLocked" />
       </div>
-      <div v-else class="hint">ⓘ 機房門禁卡已在上方填寫「使用人 Email」，不需再填聯絡方式。</div>
+      <template v-else>
+        <div class="field">
+          <label for="holderEmail">使用人 Email</label>
+          <input id="holderEmail" v-model="form.holderEmail" type="text" placeholder="請填寫使用人 Email" :disabled="contentLocked" />
+        </div>
+        <div class="hint">ⓘ 機房門禁卡以「使用人 Email」作為聯絡方式，不需再填其他聯絡方式。</div>
+      </template>
     </section>
 
     <section class="form-section">
@@ -242,7 +248,7 @@
 
     <label class="check-box confirm">
       <input id="isUniqueConf" v-model="form.isUniqueConf" type="checkbox" />
-      <span>本人確認<span class="req-mark" title="必填">*</span>：此帳號為唯一識別，僅供本人／指定使用人使用，不會與他人共用或轉借（依存取控制管理程序書 5.3.4 條規定）。</span>
+      <span>本人確認<span class="req-mark" title="必填">*</span>：此帳號/門禁卡為唯一識別，僅供本人／指定使用人使用，不會與他人共用或轉借（依存取控制管理程序書 5.3.4 條規定）。</span>
     </label>
 
     <div class="form-actions">
