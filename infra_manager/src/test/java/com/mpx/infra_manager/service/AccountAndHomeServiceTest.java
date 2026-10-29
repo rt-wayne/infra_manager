@@ -122,6 +122,11 @@ class AccountAndHomeServiceTest {
 		assertThat(stats.split("AS INSP_THIS_MONTH")[0]).containsOnlyOnce("AS ACCT_TOTAL")
 				.satisfies(acct -> assertThat(acct.split(com.mpx.infra_manager.dao.HomeDao.ACCT_MINE_COND, -1)).hasSize(5));
 		assertThat(stats.split(com.mpx.infra_manager.dao.HomeDao.EMG_MINE_COND, -1)).hasSize(3);
+		// 審查必1：片段之間必須是帶空白的 " AND "（text block 單行片段曾被剝成 NULLAND）
+		assertThat(stats).contains(com.mpx.infra_manager.dao.EmgDao.UNDECIDED_COND + " AND " + com.mpx.infra_manager.dao.HomeDao.EMG_MINE_COND)
+				.contains(com.mpx.infra_manager.dao.EmgDao.RETURNED_COND + " AND " + com.mpx.infra_manager.dao.HomeDao.EMG_MINE_COND)
+				.contains(AcctDao.EXPIRING_COND + " AND " + com.mpx.infra_manager.dao.HomeDao.ACCT_MINE_COND)
+				.doesNotContain("NULLAND").doesNotContain("'DELETED'AND").doesNotContain("'REVIEW'AND");
 		String insp = stats.substring(stats.indexOf("AS ACCT_PRIV"), stats.indexOf("AS INSP_EXCPT_THIS_MONTH"));
 		assertThat(insp).doesNotContain(":acctApplyBy").doesNotContain(":emgApplyBy");
 		assertThat(com.mpx.infra_manager.dao.HomeDao.FIND_EXPIRING).contains(AcctDao.EXPIRING_COND);

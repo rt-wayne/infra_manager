@@ -167,6 +167,8 @@ class SqlConstantScanTest {
 
 	/** END 後面直接接英文字母（END_DATE 之類有底線的欄名不算） */
 	static final Pattern GLUED_END = Pattern.compile("\\bEND[A-Z]");
+	/** NULL 後面直接接 AND／OR／AS（例 NULLAND）：第 148 項審查必1，text block 單行片段前後空白被整個剝掉；右括號黏字 Oracle 可接受，不掃 */
+	static final Pattern GLUED_NULL = Pattern.compile("\\bNULL(AND|OR|AS)\\b");
 	/** 對同步人員檔做 LEFT JOIN 以外的 JOIN（PX_SYNC_EMP_MGR 不算；同步表查無的人會整列消失） */
 	static final Pattern INNER_JOIN_SYNC_EMP = Pattern.compile("(?<!LEFT )(?<!OUTER )\\bJOIN\\s+PX_SYNC_EMP\\b");
 
@@ -300,6 +302,22 @@ class SqlConstantScanTest {
 		List<String> bad = new ArrayList<>();
 		for (Map.Entry<String, String> e : daoSqlsWithEmpSql().entrySet()) {
 			if (GLUED_END.matcher(e.getValue()).find()) {
+				bad.add(e.getKey());
+			}
+		}
+		assertThat(bad).isEmpty();
+	}
+
+	/** NULL 與下一個 AND／OR／AS 黏在一起（例 NULLAND）：第 148 項審查必1，HomeDao.FIND_STATS 曾拼出 IS NULLAND( */
+	@Test
+	void DAO_SQL常數_NULL不與AND_OR_AS黏在一起() throws Exception {
+		assertThat(GLUED_NULL.matcher("E.DECIDE_CODE IS NULLAND(:x IS NULL").find()).isTrue();
+		assertThat(GLUED_NULL.matcher("E.DECIDE_CODE IS NULL AND (:x IS NULL").find()).isFalse();
+		assertThat(GLUED_NULL.matcher("NULLS FIRST").find()).isFalse();
+		assertThat(GLUED_NULL.matcher("NULLABLE_COL").find()).isFalse();
+		List<String> bad = new ArrayList<>();
+		for (Map.Entry<String, String> e : daoSqlsWithEmpSql().entrySet()) {
+			if (GLUED_NULL.matcher(e.getValue()).find()) {
 				bad.add(e.getKey());
 			}
 		}

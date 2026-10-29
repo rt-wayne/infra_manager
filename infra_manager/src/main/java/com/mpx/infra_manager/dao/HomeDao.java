@@ -52,17 +52,22 @@ public class HomeDao {
 	/** 緊急存取兩張卡的個人過濾：綁 NULL 看全部，否則只算申請人是我的單（同緊急存取清單口徑） */
 	public static final String EMG_MINE_COND = "(:emgApplyBy IS NULL OR E.APPLY_BY = :emgApplyBy)";
 
-	/** 首頁卡片（共用計算函式，第二階段統計頁可沿用）：帳號四張、巡檢兩張、緊急存取兩張；帳號與緊急存取可依個人過濾 */
+	/**
+	 * 首頁卡片（共用計算函式，第二階段統計頁可沿用）：帳號四張、巡檢兩張、緊急存取兩張；帳號與緊急存取可依個人過濾。
+	 * 片段之間一律用一般字串 " AND " 串接：text block 只有一行時前後空白會被整個剝掉，曾拼出 NULLAND（第 148 項審查必1）
+	 */
 	public static final String FIND_STATS = """
-			SELECT (SELECT COUNT(*) FROM IM_ACCT A WHERE A.ACCT_STATE_CODE <> 'DELETED' AND """ + ACCT_MINE_COND + """
+			SELECT (SELECT COUNT(*) FROM IM_ACCT A WHERE A.ACCT_STATE_CODE <> 'DELETED'
+			""" + " AND " + ACCT_MINE_COND + """
 			       ) AS ACCT_TOTAL,
-			       (SELECT COUNT(*) FROM IM_ACCT A WHERE A.ACCT_STATE_CODE = 'REVIEW' AND """ + ACCT_MINE_COND + """
+			       (SELECT COUNT(*) FROM IM_ACCT A WHERE A.ACCT_STATE_CODE = 'REVIEW'
+			""" + " AND " + ACCT_MINE_COND + """
 			       ) AS ACCT_REVIEWING,
 			       (SELECT COUNT(*) FROM IM_ACCT A WHERE
-			""" + AcctDao.EXPIRING_COND + """
-			           AND """ + ACCT_MINE_COND + """
+			""" + AcctDao.EXPIRING_COND + " AND " + ACCT_MINE_COND + """
 			       ) AS ACCT_EXPIRING,
-			       (SELECT COUNT(*) FROM IM_ACCT A WHERE A.IS_PRIV = 1 AND A.ACCT_STATE_CODE <> 'DELETED' AND """ + ACCT_MINE_COND + """
+			       (SELECT COUNT(*) FROM IM_ACCT A WHERE A.IS_PRIV = 1 AND A.ACCT_STATE_CODE <> 'DELETED'
+			""" + " AND " + ACCT_MINE_COND + """
 			       ) AS ACCT_PRIV,
 			       (SELECT COUNT(*) FROM IM_INSP I
 			         WHERE I.STATUS = 1 AND I.INSP_DATE >= :monthStart AND I.INSP_DATE < :nextMonthStart) AS INSP_THIS_MONTH,
@@ -70,12 +75,10 @@ public class HomeDao {
 			         WHERE I.STATUS = 1 AND R.RESULT_CODE = 'EXCPT' AND R.IS_FIXED = 0
 			           AND I.INSP_DATE >= :monthStart AND I.INSP_DATE < :nextMonthStart) AS INSP_EXCPT_THIS_MONTH,
 			       (SELECT COUNT(*) FROM IM_EMG_ACCESS E WHERE
-			""" + EmgDao.UNDECIDED_COND + """
-			           AND """ + EMG_MINE_COND + """
+			""" + EmgDao.UNDECIDED_COND + " AND " + EMG_MINE_COND + """
 			       ) AS EMG_UNDECIDED,
 			       (SELECT COUNT(*) FROM IM_EMG_ACCESS E WHERE
-			""" + EmgDao.RETURNED_COND + """
-			           AND """ + EMG_MINE_COND + """
+			""" + EmgDao.RETURNED_COND + " AND " + EMG_MINE_COND + """
 			       ) AS EMG_RETURNED
 			  FROM DUAL
 			""";
