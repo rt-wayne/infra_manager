@@ -345,8 +345,9 @@ class RequestServiceTest {
 		svc.submit(id(KEVIN), f, null);
 		assertThat(fx.req.getHolderName()).isEqualTo(a.getHolderName());
 		assertThat(fx.req.getApplyReason()).isEqualTo("不再使用");
+		// 主表 H02 非特權：不符合審查條件，跳過資訊主管，回報時版本 3
 		toExecFromReview();
-		svc.execDone(id(ALEX), FIRST_ID, exec(4, null), FILE);
+		svc.execDone(id(ALEX), FIRST_ID, exec(3, null), FILE);
 		verify(fx.acctDao).applyState(a.getAcctId(), AcctConst.AS_DISABLED, "不再使用", TestFixture.NOW, ALEX);
 		verify(fx.acctDao, never()).updateReviewDates(any(), any(), any(), any(), any());
 	}
@@ -367,11 +368,15 @@ class RequestServiceTest {
 		a.setReviewFlagDate(TestFixture.NOW.minusDays(1));
 	}
 
-	/** 送出 → 4 關簽核 → 關卡 6 回報，停在關卡 7；回報時間改成 EXEC（替身原寫 NOW） */
+	/**
+	 * 送出 → 簽核 → 關卡 6 回報，停在關卡 7；回報時間改成 EXEC（替身原寫 NOW）。
+	 * 本段測試用的 modifyForm／reasonOnlyForm 都是 H02 非特權（主表預設亦同），不符合審查條件，
+	 * 關卡 4 核准後跳過資訊主管：只簽 3 關，回報時版本 3、複驗時版本 4
+	 */
 	private void toVerify(AcctReqForm f) {
 		svc.submit(id(KEVIN), f, null);
 		toExecFromReview();
-		svc.execDone(id(ALEX), FIRST_ID, exec(4, null), FILE);
+		svc.execDone(id(ALEX), FIRST_ID, exec(3, null), FILE);
 		fx.req.setExecDate(EXEC);
 	}
 
@@ -390,7 +395,7 @@ class RequestServiceTest {
 		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
 		flag(a, FLAG_REASON);
 		toVerify(modifyForm(a.getAcctId()));
-		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(4));
 		assertCleared(a);
 		AcctHist last = fx.hists.get(fx.hists.size() - 1);
 		assertThat(last.getActionCode()).isEqualTo("FLAG_CLEAR");
@@ -404,7 +409,7 @@ class RequestServiceTest {
 		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
 		flag(a, FLAG_REASON);
 		toVerify(reasonOnlyForm(AcctConst.REQ_DISABLE, a.getAcctId()));
-		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(4));
 		assertCleared(a);
 	}
 
@@ -415,7 +420,7 @@ class RequestServiceTest {
 		AcctReqForm f = modifyForm(a.getAcctId());
 		f.setReqTypeCode(AcctConst.REQ_ENABLE);
 		toVerify(f);
-		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(4));
 		assertCleared(a);
 	}
 
@@ -424,7 +429,7 @@ class RequestServiceTest {
 		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_DISABLED);
 		flag(a, FLAG_REASON);
 		toVerify(reasonOnlyForm(AcctConst.REQ_DELETE, a.getAcctId()));
-		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(4));
 		assertNotCleared();
 	}
 
@@ -435,7 +440,7 @@ class RequestServiceTest {
 		toVerify(modifyForm(a.getAcctId()));
 		// 回報後才被標記：審查人複驗時沒看過這個旗標
 		a.setReviewFlagDate(EXEC.plusSeconds(1));
-		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(4));
 		assertNotCleared();
 	}
 
@@ -445,7 +450,7 @@ class RequestServiceTest {
 		flag(a, FLAG_REASON);
 		a.setReviewFlagDate(EXEC);
 		toVerify(modifyForm(a.getAcctId()));
-		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(4));
 		assertCleared(a);
 	}
 
@@ -453,7 +458,7 @@ class RequestServiceTest {
 	void 複驗通過_未掛旗標_不清旗標不寫歷史() {
 		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
 		toVerify(modifyForm(a.getAcctId()));
-		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(4));
 		assertNotCleared();
 	}
 
@@ -463,7 +468,7 @@ class RequestServiceTest {
 		flag(a, FLAG_REASON);
 		toVerify(modifyForm(a.getAcctId()));
 		when(fx.acctReqDao.verifyOk(anyString(), anyInt(), any(), any(), any())).thenReturn(0);
-		assertStatus(() -> svc.verifyOk(id(CATHY), FIRST_ID, version(5)), HttpStatus.CONFLICT, AcctMsg.E08);
+		assertStatus(() -> svc.verifyOk(id(CATHY), FIRST_ID, version(4)), HttpStatus.CONFLICT, AcctMsg.E08);
 		assertNotCleared();
 	}
 
@@ -473,7 +478,7 @@ class RequestServiceTest {
 		flag(a, FLAG_REASON);
 		when(fx.acctDao.clearReview(any(), any(), any(), any())).thenReturn(0);
 		toVerify(modifyForm(a.getAcctId()));
-		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(4));
 		verify(fx.acctDao).clearReview(a.getAcctId(), EXEC, TestFixture.NOW, CATHY);
 		assertThat(fx.histActions()).contains("VERIFY_OK").doesNotContain("FLAG_CLEAR");
 	}
@@ -483,7 +488,7 @@ class RequestServiceTest {
 		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
 		flag(a, null);
 		toVerify(modifyForm(a.getAcctId()));
-		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(4));
 		AcctHist last = fx.hists.get(fx.hists.size() - 1);
 		assertThat(last.getActionCode()).isEqualTo("FLAG_CLEAR");
 		assertThat(last.getResultDescr()).contains("原標記原因：（未填）").doesNotContain("null");
@@ -1039,11 +1044,14 @@ class RequestServiceTest {
 		toExecFromReview();
 	}
 
+	/** 關卡 2～4 核准；關卡 4 核准後若沒跳過資訊主管（申請內容符合審查條件）才再核准關卡 5 */
 	void toExecFromReview() {
 		approve(ALEX);
 		approve(TERRY);
 		approve(CATHY);
-		approve(GARY);
+		if (AcctConst.RS_REVIEW.equals(fx.req.getReqStateCode())) {
+			approve(GARY);
+		}
 	}
 
 	// ------------------------------------------------------------
@@ -1113,6 +1121,92 @@ class RequestServiceTest {
 		approve(TERRY);
 		approve(CATHY);
 		assertState(AcctConst.RS_REVIEW, 5, 3);
+	}
+
+	@Test
+	void 停用_依主表內容判斷_H02非特權跳過資訊主管() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		svc.submit(id(KEVIN), reasonOnlyForm(AcctConst.REQ_DISABLE, a.getAcctId()), null);
+		approve(ALEX);
+		approve(TERRY);
+		approve(CATHY);
+		assertState(AcctConst.RS_EXEC, 6, 3);
+	}
+
+	@Test
+	void 刪除_主表特權_不跳過資訊主管() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_DISABLED);
+		a.setIsPriv(1);
+		svc.submit(id(KEVIN), reasonOnlyForm(AcctConst.REQ_DELETE, a.getAcctId()), null);
+		approve(ALEX);
+		approve(TERRY);
+		approve(CATHY);
+		assertState(AcctConst.RS_REVIEW, 5, 3);
+	}
+
+	@Test
+	void 退件重送_改為非審查條件_重新判斷為跳過() {
+		submitAdd(); // H01＋特權
+		approve(ALEX);
+		svc.reject(id(TERRY), FIRST_ID, reason(1, "分類填錯"));
+		AcctReqForm f = dbForm();
+		f.setVersionNo(2);
+		f.setAssetClassId("H02");
+		f.setIsPriv(0);
+		svc.resubmit(id(KEVIN), FIRST_ID, f, FILE);
+		approve(ALEX);
+		approve(TERRY);
+		approve(CATHY);
+		assertState(AcctConst.RS_EXEC, 6, 6);
+	}
+
+	@Test
+	void 退件重送_改為審查條件碼_重新判斷為不跳過() {
+		AcctReqForm first = dbForm();
+		first.setAssetClassId("H02");
+		first.setIsPriv(0);
+		svc.submit(id(KEVIN), first, FILE);
+		fx.acct(FIRST_ID, fx.req.getCatgId(), AcctConst.AS_REVIEW);
+		approve(ALEX);
+		svc.reject(id(TERRY), FIRST_ID, reason(1, "分類填錯"));
+		AcctReqForm f = dbForm(); // H01＋特權
+		f.setVersionNo(2);
+		svc.resubmit(id(KEVIN), FIRST_ID, f, FILE);
+		approve(ALEX);
+		approve(TERRY);
+		approve(CATHY);
+		assertState(AcctConst.RS_REVIEW, 5, 6);
+	}
+
+	@Test
+	void 跳過後_資訊主管持有人再核准_回409() {
+		AcctReqForm f = dbForm();
+		f.setAssetClassId("H02");
+		f.setIsPriv(0);
+		svc.submit(id(KEVIN), f, FILE);
+		approve(ALEX);
+		approve(TERRY);
+		approve(CATHY);
+		assertState(AcctConst.RS_EXEC, 6, 3);
+		// 單已在待執行：帶舊版本或當前版本都視為衝突，不會多簽一關
+		assertStatus(() -> svc.approve(id(GARY), FIRST_ID, version(2)), HttpStatus.CONFLICT, AcctMsg.E08);
+		assertStatus(() -> svc.approve(id(GARY), FIRST_ID, version(3)), HttpStatus.CONFLICT, AcctMsg.E08);
+		verify(fx.notificationService, times(1)).requestEvent(eq(AcctConst.EV_TO_EXEC), eq(FIRST_ID), anyString());
+	}
+
+	@Test
+	void 資產分類核准前被停用_查不到視同非審查條件_跳過資訊主管() {
+		AcctReqForm f = dbForm();
+		f.setIsPriv(0); // H01（審查條件碼）、非特權
+		svc.submit(id(KEVIN), f, FILE);
+		approve(ALEX);
+		approve(TERRY);
+		// H01 在關卡 4 核准前被停用（STATUS＝0 不在清單）：目前行為是視同非審查條件而跳過（BACKLOG 第 139 項待拍板）
+		when(fx.codeDao.findAssetClasses()).thenReturn(TestFixture.assetClasses().stream()
+				.filter(a -> !"H01".equals(a.getAssetClassId())).collect(java.util.stream.Collectors.toList()));
+		approve(CATHY);
+		assertState(AcctConst.RS_EXEC, 6, 3);
+		assertThat(fx.hists.get(fx.hists.size() - 1).getResultDescr()).contains("資訊主管免簽（非審查條件）");
 	}
 
 	void approve(String userId) {

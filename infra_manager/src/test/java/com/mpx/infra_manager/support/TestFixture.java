@@ -424,6 +424,9 @@ public class TestFixture {
 			}
 			req.setApplyReason(c.getApplyReason());
 			req.setApplyDept(c.getApplyDept());
+			// 實際 SQL 整份內容覆寫；替身至少同步關卡 4 判斷審查條件要用的兩欄
+			req.setAssetClassId(c.getAssetClassId());
+			req.setIsPriv(c.getIsPriv());
 			req.setReqStateCode("REVIEW");
 			req.setCurrStageId(2);
 			req.setResubCnt(req.getResubCnt() + 1);

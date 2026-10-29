@@ -448,6 +448,32 @@ describe('RequestFormView', () => {
     w.unmount()
   })
 
+  it('簽核路徑預覽：停用／刪除依帳號目前內容判斷，重送依原申請單內容判斷', async () => {
+    const skipped = (w: VueWrapper) => w.findAll('.approval-step.skipped').map(s => s.find('.step-role').text())
+    // 停用 H02 非特權帳號：內容鎖定仍照帳號目前內容判斷 → 免簽
+    lookupDetailMock.mockResolvedValue({ ...ACCT, assetClassId: 'H02', isPriv: 0 })
+    const w1 = await mountForm('/requests/new?reqType=DISABLE&acctId=AR20261001-001&acctName=sa')
+    expect(skipped(w1)).toEqual(['資訊主管'])
+    w1.unmount()
+    // 刪除 H01＋特權帳號：不免簽
+    lookupDetailMock.mockResolvedValue({ ...ACCT, acctStateCode: 'DISABLED' })
+    const w2 = await mountForm('/requests/new?reqType=DELETE&acctId=AR20261001-001&acctName=sa')
+    expect(skipped(w2)).toEqual([])
+    w2.unmount()
+    // 重送：原單未分類、非特權 → 免簽；改選 H01 即恢復
+    requestMock.mockResolvedValue(REJECTED_REQ)
+    const w3 = await mountForm('/requests/new?resubmit=AR20261005-002')
+    expect(skipped(w3)).toEqual(['資訊主管'])
+    await w3.find('#assetClassId').setValue('H01')
+    expect(skipped(w3)).toEqual([])
+    w3.unmount()
+    // 重送原單已是審查條件碼：帶入即不免簽
+    requestMock.mockResolvedValue({ ...REJECTED_REQ, assetClassId: 'H01' })
+    const w4 = await mountForm('/requests/new?resubmit=AR20261005-002')
+    expect(skipped(w4)).toEqual([])
+    w4.unmount()
+  })
+
   it('修改：帶入 lookup/{id}?acctName，類別／名稱／系統鎖定；到期日早於今天擋下（E04）', async () => {
     lookupDetailMock.mockResolvedValue(ACCT)
     const w = await mountForm('/requests/new?reqType=MODIFY&acctId=AR20261001-001&acctName=sa')
