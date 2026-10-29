@@ -21,6 +21,10 @@
   變更說明: BACKLOG 第 80 項：工具列加「匯出 Excel」（只對 ACC_EXPORT 顯示；後端不另檢查，能看列表者即 ACC_LIST_FULL）
             匯出目前篩選結果（含前端「未分類」篩選、所有分頁），一律排除已刪除；狀態篩選選「已刪除」時停用並提示；
             查詢中、匯出中、沒有資料時停用；帳號名稱、所屬系統、到期日三欄改用 utils/accountExport 的共用函式（畫面與檔案同一套文字）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-29
+  變更說明: 欄寬重新分配，讓使用人、所屬系統較長的名稱不折行：單號 13→11%、到期日 10→8%、操作 20→18%，
+            使用人 8→11%、所屬系統 11→14%（以大螢幕為主；1536 寬筆電單號會折行）
 -->
 <template>
   <main>
@@ -81,15 +85,15 @@
         <p class="res-head">共 {{ viewRows.length }} 筆，第 {{ page }} / {{ totalPages }} 頁</p>
         <table class="tbl acct">
           <colgroup>
-            <col style="width: 13%" />
+            <col style="width: 11%" />
             <col style="width: 10%" />
             <col style="width: 11%" />
+            <col style="width: 14%" />
             <col style="width: 11%" />
-            <col style="width: 8%" />
             <col style="width: 7%" />
+            <col style="width: 8%" />
             <col style="width: 10%" />
-            <col style="width: 10%" />
-            <col style="width: 20%" />
+            <col style="width: 18%" />
           </colgroup>
           <thead>
             <tr>
