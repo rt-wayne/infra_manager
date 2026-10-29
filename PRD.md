@@ -146,7 +146,7 @@
 | GOV | APPR_G4、VERIFY_G7 |
 | GOV_MGR | SYS_AUDIT_VIEW、ACC_EXPIRY_ALL、REVIEW_LIST、REVIEW_SIGN_GOV、EMG_VIEW_ALL、EMG_DECIDE |
 | IT_HEAD | APPR_G5、ACC_EXPIRY_ALL、REVIEW_LIST、EMG_VIEW_ALL、EMG_DECIDE |
-| ACCT_REGISTRY | ACC_LIST_FULL、ACC_EXPORT |
+| ACCT_REGISTRY | ACC_LIST_FULL、ACC_EXPORT、ACC_EXPIRY_ALL（第 148 項裁示 ②C：看全部清冊的人首頁到期卡與鈴鐺也看全部，點卡進列表筆數才一致） |
 | INSP_STAFF | INSP_VIEW、INSP_CREATE、INSP_RESOLVE、INSP_EXPORT |
 | SYS_ADMIN | SYS_ROLE、SYS_EXECUTOR、SYS_IMPERSONATE、SYS_AUDIT_VIEW、SYS_JOB_RUN |
 
@@ -468,7 +468,7 @@
 #### 11. 首頁、鈴鐺、待辦
 
 **首頁八張卡片**（所有登入者，只回數字；範圍由後端依權限碼決定、不看角色名稱，回應附 acctAll／emgAll／inspVisible 三個旗標供前端顯示），分三個區塊：
-- 帳號權限管理：帳號總數（不含已刪除）、待審核（帳號狀態審核中）、30 天內到期（到期提醒範圍，含已逾期；有 ACC_LIST_FULL 點擊進帳號列表到期篩選，否則進無權限頁）、特權帳號（不含已刪除）。有 ACC_EXPIRY_ALL（初始資料：資訊主管、Infra 主管、資訊治理主管）看全部；其他人四張只算「原新增申請人是我（有效身分）」的帳號（同「我曾申請新增的帳號」口徑；舊資料轉入的帳號沒有申請人、不算進任何人），卡片標題前加「我的」。
+- 帳號權限管理：帳號總數（不含已刪除）、待審核（帳號狀態審核中）、30 天內到期（到期提醒範圍，含已逾期；有 ACC_LIST_FULL 點擊進帳號列表到期篩選，否則進無權限頁）、特權帳號（不含已刪除）。有 ACC_EXPIRY_ALL（初始資料：資訊主管、Infra 主管、資訊治理主管、帳號清冊檢視）看全部；其他人四張只算「原新增申請人是我（有效身分）」的帳號（同「我曾申請新增的帳號」口徑；舊資料轉入的帳號沒有申請人、不算進任何人），卡片標題前加「我的」。
 - 緊急存取：待補核准（尚未處理，含逾期）、異常待追蹤（已退回、尚未結案）。有 EMG_VIEW_ALL 看全部；其他人只算我申請的單，標題前加「我的」。兩張都可點、人人可進緊急存取清單並套好篩選（「未處理（含逾期）」／「已退回」，日期全部）；清單本身依 EMG_VIEW_ALL 決定全部或本人，所以筆數與卡片一致。
 - 機房巡檢：本月巡檢次數、本月發現異常項目數（本月巡檢中異常且未處理的項目數），數字一律看全部（巡檢是共同業務）。只給有 INSP_VIEW 的人、或帳號／緊急存取任一區看全部的人（主管沒有巡檢權限也維持看得到）；其他人兩個數字回 null、整區不顯示。
 
