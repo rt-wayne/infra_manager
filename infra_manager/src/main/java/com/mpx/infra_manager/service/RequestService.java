@@ -82,6 +82,13 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a 審查修正 M2 ③A：selfLabel 對來源 REVIEW（定期審查）的自核列顯示「自行審查」，
 //           不比對該列的實際操作人（旗標代表兩半任一簽核人是原申請人，第二半的操作人不一定是那個人）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R4（帳號異動連動，裁示 ⑤A）：關卡 6 第一次回報覆寫主表時（修改、重新啟用、停用、刪除），
+//           同交易先鎖帳號主表列（AcctDao.lockForReview，鎖序「帳號主表 → IM_ACCT_REVIEW」與簽核／駁回一致）→ 覆寫主表
+//           → 把該帳號進行中的定期審查輪改 CANCELED（ReviewDao.cancelOpen：CANCEL_REQ_ID＝本單、說明「{申請類型}申請生效」；
+//           0 筆正常）；新增不做（帳號此前不可能有審查輪）、複驗退回後再次回報不做（同「不重寫主表」）；不寫歷史、不寄信（㉑A）。
+//           建構子多傳 ReviewDao
 // ============================================================
 
 import java.nio.file.Path;
@@ -110,6 +117,7 @@ import com.mpx.infra_manager.dao.AcctDao;
 import com.mpx.infra_manager.dao.AcctHistDao;
 import com.mpx.infra_manager.dao.AcctReqDao;
 import com.mpx.infra_manager.dao.AttachDao;
+import com.mpx.infra_manager.dao.ReviewDao;
 import com.mpx.infra_manager.model.Acct;
 import com.mpx.infra_manager.model.AcctHist;
 import com.mpx.infra_manager.model.AcctReq;
@@ -150,13 +158,14 @@ public class RequestService {
 	private final AcctDao acctDao;
 	private final AcctHistDao acctHistDao;
 	private final AttachDao attachDao;
+	private final ReviewDao reviewDao;
 	private final AttachmentService attachmentService;
 	private final NotificationService notificationService;
 	private final TransactionTemplate tx;
 	private final Clock clock;
 
 	public RequestService(PermissionService perm, CodeService codeService, DocSeqService docSeqService, AcctReqDao acctReqDao,
-			AcctDao acctDao, AcctHistDao acctHistDao, AttachDao attachDao, AttachmentService attachmentService,
+			AcctDao acctDao, AcctHistDao acctHistDao, AttachDao attachDao, ReviewDao reviewDao, AttachmentService attachmentService,
 			NotificationService notificationService, TransactionTemplate tx, Clock clock) {
 		this.perm = perm;
 		this.codeService = codeService;
@@ -165,6 +174,7 @@ public class RequestService {
 		this.acctDao = acctDao;
 		this.acctHistDao = acctHistDao;
 		this.attachDao = attachDao;
+		this.reviewDao = reviewDao;
 		this.attachmentService = attachmentService;
 		this.notificationService = notificationService;
 		this.tx = tx;
@@ -551,14 +561,22 @@ public class RequestService {
 		return result(reqId, AcctConst.RS_VERIFY, AcctConst.STAGE_VERIFY, v + 1);
 	}
 
-	/** 第一次回報時依類型更新主表（spec §4.6），UPDATE_BY＝實際操作人 */
+	/**
+	 * 第一次回報時依類型更新主表（spec §4.6），UPDATE_BY＝實際操作人。
+	 * 新增以外的四種類型是對既有帳號的異動：先鎖帳號主表列（鎖序「帳號主表 → IM_ACCT_REVIEW」，與定期審查簽核／駁回一致，
+	 * 第 158 項 R3a 審查裁示 ①A），覆寫主表後把該帳號進行中的定期審查輪改 CANCELED（裁示 ⑤A；0 筆＝沒有進行中的輪）
+	 */
 	private void applyToAccount(AcctReq r, Acct acct, String cardNo, LocalDateTime now, String userId) {
 		String reqId = r.getReqId();
-		switch (r.getReqTypeCode()) {
-		case AcctConst.REQ_ADD -> {
+		String type = r.getReqTypeCode();
+		if (AcctConst.REQ_ADD.equals(type)) {
+			// 新增：帳號此前不可能有審查輪，不鎖、不取消
 			String name = AcctConst.CATG_DOOR.equals(r.getCatgId()) ? cardNo : r.getAcctName();
 			must(acctDao.applyAdd(r, name, now, userId), reqId, "主表寫入新增內容");
+			return;
 		}
+		acctDao.lockForReview(acct.getAcctId());
+		switch (type) {
 		case AcctConst.REQ_MODIFY -> must(acctDao.applyModify(r, revive(r, LocalDate.from(now)), now, userId), reqId,
 				"主表覆寫修改內容");
 		case AcctConst.REQ_ENABLE -> must(acctDao.applyEnable(r, now, userId), reqId, "主表重新啟用");
@@ -567,6 +585,10 @@ public class RequestService {
 		case AcctConst.REQ_DELETE -> must(acctDao.applyState(acct.getAcctId(), AcctConst.AS_DELETED, r.getApplyReason(), now,
 				userId), reqId, "主表刪除");
 		default -> throw new IllegalStateException("未知的申請類型");
+		}
+		int canceled = reviewDao.cancelOpen(acct.getAcctId(), reqId, AcctConst.reqTypeName(type) + "申請生效", now, userId);
+		if (canceled > 0) {
+			log.info("關卡 6 生效取消進行中的定期審查輪 reqId={} acctId={}", reqId, acct.getAcctId());
 		}
 	}
 

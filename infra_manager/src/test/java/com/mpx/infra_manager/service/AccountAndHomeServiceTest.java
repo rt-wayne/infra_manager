@@ -265,7 +265,10 @@ class AccountAndHomeServiceTest {
 		assertThat(ReviewRule.shouldWrite("ADD", true, false, null)).isTrue();
 		assertThat(ReviewRule.shouldWrite("MODIFY", true, false, TODAY)).isTrue();
 		assertThat(ReviewRule.shouldWrite("MODIFY", true, true, null)).isTrue();
-		assertThat(ReviewRule.shouldWrite("ENABLE", true, true, TODAY)).isFalse();
+		assertThat(ReviewRule.shouldWrite("MODIFY", true, true, TODAY)).isFalse();
+		// 重新啟用同新增（第 158 項裁示 ⑫B）：舊內容符合、已有審查日也重寫；新內容不符合才不寫
+		assertThat(ReviewRule.shouldWrite("ENABLE", true, true, TODAY)).isTrue();
+		assertThat(ReviewRule.shouldWrite("ENABLE", false, true, TODAY)).isFalse();
 		assertThat(ReviewRule.shouldWrite("DISABLE", true, false, null)).isFalse();
 		assertThat(ReviewRule.shouldWrite("ADD", false, false, null)).isFalse();
 		assertThat(ReviewRule.nextReview(TODAY)).isEqualTo(TODAY.plusDays(180));

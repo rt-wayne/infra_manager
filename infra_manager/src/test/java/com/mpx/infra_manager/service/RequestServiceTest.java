@@ -64,6 +64,11 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a 審查修正 M2 ③A：selfLabel 對來源 REVIEW 的自核列回「自行審查」，與操作人是否為申請人無關
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R4（⑤A／⑫B）：關卡 6 第一次回報——修改、重新啟用、停用、刪除先鎖帳號列、覆寫主表、再取消進行中的
+//           審查輪（說明「{類型}申請生效」、UPDATE_BY＝實際操作人）；新增不鎖不取消；複驗退回後再次回報不取消；
+//           重新啟用舊內容已符合且有審查日仍重寫審查日期
 // ============================================================
 
 import static com.mpx.infra_manager.support.TestFixture.ALAN;
@@ -84,6 +89,7 @@ import static com.mpx.infra_manager.support.TestFixture.impersonate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -102,6 +108,8 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+import org.mockito.Mockito;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
@@ -353,6 +361,96 @@ class RequestServiceTest {
 		svc.execDone(id(ALEX), FIRST_ID, exec(3, null), FILE);
 		verify(fx.acctDao).applyState(a.getAcctId(), AcctConst.AS_DISABLED, "不再使用", TestFixture.NOW, ALEX);
 		verify(fx.acctDao, never()).updateReviewDates(any(), any(), any(), any(), any());
+	}
+
+	// ------------------------------------------------------------
+	// 第 158 項 R4：關卡 6 第一次回報覆寫主表時取消進行中的定期審查輪（⑤A）；鎖序 帳號主表 → IM_ACCT_REVIEW（R3a 審查 ①A）
+	// ------------------------------------------------------------
+
+	/** 鎖帳號列 → 覆寫主表 → 取消進行中的輪，順序固定；說明「{類型}申請生效」、UPDATE_BY＝實際操作人；回報交易沒有回滾 */
+	private void assertLockApplyCancel(String acctId, Runnable verifyApply, String descr) {
+		InOrder order = Mockito.inOrder(fx.acctDao, fx.reviewDao);
+		order.verify(fx.acctDao).lockForReview(acctId);
+		verifyApply.run();
+		order.verify(fx.reviewDao).cancelOpen(acctId, FIRST_ID, descr, TestFixture.NOW, ALEX);
+		assertThat(fx.txm.rollbacks).isZero();
+	}
+
+	@Test
+	void 修改_第一次回報_先鎖帳號列再覆寫主表再取消進行中審查輪() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		// 有進行中的輪（取消 1 筆）與沒有（0 筆）結果一樣，都不報錯
+		when(fx.reviewDao.cancelOpen(any(), any(), any(), any(), any())).thenReturn(1);
+		svc.submit(id(KEVIN), modifyForm(a.getAcctId()), null);
+		toExecFromReview();
+		svc.execDone(id(ALEX), FIRST_ID, exec(3, null), FILE);
+		InOrder order = Mockito.inOrder(fx.acctDao, fx.reviewDao);
+		order.verify(fx.acctDao).lockForReview(a.getAcctId());
+		order.verify(fx.acctDao).applyModify(any(), anyBoolean(), any(), eq(ALEX));
+		order.verify(fx.reviewDao).cancelOpen(a.getAcctId(), FIRST_ID, "修改申請生效", TestFixture.NOW, ALEX);
+		assertThat(fx.txm.rollbacks).isZero();
+	}
+
+	@Test
+	void 重新啟用_第一次回報_取消進行中審查輪_且舊內容已符合有審查日仍重寫審查日期() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_DISABLED);
+		a.setAssetClassId("H01");
+		a.setLastReviewDate(LocalDateTime.of(2026, 9, 1, 0, 0));
+		AcctReqForm f = modifyForm(a.getAcctId());
+		f.setReqTypeCode(AcctConst.REQ_ENABLE);
+		f.setAssetClassId("H01");
+		svc.submit(id(KEVIN), f, null);
+		toExecFromReview();
+		svc.execDone(id(ALEX), FIRST_ID, exec(4, null), FILE);
+		assertLockApplyCancel(a.getAcctId(), () -> verify(fx.acctDao).applyEnable(any(), eq(TestFixture.NOW), eq(ALEX)),
+				"重新啟用申請生效");
+		// ⑫B：重新啟用同新增，不看舊內容與舊審查日
+		verify(fx.acctDao).updateReviewDates(eq(a.getAcctId()), eq(TODAY), eq(TODAY.plusDays(180)), any(), any());
+	}
+
+	@Test
+	void 停用_第一次回報_取消進行中審查輪() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		svc.submit(id(KEVIN), reasonOnlyForm(AcctConst.REQ_DISABLE, a.getAcctId()), null);
+		toExecFromReview();
+		svc.execDone(id(ALEX), FIRST_ID, exec(3, null), FILE);
+		assertLockApplyCancel(a.getAcctId(),
+				() -> verify(fx.acctDao).applyState(a.getAcctId(), AcctConst.AS_DISABLED, "不再使用", TestFixture.NOW, ALEX),
+				"停用申請生效");
+	}
+
+	@Test
+	void 刪除_第一次回報_取消進行中審查輪() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		svc.submit(id(KEVIN), reasonOnlyForm(AcctConst.REQ_DELETE, a.getAcctId()), null);
+		toExecFromReview();
+		svc.execDone(id(ALEX), FIRST_ID, exec(3, null), FILE);
+		assertLockApplyCancel(a.getAcctId(),
+				() -> verify(fx.acctDao).applyState(a.getAcctId(), AcctConst.AS_DELETED, "不再使用", TestFixture.NOW, ALEX),
+				"刪除申請生效");
+	}
+
+	@Test
+	void 新增_第一次回報_不鎖帳號列也不取消審查輪() {
+		toExec(dbForm());
+		svc.execDone(id(MICHAEL), FIRST_ID, exec(4, null), FILE);
+		verify(fx.acctDao).applyAdd(any(), any(), any(), any());
+		verify(fx.acctDao, never()).lockForReview(any());
+		verify(fx.reviewDao, never()).cancelOpen(any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void 修改_複驗退回後再次回報_不再取消審查輪() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		svc.submit(id(KEVIN), modifyForm(a.getAcctId()), null);
+		toExecFromReview();
+		svc.execDone(id(ALEX), FIRST_ID, exec(3, null), FILE);
+		svc.verifyReject(id(CATHY), FIRST_ID, reason(4, "佐證不清楚"));
+		svc.execDone(id(ALEX), FIRST_ID, exec(5, null), FILE);
+		// 只有第一次回報鎖與取消各一次；第二次回報不重寫主表、不再取消
+		verify(fx.acctDao, times(1)).lockForReview(a.getAcctId());
+		verify(fx.reviewDao, times(1)).cancelOpen(any(), any(), any(), any(), any());
+		verify(fx.acctDao, times(1)).applyModify(any(), anyBoolean(), any(), any());
 	}
 
 	// ------------------------------------------------------------

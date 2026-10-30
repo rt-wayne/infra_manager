@@ -118,6 +118,9 @@ package com.mpx.infra_manager.dao;
 // 變更說明: BACKLOG 第 158 項 R3b：API 數 50 → 51（POST /reviews/{acctId}/reject）；駁回 SQL 斷言——INSERT_REJECTED 直接 REJECTED 不寫簽核欄、
 //           UPDATE_REJECT 帶版本／進行中／被駁回那一半尚未簽（①A）且不動簽核欄（③A）、FIND_ROUND 以 REVIEW_ID 接並帶駁回欄、清單不帶駁回欄；
 //           第 2 單位：RoleAdminDao.FIND_IN_FLIGHT_REVIEW（進行中且 :half 未簽、DOC_ID＝帳號單號）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R4：ReviewDao.UPDATE_CANCEL 斷言（以帳號＋OPEN 當條件、不帶版本、寫取消三欄、不動簽核欄）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -605,6 +608,17 @@ class SqlConstantScanTest {
 		assertThat(AcctConst.FLAG_SRC_REVIEW).isEqualTo("REVIEW");
 		assertThat(AcctConst.EV_REVIEW_REJECT).isEqualTo("REVIEW_REJECT");
 		assertThat(AcctConst.REF_REVIEW).isEqualTo("REVIEW");
+	}
+
+	/** 第 158 項 R4（⑤A）：關卡 6 生效取消進行中的一輪——以帳號＋OPEN 當條件、不帶版本（系統動作、呼叫端已鎖主表列）；取消三欄綁參數；不動簽核欄 */
+	@Test
+	void 定期審查SQL_關卡6生效取消進行中一輪() {
+		assertThat(ReviewDao.UPDATE_CANCEL).contains("REVIEW_STATE_CODE = 'CANCELED'")
+				.contains("CANCEL_DATE = :now, CANCEL_REQ_ID = :reqId, CANCEL_DESCR = :descr")
+				.contains("VERSION_NO = VERSION_NO + 1").contains("WHERE ACCT_ID = :acctId").contains("REVIEW_STATE_CODE = 'OPEN'")
+				.contains("STATUS = 1").doesNotContain(":versionNo").doesNotContain("SIGN").doesNotContain("REJECT")
+				.doesNotContain("SYSDATE");
+		assertThat(AcctConst.RR_CANCELED).isEqualTo("CANCELED");
 	}
 
 	@Test

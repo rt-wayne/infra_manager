@@ -10,6 +10,10 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R4（裁示 ⑫B）：重新啟用改成同新增——新內容符合就重寫審查日期（停用期間沒人審，重新啟用視同重新起算）；
+//           修改維持「新內容符合且（舊內容不符合或 LAST_REVIEW_DATE 為空）」
 // ============================================================
 
 import java.time.LocalDate;
@@ -33,16 +37,17 @@ public final class ReviewRule {
 	 *
 	 * @param reqTypeCode   申請類型
 	 * @param newMatches    新內容是否符合審查條件
-	 * @param oldMatches    主表舊內容是否符合（新增時忽略）
-	 * @param oldLastReview 主表舊的 LAST_REVIEW_DATE（新增時忽略）
+	 * @param oldMatches    主表舊內容是否符合（新增、重新啟用時忽略）
+	 * @param oldLastReview 主表舊的 LAST_REVIEW_DATE（新增、重新啟用時忽略）
 	 */
 	public static boolean shouldWrite(String reqTypeCode, boolean newMatches, boolean oldMatches, LocalDate oldLastReview) {
 		if (!newMatches) {
 			return false;
 		}
 		return switch (reqTypeCode) {
-		case AcctConst.REQ_ADD -> true;
-		case AcctConst.REQ_MODIFY, AcctConst.REQ_ENABLE -> !oldMatches || oldLastReview == null;
+		// 重新啟用同新增（第 158 項裁示 ⑫B）：停用期間沒人審，重新啟用視同重新起算
+		case AcctConst.REQ_ADD, AcctConst.REQ_ENABLE -> true;
+		case AcctConst.REQ_MODIFY -> !oldMatches || oldLastReview == null;
 		default -> false;
 		};
 	}

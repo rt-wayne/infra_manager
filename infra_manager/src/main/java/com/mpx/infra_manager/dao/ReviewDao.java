@@ -22,6 +22,10 @@ package com.mpx.infra_manager.dao;
 // 變更說明: BACKLOG 第 158 項 R3b（駁回）：欄位清單抽成 SELECT_COLS 讓清單（接進行中一輪）與單輪查詢 FIND_ROUND（以 REVIEW_ID 接、
 //           不限狀態、多帶該輪結果與駁回五欄，駁回信提交後重讀用）共用；首次動作就是駁回 INSERT_REJECTED（直接 REJECTED、不佔 IND_02，
 //           靠 Service 先鎖帳號列避免與同時的首簽各建一輪）；已有一輪 UPDATE_REJECT（版本相符、進行中、被駁回的那一半尚未簽，裁示 ①A）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R4（帳號異動連動，裁示 ⑤A）：UPDATE_CANCEL 把某帳號進行中的一輪改 CANCELED（以 ACCT_ID＋OPEN 當條件、
+//           不帶版本——是關卡 6 生效的系統動作，呼叫端已鎖帳號主表列；0 筆＝本來就沒有進行中的輪，正常）
 // ============================================================
 
 import java.time.LocalDate;
@@ -209,6 +213,19 @@ public class ReviewDao {
 			   AND ((:half = 'INFRA' AND INFRA_SIGN_BY IS NULL) OR (:half = 'GOV' AND GOV_SIGN_BY IS NULL))
 			""";
 
+	/**
+	 * 關卡 6 生效取消進行中的一輪（R4；裁示 ⑤A）：以帳號＋OPEN 當條件、不帶版本（系統動作，呼叫端先鎖帳號主表列，
+	 * 與簽核／駁回互斥）；IND_IM_ACCT_REVIEW_02 保證最多 1 筆，0 筆＝沒有進行中的輪。已簽的那一半留存不帶到下一輪
+	 */
+	public static final String UPDATE_CANCEL = """
+			UPDATE IM_ACCT_REVIEW
+			   SET REVIEW_STATE_CODE = 'CANCELED', CANCEL_DATE = :now, CANCEL_REQ_ID = :reqId, CANCEL_DESCR = :descr,
+			       VERSION_NO = VERSION_NO + 1, UPDATE_DATE = :now, UPDATE_BY = :actBy
+			 WHERE ACCT_ID = :acctId
+			   AND REVIEW_STATE_CODE = 'OPEN'
+			   AND STATUS = 1
+			""";
+
 	private final DbClient dbClient;
 	private final String itflowDb;
 
@@ -314,5 +331,16 @@ public class ReviewDao {
 		params.put("now", DaoSupport.ts(now));
 		params.put("actBy", actBy);
 		return dbClient.update(itflowDb, UPDATE_DONE, params);
+	}
+
+	/** 取消該帳號進行中的一輪（關卡 6 生效）；reqId＝造成取消的申請單、descr＝「{申請類型}申請生效」；回 0 或 1 */
+	public int cancelOpen(String acctId, String reqId, String descr, LocalDateTime now, String actBy) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("acctId", acctId);
+		params.put("reqId", reqId);
+		params.put("descr", descr);
+		params.put("now", DaoSupport.ts(now));
+		params.put("actBy", actBy);
+		return dbClient.update(itflowDb, UPDATE_CANCEL, params);
 	}
 }
