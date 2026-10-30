@@ -6,6 +6,9 @@ package com.mpx.infra_manager.model;
 // 變更說明: 新增：定期審查清單的一列（BACKLOG 第 158 項 R2）：帳號主表要顯示的欄位、類別名與分類名、原申請人姓名、
 //           即時計算的 reviewStateCode（ABNORMAL／OVERDUE／DUE／NORMAL，由 ReviewDao.REVIEW_STATE_EXPR 算出，不存欄位），
 //           以及進行中那一輪（IM_ACCT_REVIEW OPEN）的 reviewId、版本與兩半簽核人（尚無進行中輪時皆為 null）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a：加兩半的實際操作人 infraSignActBy／govSignActBy（裁示 ⑪A：同一實際操作人不得簽兩半）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -44,10 +47,13 @@ public class ReviewItem {
 	private Integer reviewVersionNo;
 	private String infraSignBy;
 	private String infraSignByName;
+	/** Infra 半的實際操作人（切換身分代簽時與 infraSignBy 不同） */
+	private String infraSignActBy;
 	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
 	private LocalDateTime infraSignDate;
 	private String govSignBy;
 	private String govSignByName;
+	private String govSignActBy;
 	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
 	private LocalDateTime govSignDate;
 
@@ -251,6 +257,14 @@ public class ReviewItem {
 		this.infraSignByName = infraSignByName;
 	}
 
+	public String getInfraSignActBy() {
+		return infraSignActBy;
+	}
+
+	public void setInfraSignActBy(String infraSignActBy) {
+		this.infraSignActBy = infraSignActBy;
+	}
+
 	public LocalDateTime getInfraSignDate() {
 		return infraSignDate;
 	}
@@ -273,6 +287,14 @@ public class ReviewItem {
 
 	public void setGovSignByName(String govSignByName) {
 		this.govSignByName = govSignByName;
+	}
+
+	public String getGovSignActBy() {
+		return govSignActBy;
+	}
+
+	public void setGovSignActBy(String govSignActBy) {
+		this.govSignActBy = govSignActBy;
 	}
 
 	public LocalDateTime getGovSignDate() {

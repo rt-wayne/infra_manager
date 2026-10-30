@@ -15,6 +15,9 @@ package com.mpx.infra_manager.model;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a：加 reviewId（SOURCE_CODE＝REVIEW 時的來源定期審查流水號）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -28,6 +31,8 @@ public class AcctHist {
 	private String acctId;
 	private String reqId;
 	private String emgId;
+	/** 來源定期審查流水號（SOURCE_CODE＝REVIEW 時有值；IM_ACCT_REVIEW.REVIEW_ID） */
+	private Long reviewId;
 	private String sourceCode;
 	private String actionCode;
 	private Integer stageId;
@@ -77,6 +82,14 @@ public class AcctHist {
 
 	public void setReqId(String reqId) {
 		this.reqId = reqId;
+	}
+
+	public Long getReviewId() {
+		return reviewId;
+	}
+
+	public void setReviewId(Long reviewId) {
+		this.reviewId = reviewId;
 	}
 
 	public String getSourceCode() {

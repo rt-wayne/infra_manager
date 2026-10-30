@@ -35,6 +35,10 @@ package com.mpx.infra_manager.common;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 7 回合 2：刪 A02「此帳號已鎖定，請聯絡系統管理員」（代號不重用）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a（定期審查簽核）：badCode 受詞「簽核角色」；409 文案 REVIEW_NOT_SIGNABLE（不在待複審／逾期未審）、
+//           REVIEW_SAME_SIGNER（同一人不得簽核兩半，裁示 ⑪A）
 // ============================================================
 
 import java.util.List;
@@ -113,6 +117,12 @@ public final class AcctMsg {
 	public static final String WHAT_CATG = "帳號類別";
 	/** 權限存檔的 badCode 受詞：碼重複、同碼在兩邊、不在可見清單（含不存在、停用、隱藏） */
 	public static final String WHAT_PERM = "權限碼";
+	// 定期審查（BACKLOG 第 158 項 R3a）：badCode 的受詞「簽核角色」（half 不是 INFRA／GOV）
+	public static final String WHAT_REVIEW_HALF = "簽核角色";
+	/** 409：帳號目前的審查狀態不是待複審或逾期未審（含審查異常、正常、不在審查範圍；裁示 ②A、⑨A） */
+	public static final String REVIEW_NOT_SIGNABLE = "此帳號目前不在待複審或逾期未審狀態，不能簽核";
+	/** 409：另一半已由同一有效身分或同一實際操作人簽過（裁示 ⑪A） */
+	public static final String REVIEW_SAME_SIGNER = "同一人不得簽核兩半";
 
 	// 文件未定文案、由 developer 補的（400 類）
 	public static final String BAD_CODE_PREFIX = "欄位內容不正確：";

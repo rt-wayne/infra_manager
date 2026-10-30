@@ -55,6 +55,10 @@ package com.mpx.infra_manager.support;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R2：PermissionService 建構子多傳 CodeService（可看帳號查資產分類）；加 ReviewDao（mock）與 ReviewService（真）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a：ReviewService 建構子多傳 AcctDao、AcctHistDao、TransactionTemplate（簽核交易）；
+//           reviewDao.signHalf／markDone 與 acctDao.updateReviewDates 預設回 1、nextReviewId 預設回 101
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -291,7 +295,7 @@ public class TestFixture {
 			clock);
 	public final EmergencyService emergencyService = new EmergencyService(permissionService, codeService, docSeqService, emgDao,
 			acctDao, acctHistDao, notificationService, tx, clock);
-	public final ReviewService reviewService = new ReviewService(permissionService, reviewDao, clock);
+	public final ReviewService reviewService = new ReviewService(permissionService, reviewDao, acctDao, acctHistDao, tx, clock);
 	public final HolderGuard holderGuard = new HolderGuard(roleAdminDao);
 	public final AdminLogWriter adminLogWriter = new AdminLogWriter(adminLogDao);
 	public final RoleAdminService roleAdminService = new RoleAdminService(permissionService, roleAdminDao, userDao, codeService,
@@ -329,6 +333,10 @@ public class TestFixture {
 		when(acctDao.updateReviewDates(any(), any(), any(), any(), any())).thenReturn(1);
 		when(acctDao.flagReview(any(), any(), any(), any(), any(), any())).thenReturn(1);
 		when(acctDao.clearReview(any(), any(), any(), any())).thenReturn(1);
+		when(acctDao.updateReviewDates(any(), any(), any(), any(), any())).thenReturn(1);
+		when(reviewDao.nextReviewId()).thenReturn(101L);
+		when(reviewDao.signHalf(anyLong(), anyInt(), any(), any(), any(), any())).thenReturn(1);
+		when(reviewDao.markDone(anyLong(), anyInt(), any(), any(), any())).thenReturn(1);
 
 		when(acctHistDao.insert(any())).thenAnswer(inv -> {
 			AcctHist h = new AcctHist();

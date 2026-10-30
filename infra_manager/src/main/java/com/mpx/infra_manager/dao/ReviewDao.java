@@ -11,9 +11,16 @@ package com.mpx.infra_manager.dao;
 //           清單 FIND_LIST 以子查詢 X 包住後再篩（Oracle WHERE 不能用別名）：排除不在範圍、:stateCode 為空＝異常＋逾期＋待複審，
 //           關鍵字比對帳號單號、帳號名稱、使用人、所屬系統（LIKE 加 ESCAPE '\'，關鍵字由 Service 跳脫），
 //           並 LEFT JOIN 進行中那一輪（IM_ACCT_REVIEW OPEN）帶出兩半簽核人；排序 異常 → 逾期（最舊先）→ 待複審 → 正常
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a（簽核與完成）：清單多回兩半的實際操作人（⑪A 同人判斷用）；單筆 FIND_BY_ACCT（簽核交易內重讀狀態）；
+//           序列取號 NEXT_REVIEW_ID；首簽建本輪 INSERT_OPEN（⑮A；撞 IND_IM_ACCT_REVIEW_02 由 Service 重讀改 UPDATE）；
+//           簽半 UPDATE_SIGN_INFRA／GOV（條件：版本相符、進行中、本半尚未簽；VERSION_NO＋1，0 筆＝409）；
+//           雙簽完成 UPDATE_DONE（條件：版本相符、進行中、兩半都已簽）。所有時間綁參數
 // ============================================================
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +29,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
 import com.mpx.common.db.DbClient;
+import com.mpx.infra_manager.common.AcctConst;
+import com.mpx.infra_manager.model.CountRow;
 import com.mpx.infra_manager.model.ReviewItem;
 
 @Repository
@@ -65,9 +74,9 @@ public class ReviewDao {
 			""" + "       " + REVIEW_STATE_EXPR + " AS REVIEW_STATE_CODE,\n" + """
 			       R.REVIEW_ID, R.VERSION_NO AS REVIEW_VERSION_NO, R.INFRA_SIGN_BY,
 			""" + "       " + EmpSql.nameExpr("UI", "R.INFRA_SIGN_BY") + " AS INFRA_SIGN_BY_NAME,\n" + """
-			       R.INFRA_SIGN_DATE, R.GOV_SIGN_BY,
+			       R.INFRA_SIGN_ACT_BY, R.INFRA_SIGN_DATE, R.GOV_SIGN_BY,
 			""" + "       " + EmpSql.nameExpr("UG", "R.GOV_SIGN_BY") + " AS GOV_SIGN_BY_NAME,\n" + """
-			       R.GOV_SIGN_DATE
+			       R.GOV_SIGN_ACT_BY, R.GOV_SIGN_DATE
 			  FROM IM_ACCT A
 			  LEFT JOIN IM_ACCT_CATG C ON C.CATG_ID = A.CATG_ID
 			""" + "  " + JOIN_ASSET_CLASS + "\n" + """
@@ -92,6 +101,60 @@ public class ReviewDao {
 			          X.NEXT_REVIEW_DATE NULLS FIRST, X.ACCT_ID
 			""";
 
+	/** 單筆（簽核交易內重讀狀態用）：不過濾狀態，不在範圍時 REVIEW_STATE_CODE 為 NULL，由 Service 判斷 */
+	public static final String FIND_BY_ACCT = SELECT_BASE + """
+			 WHERE A.ACCT_ID = :acctId
+			""";
+
+	public static final String NEXT_REVIEW_ID = "SELECT SEQ_IM_ACCT_REVIEW.NEXTVAL AS CNT FROM DUAL";
+
+	/**
+	 * 首簽建本輪（⑮A）：兩組簽核欄只有簽的那一半有值、另一半 NULL；VERSION_NO＝0、STATUS＝1；
+	 * 同帳號已有進行中一輪時由 IND_IM_ACCT_REVIEW_02 丟 DuplicateKeyException（Service 重讀後改走 UPDATE）
+	 */
+	public static final String INSERT_OPEN = """
+			INSERT INTO IM_ACCT_REVIEW (REVIEW_ID, ACCT_ID, DUE_DATE, REVIEW_STATE_CODE,
+			       INFRA_SIGN_BY, INFRA_SIGN_ACT_BY, INFRA_SIGN_DATE, GOV_SIGN_BY, GOV_SIGN_ACT_BY, GOV_SIGN_DATE,
+			       VERSION_NO, STATUS, CREATE_DATE, CREATE_BY)
+			VALUES (:reviewId, :acctId, :dueDate, 'OPEN',
+			       :infraSignBy, :infraSignActBy, :infraSignDate, :govSignBy, :govSignActBy, :govSignDate,
+			       0, 1, :now, :createBy)
+			""";
+
+	/** 簽 Infra 半：版本相符、進行中、本半尚未簽才更新；VERSION_NO＋1（樂觀鎖，0 筆＝409）。signBy 有效身分、actBy 實際操作人 */
+	public static final String UPDATE_SIGN_INFRA = """
+			UPDATE IM_ACCT_REVIEW
+			   SET INFRA_SIGN_BY = :signBy, INFRA_SIGN_ACT_BY = :actBy, INFRA_SIGN_DATE = :now,
+			       VERSION_NO = VERSION_NO + 1, UPDATE_DATE = :now, UPDATE_BY = :actBy
+			 WHERE REVIEW_ID = :reviewId
+			   AND VERSION_NO = :versionNo
+			   AND REVIEW_STATE_CODE = 'OPEN'
+			   AND INFRA_SIGN_BY IS NULL
+			""";
+
+	/** 簽治理半：同 UPDATE_SIGN_INFRA */
+	public static final String UPDATE_SIGN_GOV = """
+			UPDATE IM_ACCT_REVIEW
+			   SET GOV_SIGN_BY = :signBy, GOV_SIGN_ACT_BY = :actBy, GOV_SIGN_DATE = :now,
+			       VERSION_NO = VERSION_NO + 1, UPDATE_DATE = :now, UPDATE_BY = :actBy
+			 WHERE REVIEW_ID = :reviewId
+			   AND VERSION_NO = :versionNo
+			   AND REVIEW_STATE_CODE = 'OPEN'
+			   AND GOV_SIGN_BY IS NULL
+			""";
+
+	/** 雙簽完成：改 DONE、記完成時間與寫進主表的新下次應審查日；條件兩半都已簽（第二半剛簽完、版本已＋1，帶更新後的版本） */
+	public static final String UPDATE_DONE = """
+			UPDATE IM_ACCT_REVIEW
+			   SET REVIEW_STATE_CODE = 'DONE', DONE_DATE = :now, NEXT_DUE_DATE = :nextDueDate,
+			       VERSION_NO = VERSION_NO + 1, UPDATE_DATE = :now, UPDATE_BY = :actBy
+			 WHERE REVIEW_ID = :reviewId
+			   AND VERSION_NO = :versionNo
+			   AND REVIEW_STATE_CODE = 'OPEN'
+			   AND INFRA_SIGN_BY IS NOT NULL
+			   AND GOV_SIGN_BY IS NOT NULL
+			""";
+
 	private final DbClient dbClient;
 	private final String itflowDb;
 
@@ -107,5 +170,58 @@ public class ReviewDao {
 		params.put("stateCode", stateCode);
 		params.put("today", DaoSupport.ts(today));
 		return dbClient.query(itflowDb, FIND_LIST, params, ReviewItem.class);
+	}
+
+	/** 查無回 null；reviewStateCode 為 null＝不在審查範圍 */
+	public ReviewItem findByAcct(String acctId, LocalDate today) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("acctId", acctId);
+		params.put("today", DaoSupport.ts(today));
+		return DaoSupport.first(dbClient.query(itflowDb, FIND_BY_ACCT, params, ReviewItem.class));
+	}
+
+	public long nextReviewId() {
+		return DaoSupport.count(dbClient.query(itflowDb, NEXT_REVIEW_ID, new HashMap<>(), CountRow.class));
+	}
+
+	/** 首簽建本輪；half＝INFRA／GOV 決定哪一組簽核欄有值；signBy 有效身分、actBy 實際操作人（同時是 CREATE_BY） */
+	public int insertOpen(long reviewId, String acctId, LocalDate dueDate, String half, String signBy, String actBy,
+			LocalDateTime now) {
+		boolean infra = AcctConst.HALF_INFRA.equals(half);
+		Map<String, Object> params = new HashMap<>();
+		params.put("reviewId", reviewId);
+		params.put("acctId", acctId);
+		params.put("dueDate", DaoSupport.ts(dueDate));
+		params.put("infraSignBy", infra ? signBy : null);
+		params.put("infraSignActBy", infra ? actBy : null);
+		params.put("infraSignDate", infra ? DaoSupport.ts(now) : null);
+		params.put("govSignBy", infra ? null : signBy);
+		params.put("govSignActBy", infra ? null : actBy);
+		params.put("govSignDate", infra ? null : DaoSupport.ts(now));
+		params.put("now", DaoSupport.ts(now));
+		params.put("createBy", actBy);
+		return dbClient.update(itflowDb, INSERT_OPEN, params);
+	}
+
+	/** 簽一半；版本不符、已結束或本半已簽回 0 */
+	public int signHalf(long reviewId, int versionNo, String half, String signBy, String actBy, LocalDateTime now) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("reviewId", reviewId);
+		params.put("versionNo", versionNo);
+		params.put("signBy", signBy);
+		params.put("actBy", actBy);
+		params.put("now", DaoSupport.ts(now));
+		return dbClient.update(itflowDb, AcctConst.HALF_INFRA.equals(half) ? UPDATE_SIGN_INFRA : UPDATE_SIGN_GOV, params);
+	}
+
+	/** 雙簽完成；versionNo＝簽第二半之後的版本；兩半未齊或版本不符回 0 */
+	public int markDone(long reviewId, int versionNo, LocalDate nextDueDate, LocalDateTime now, String actBy) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("reviewId", reviewId);
+		params.put("versionNo", versionNo);
+		params.put("nextDueDate", DaoSupport.ts(nextDueDate));
+		params.put("now", DaoSupport.ts(now));
+		params.put("actBy", actBy);
+		return dbClient.update(itflowDb, UPDATE_DONE, params);
 	}
 }

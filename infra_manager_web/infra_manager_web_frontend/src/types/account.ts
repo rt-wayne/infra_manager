@@ -12,6 +12,9 @@
 // AI版本  : Claude Fable 5 (claude-fable-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S10：Account 加 reviewFlagDate／reviewFlagBy（帳號詳情顯示標記日期與標記人）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a：AccountHist 加 emgId、reviewId（來源緊急存取單號／定期審查流水號；後端一直有回 emgId，型別補齊）
 // ============================================================
 
 /** 申請類型（IM_ACCT_REQ.REQ_TYPE_CODE） */
@@ -123,6 +126,10 @@ export interface AccountHist {
   stageId?: number | null
   stageName?: string | null
   reqId?: string | null
+  /** 來源緊急存取單號（sourceCode＝EMG） */
+  emgId?: string | null
+  /** 來源定期審查流水號（sourceCode＝REVIEW） */
+  reviewId?: number | null
   actBy?: string | null
   /** 實際操作人顯示名快照；系統排程為「系統排程」 */
   actByName?: string | null

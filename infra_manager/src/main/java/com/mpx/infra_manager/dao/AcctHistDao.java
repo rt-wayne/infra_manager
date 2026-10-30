@@ -22,6 +22,9 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a：寫入與查詢加 REVIEW_ID（SOURCE_CODE＝REVIEW 的定期審查事件，參照 IM_ACCT_REVIEW）
 // ============================================================
 
 import java.util.HashMap;
@@ -40,15 +43,15 @@ import com.mpx.infra_manager.model.CountRow;
 public class AcctHistDao {
 
 	public static final String INSERT_HIST = """
-			INSERT INTO IM_ACCT_HIST (HIST_ID, ACCT_ID, REQ_ID, EMG_ID, SOURCE_CODE, ACTION_CODE, STAGE_ID, ACT_BY, ACT_BY_NAME,
+			INSERT INTO IM_ACCT_HIST (HIST_ID, ACCT_ID, REQ_ID, EMG_ID, REVIEW_ID, SOURCE_CODE, ACTION_CODE, STAGE_ID, ACT_BY, ACT_BY_NAME,
 			       ACT_AS_ID, ACT_AS_NAME, ACT_DATE, APPLY_DEPT, RESULT_DESCR, IS_SELF_ACTION, CREATE_DATE, CREATE_BY)
-			VALUES (SEQ_IM_ACCT_HIST.NEXTVAL, :acctId, :reqId, :emgId, :sourceCode, :actionCode, :stageId, :actBy, :actByName,
+			VALUES (SEQ_IM_ACCT_HIST.NEXTVAL, :acctId, :reqId, :emgId, :reviewId, :sourceCode, :actionCode, :stageId, :actBy, :actByName,
 			       :actAsId, :actAsName, :actDate, :applyDept, :resultDescr, :isSelfAction, :actDate, :createBy)
 			""";
 
 	/** REQ_APPLY_BY：該列來源單的申請人（申請單或緊急存取單），Service 算「自行核准／同人兼任」標籤用 */
 	static final String SELECT_BASE = """
-			SELECT H.HIST_ID, H.ACCT_ID, H.REQ_ID, H.EMG_ID, H.SOURCE_CODE, H.ACTION_CODE, H.STAGE_ID, S.STAGE_NAME, H.ACT_BY,
+			SELECT H.HIST_ID, H.ACCT_ID, H.REQ_ID, H.EMG_ID, H.REVIEW_ID, H.SOURCE_CODE, H.ACTION_CODE, H.STAGE_ID, S.STAGE_NAME, H.ACT_BY,
 			       H.ACT_BY_NAME, H.ACT_AS_ID, H.ACT_AS_NAME, H.ACT_DATE, H.APPLY_DEPT, H.RESULT_DESCR, H.IS_SELF_ACTION,
 			       COALESCE(R.APPLY_BY, EM.APPLY_BY) AS REQ_APPLY_BY
 			  FROM IM_ACCT_HIST H
@@ -92,13 +95,14 @@ public class AcctHistDao {
 		this.itflowDb = itflowDb;
 	}
 
-	/** h 需備齊 acctId、reqId 或 emgId、sourceCode、actionCode、stageId、actBy、actByName、actAsId、actAsName、actDate、
+	/** h 需備齊 acctId、reqId 或 emgId 或 reviewId、sourceCode、actionCode、stageId、actBy、actByName、actAsId、actAsName、actDate、
 	 *  applyDept、resultDescr、isSelfAction、createBy */
 	public int insert(AcctHist h) {
 		Map<String, Object> params = new HashMap<>();
 		params.put("acctId", h.getAcctId());
 		params.put("reqId", h.getReqId());
 		params.put("emgId", h.getEmgId());
+		params.put("reviewId", h.getReviewId());
 		params.put("sourceCode", h.getSourceCode());
 		params.put("actionCode", h.getActionCode());
 		params.put("stageId", h.getStageId());

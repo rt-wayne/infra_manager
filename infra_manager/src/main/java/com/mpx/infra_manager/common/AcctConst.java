@@ -77,6 +77,10 @@ package com.mpx.infra_manager.common;
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R2（定期權限審查）：權限碼 REVIEW_LIST／REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 進可見清單（20 → 23 碼）；
 //           審查狀態碼 4 種（ABNORMAL／OVERDUE／DUE／NORMAL，由 ReviewDao.REVIEW_STATE_EXPR 算出）與待複審天數 REVIEW_DUE_DAYS＝30
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a：簽核紀錄輪狀態 RR_OPEN／DONE／REJECTED／CANCELED、簽核半邊 HALF_INFRA／GOV；
+//           歷史來源 REVIEW 與動作 REVIEW_DONE（雙簽完成）／REVIEW_REJECT（駁回，R3b 用）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -167,6 +171,12 @@ public final class AcctConst {
 	public static final String ACT_EMG_CLOSE_MODIFY = "EMG_CLOSE_MODIFY";
 	/** 審查異常旗標清除：FLAG_CLEAR_REQ_TYPES 的申請在關卡 7 複驗通過時寫入（D42、裁示㉔；S10） */
 	public static final String ACT_FLAG_CLEAR = "FLAG_CLEAR";
+	/** 定期審查事件（REVIEW_ID 有值、REQ_ID／EMG_ID／STAGE_ID／APPLY_DEPT 空；BACKLOG 第 158 項） */
+	public static final String HIST_SRC_REVIEW = "REVIEW";
+	/** 定期審查完成：寫第二半簽核時（裁示 ㉑A：單半簽核與取消不寫歷史） */
+	public static final String ACT_REVIEW_DONE = "REVIEW_DONE";
+	/** 定期審查駁回（R3b） */
+	public static final String ACT_REVIEW_REJECT = "REVIEW_REJECT";
 	/** 判斷 IS_SELF_ACTION 的動作（spec §4.8） */
 	public static final List<String> SELF_CHECK_ACTIONS = List.of(ACT_APPROVE, ACT_REJECT, ACT_EXEC_DONE, ACT_VERIFY_OK,
 			ACT_VERIFY_REJECT);
@@ -315,6 +325,17 @@ public final class AcctConst {
 	public static final String RVS_DUE = "DUE";
 	public static final String RVS_NORMAL = "NORMAL";
 	public static final List<String> REVIEW_STATES = List.of(RVS_ABNORMAL, RVS_OVERDUE, RVS_DUE, RVS_NORMAL);
+	/** 可簽核或駁回的審查狀態（裁示 ②A、⑨A）：待複審、逾期未審；異常、正常、不在範圍都回 409 */
+	public static final List<String> REVIEW_SIGNABLE_STATES = List.of(RVS_DUE, RVS_OVERDUE);
+	/** 簽核紀錄每輪狀態 IM_ACCT_REVIEW.REVIEW_STATE_CODE：進行中、完成（雙簽）、駁回（一半駁回整輪結束，③A）、取消（關卡 6 生效，⑤A） */
+	public static final String RR_OPEN = "OPEN";
+	public static final String RR_DONE = "DONE";
+	public static final String RR_REJECTED = "REJECTED";
+	public static final String RR_CANCELED = "CANCELED";
+	/** 簽核半邊：Infra（REVIEW_SIGN_INFRA）、治理（REVIEW_SIGN_GOV）；也是 IM_ACCT_REVIEW.REJECT_HALF_CODE 的值域 */
+	public static final String HALF_INFRA = "INFRA";
+	public static final String HALF_GOV = "GOV";
+	public static final List<String> REVIEW_HALVES = List.of(HALF_INFRA, HALF_GOV);
 	/** 到期提醒範圍：到期日 ≤ 今天＋30（spec §4.11） */
 	public static final int EXPIRY_WARN_DAYS = 30;
 	/** J01 到期前 7 天信 */

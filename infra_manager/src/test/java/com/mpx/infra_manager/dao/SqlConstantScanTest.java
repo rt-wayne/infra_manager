@@ -104,6 +104,11 @@ package com.mpx.infra_manager.dao;
 // 變更說明: BACKLOG 第 158 項 R2：掃描清單加 ReviewDao、ReviewController；API 數 48 → 49（GET /reviews）；
 //           可見權限碼 20 → 23（REVIEW_* 三碼改為必須在內，隱藏碼剩 5）；新增定期審查 SQL 斷言——範圍三條件與 ReviewRule.matches 對齊、
 //           分類 JOIN 帶 STATUS = 1、範圍寫成正向 WHEN（不得 NOT (…)）、狀態順序異常 → 範圍 → 逾期 → 待複審 → 正常、清單篩選與排序
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a：API 數 49 → 50（POST /reviews/{acctId}/sign）；歷史 INSERT／SELECT 須含 REVIEW_ID；
+//           簽核 SQL 斷言——INSERT_OPEN 建 OPEN、版本 0；UPDATE_SIGN_INFRA／GOV 帶版本、進行中、本半未簽並 VERSION_NO＋1；
+//           UPDATE_DONE 要兩半都已簽；清單多回兩半實際操作人
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -535,6 +540,35 @@ class SqlConstantScanTest {
 		assertThat(AcctConst.REVIEW_STATES).containsExactly("ABNORMAL", "OVERDUE", "DUE", "NORMAL");
 	}
 
+	/** 第 158 項 R3a：簽核 SQL——首簽建輪、簽半樂觀鎖、雙簽完成；歷史帶 REVIEW_ID */
+	@Test
+	void 定期審查SQL_簽核_首簽建輪_簽半樂觀鎖_雙簽完成_歷史帶REVIEW_ID() {
+		assertThat(ReviewDao.SELECT_BASE).contains("R.INFRA_SIGN_ACT_BY").contains("R.GOV_SIGN_ACT_BY");
+		assertThat(ReviewDao.FIND_BY_ACCT).contains(ReviewDao.REVIEW_STATE_EXPR).contains("WHERE A.ACCT_ID = :acctId")
+				.doesNotContain(":stateCode").doesNotContain(":keyword");
+		assertThat(ReviewDao.NEXT_REVIEW_ID).contains("SEQ_IM_ACCT_REVIEW.NEXTVAL AS CNT");
+		// 首簽建輪（⑮A）：狀態 OPEN、版本 0、兩組簽核欄都綁參數（Service 決定哪一組有值）、時間綁 :now
+		assertThat(ReviewDao.INSERT_OPEN).contains("INSERT INTO IM_ACCT_REVIEW").contains("'OPEN'").contains(":dueDate")
+				.contains(":infraSignBy, :infraSignActBy, :infraSignDate, :govSignBy, :govSignActBy, :govSignDate")
+				.contains("0, 1, :now, :createBy").doesNotContain("SEQ_IM_ACCT_REVIEW").doesNotContain("REJECT");
+		// 簽半：版本相符、進行中、本半尚未簽，VERSION_NO＋1；只動自己那一半的欄位
+		assertThat(ReviewDao.UPDATE_SIGN_INFRA).contains("INFRA_SIGN_BY = :signBy, INFRA_SIGN_ACT_BY = :actBy, INFRA_SIGN_DATE = :now")
+				.contains("VERSION_NO = VERSION_NO + 1").contains("VERSION_NO = :versionNo").contains("REVIEW_STATE_CODE = 'OPEN'")
+				.contains("INFRA_SIGN_BY IS NULL").doesNotContain("GOV_SIGN");
+		assertThat(ReviewDao.UPDATE_SIGN_GOV).contains("GOV_SIGN_BY = :signBy, GOV_SIGN_ACT_BY = :actBy, GOV_SIGN_DATE = :now")
+				.contains("VERSION_NO = VERSION_NO + 1").contains("VERSION_NO = :versionNo").contains("REVIEW_STATE_CODE = 'OPEN'")
+				.contains("GOV_SIGN_BY IS NULL").doesNotContain("INFRA_SIGN");
+		// 雙簽完成：兩半都已簽才改 DONE，寫完成時間與新下次應審查日
+		assertThat(ReviewDao.UPDATE_DONE).contains("REVIEW_STATE_CODE = 'DONE'").contains("DONE_DATE = :now")
+				.contains("NEXT_DUE_DATE = :nextDueDate").contains("VERSION_NO = :versionNo").contains("REVIEW_STATE_CODE = 'OPEN'")
+				.contains("INFRA_SIGN_BY IS NOT NULL").contains("GOV_SIGN_BY IS NOT NULL");
+		// 歷史（㉑A）：寫入與查詢都帶 REVIEW_ID
+		assertThat(AcctHistDao.INSERT_HIST).contains("REVIEW_ID").contains(":reviewId");
+		assertThat(AcctHistDao.FIND_BY_ACCT).contains("H.REVIEW_ID");
+		assertThat(AcctConst.REVIEW_SIGNABLE_STATES).containsExactly("DUE", "OVERDUE");
+		assertThat(AcctConst.REVIEW_HALVES).containsExactly("INFRA", "GOV");
+	}
+
 	@Test
 	void 樂觀鎖_狀態轉移都帶版本與預期狀態並遞增版本() {
 		for (String sql : List.of(AcctReqDao.UPDATE_APPROVE, AcctReqDao.UPDATE_REJECT, AcctReqDao.UPDATE_EXEC_DONE,
@@ -699,8 +733,8 @@ class SqlConstantScanTest {
 		// 第 89 項階段 1：/admin/roles、/admin/users、/admin/roles/{roleId}/members、…/{userId}/revoke（39 → 43）
 		// 第 89 項階段 2：/admin/executors、/admin/executors/{catgId}/members、…/{userId}/revoke（43 → 46）
 		// 第 89 項階段 3：/admin/role-perms、/admin/roles/{roleId}/perms（46 → 48）
-		// 第 158 項 R2：GET /reviews（48 → 49）
-		assertThat(apis).isEqualTo(49);
+		// 第 158 項 R2：GET /reviews（48 → 49）；R3a：POST /reviews/{acctId}/sign（49 → 50）
+		assertThat(apis).isEqualTo(50);
 		assertThat(missing).isEmpty();
 	}
 }
