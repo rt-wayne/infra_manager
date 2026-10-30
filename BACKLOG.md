@@ -17,10 +17,10 @@
 | 158 | 定期權限審查（SA §5.10、J04；從第 14 項拆出）：審查狀態即時計算、Infra／治理雙簽、駁回標旗標、J04 待複審信、J02 加逾期未審、待辦、首頁第四區兩張卡、鈴鐺類別 2。21 項裁示 2026-10-30 全部依 architect 建議，分 R0～R10 共 12 段 | [backlog/158-定期審查.md](backlog/158-定期審查.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：R1 腳本已寫好並 commit → 等使用者在測試 DB 以 RD_USER 用 SQL Developer F5 跑 `db/infra_manager_phase2_review.sql` 兩次（第二次應全部「已存在，略過」）並貼回檔尾七句結果；核對無誤後 R1 結束（本階段無程式變更，不派 code-reviewer／test-runner，改由使用者實跑腳本驗收），接著 R2（審查狀態共用片段＋唯讀清單 API）
+- 下一步：R1 完成（測試 DB 已執行並核對）。接著 R2：審查狀態共用 SQL 片段、`GET /reviews` 唯讀清單 API、`PermissionService.canViewAccount` 擴充、Java／SQL 審查範圍對齊測試；開工前先列理解與檔案清單等使用者確認
 - 已改動（未 commit）：無
-- 本階段起點：R1 `f2219ec`
-- 卡住／待確認：等使用者在測試 DB 執行腳本；UAT／正式於 R5 部署前執行（SETUP 第 6 節已寫）
+- 本階段起點：R2 開工時記（R1 `f2219ec`）
+- 卡住／待確認：UAT／正式環境的 R1 腳本於 R5 部署前執行（SETUP 第 6 節已寫）
 
 ## 已拍板待實作
 
