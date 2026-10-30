@@ -14,6 +14,11 @@ package com.mpx.infra_manager.service;
 //           就重讀那一輪改走 UPDATE → 有一輪：版本相符、⑪A 另一半的有效身分或實際操作人不是我 → UPDATE 本半（0 筆＝409 E08）→
 //           兩半都簽了：本輪改 DONE、主表上次＝今天、下次＝今天＋180（①A）、歷史 REVIEW_DONE（㉑A，帶 REVIEW_ID）。
 //           單半簽核不寫歷史、不寄信；駁回、守門由 R3b 追加
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a 審查修正：①A 簽核交易一開始先鎖帳號主表那一列（AcctDao.lockForReview），
+//           同帳號的簽核、標旗標、關卡 6 取消進行中一輪排隊執行，讀到的狀態與那一輪才算數；
+//           M2 ③A REVIEW_DONE 的 IS_SELF_ACTION 改為「兩半任一簽核人（有效身分）是原新增申請人」，標籤改顯示「自行審查」
 // ============================================================
 
 import java.time.Clock;
@@ -102,6 +107,8 @@ public class ReviewService {
 		LocalDate today = now.toLocalDate();
 
 		ReviewActionResult r = tx.execute(s -> {
+			// ①A：先鎖帳號列，同帳號的另一半簽核、緊急存取標旗標、關卡 6 取消本輪都排在這之後，下面讀到的狀態與那一輪才算數
+			acctDao.lockForReview(acctId);
 			ReviewItem item = loadSignable(acctId, today);
 			if (item.getReviewId() == null) {
 				// 前端看到的是「還沒有一輪」卻帶了版本：它看的那一輪已結束（或資料已變），要重新整理
@@ -182,7 +189,8 @@ public class ReviewService {
 
 	/**
 	 * REVIEW_DONE 歷史（㉑A）：SOURCE_CODE＝REVIEW、REVIEW_ID＝本輪；REQ_ID／EMG_ID／STAGE_ID／APPLY_DEPT 空；
-	 * ACT_BY＝第二半的實際操作人、ACT_AS＝代理身分、IS_SELF_ACTION＝第二半簽核人（有效身分）是該帳號原新增申請人。
+	 * ACT_BY＝第二半的實際操作人、ACT_AS＝代理身分、IS_SELF_ACTION＝兩半任一簽核人（有效身分）是該帳號原新增申請人
+	 * （兩半判準一致；歷史畫面標籤由 RequestService.selfLabel 依來源 REVIEW 顯示「自行審查」）。
 	 * item 是簽第二半之前讀到的，所以本半的簽核人與時間用當下的值
 	 */
 	private static AcctHist doneHist(Identity id, ReviewItem item, long reviewId, boolean infra, LocalDateTime now,
@@ -207,7 +215,9 @@ public class ReviewService {
 		h.setActAsName(id.actAsName());
 		h.setActDate(now);
 		h.setResultDescr(Texts.truncate(sb.toString(), RESULT_DESCR_MAX));
-		h.setIsSelfAction(id.getUserId().equals(item.getApplyBy()) ? 1 : 0);
+		String otherBy = infra ? item.getGovSignBy() : item.getInfraSignBy();
+		String applyBy = item.getApplyBy();
+		h.setIsSelfAction(applyBy != null && (applyBy.equals(id.getUserId()) || applyBy.equals(otherBy)) ? 1 : 0);
 		h.setCreateBy(id.getRealUserId());
 		return h;
 	}

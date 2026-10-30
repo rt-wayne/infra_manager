@@ -17,9 +17,9 @@
 | 158 | 定期權限審查（SA §5.10、J04；從第 14 項拆出）：審查狀態即時計算、Infra／治理雙簽、駁回標旗標、J04 待複審信、J02 加逾期未審、待辦、首頁第四區兩張卡、鈴鐺類別 2。21 項裁示 2026-10-30 全部依 architect 建議，分 R0～R10 共 12 段 | [backlog/158-定期審查.md](backlog/158-定期審查.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：R3a 程式與文件已 commit；接著 R3a 收尾——平行派 code-reviewer（範圍 `53eb425` 起）與 test-runner（後端完整套件、前端型別檢查；簽核 SQL 無法用改 `:today` 的方式唯讀驗證，INSERT／UPDATE 只能靠單元測試＋R5 瀏覽器實測）。遺留：`GET /api/v1/reviews` 未登入回 401 要等使用者以新 jar 重啟 8989 後補驗
+- 下一步：R3a 已結案（審查修正 ①A 鎖帳號列、M2 ③A 自行審查、PRD 四處已 commit）；接著 R3b（`POST /reviews/{acctId}/reject`），開工前先讀 `backlog/158-定期審查.md` 交接段的「R3b／R4 設計前提」（寫入交易先 `AcctDao.lockForReview`，鎖序帳號主表 → IM_ACCT_REVIEW）。遺留：`GET /api/v1/reviews` 未登入回 401 要等使用者以新 jar 重啟 8989 後補驗
 - 已改動（未 commit）：無
-- 本階段起點：`53eb425`（R3a；R0 `05865e0`、R1 `f2219ec`、R2 `146e78a`）
+- 本階段起點：R3b 尚未開工（R0 `05865e0`、R1 `f2219ec`、R2 `146e78a`、R3a `53eb425`）
 - 卡住／待確認：UAT／正式環境的 R1 腳本於 R5 部署前執行（SETUP 第 6 節已寫）
 
 ## 已拍板待實作
@@ -51,6 +51,8 @@
 | 160 | `ReviewServiceTest.有審查狀態_與ReviewRule範圍同口徑` 其實是 Java 比 Java（`PermissionService.hasReviewState` 內部就呼叫 `ReviewRule.matches`），名實不符；Java↔SQL 審查範圍對齊目前只靠 `SqlConstantScanTest` 字串斷言。建議：測試改名為「只看 APPROVED、旗標與刪除」；下次測試 DB 實跑時補兩筆（APPROVED、非 DOOR、非特權、分類 IS_REVIEW_TRIGGER＝1 但分類 STATUS＝0；ASSET_CLASS_ID 為空）確認不出現在 `/reviews` 且只有 INFRA_MGR 的人開明細回 403。第 158 項 R2 code-reviewer S1 | 2026-10-30 | — |
 | 161 | 所有清單 API（`/accounts`、`/requests`、`/emergencies`、`/reviews`…）的 keyword 只修剪與 LIKE 跳脫、沒有長度上限（`security.md`「字串輸入要限制長度」）；既有共同寫法，非單一 API 問題。第 158 項 R2 code-reviewer S5 | 2026-10-30 | — |
 | 162 | 前端 `permGroups.ts` 的分組順序（帳號 → 簽核 → 巡檢 → 緊急存取 → 定期審查 → 系統管理）沒有測試鎖住，`AdminViews.spec.ts` 的 `groupPerms` 案例只涵蓋 SYS 與未知模組；補一筆含 EMG、REVIEW、SYS 的案例。第 158 項 R2 code-reviewer S6 | 2026-10-30 | — |
+| 163 | `ReviewServiceTest` 簽核測試缺口：markDone 回 0 → 409；首簽撞 IND_02 重讀後仍無一輪 → 409；重讀後另一半是同一人 → 409；治理半先簽、Infra 後簽時 `doneHist` 文字；交易次數斷言（比照 `EmergencyServiceTest` 的 `fx.txm.commits`／`rollbacks`，撞索引改走 UPDATE 那筆最該鎖 commits＝1、rollbacks＝0）；「500 整筆回滾不留歷史」那筆沒驗 rollbacks＝1；「已有一輪_…_同人兩半409」名稱含同人兩半但內容沒測。第 158 項 R3a code-reviewer S1 | 2026-10-30 | — |
+| 164 | 定期審查簽核的三種 409（版本不符、同半已簽、以為沒有一輪卻帶版本）沿用 E08「此申請已由他人處理，請重新整理」，使用者操作的是定期審查不是申請；R5 做畫面時另訂文案或前端改寫。第 158 項 R3a code-reviewer S3 | 2026-10-30 | — |
 | 16 | 原始規格書缺件：子 README 與 `.example` 註解（範本已於 2026-10-14 刪除）引用 `spec_im_acct_insp_v2.0.md`、變更單 #1～#4，但 repo 與使用者手上都沒有；PRD 不引用 | 2026-10-10 | — |
 | 17 | `infra_manager_web\README.md` 第 2 節「兩包結構」表仍是範本初始描述：說 Controller 目錄只有 `package-info.java`、`src\types\` 與 `src\views\` 只有 `.gitkeep`、router 的 routes 是空陣列，實際都已有程式（4 個型別檔、10 個畫面、14 個 path） | 2026-10-10 | — |
 | 18 | 登入查詢後才被改成停用（STATUS＝0）的帳號，該次登入仍取得 token 與回應中的權限清單；下一次呼叫 API 即因 `TokenIdentityProvider` 檢查 STATUS 而回 A03，攻擊面接近零 | 2026-10-10 | — |

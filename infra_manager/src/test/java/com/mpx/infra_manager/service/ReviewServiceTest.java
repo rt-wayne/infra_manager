@@ -13,6 +13,10 @@ package com.mpx.infra_manager.service;
 //           首簽撞 IND_IM_ACCT_REVIEW_02 重讀改 UPDATE（⑮A）、其他唯一鍵衝突原樣往上拋；已有一輪：版本不符 409、
 //           同人兩半 409（有效身分與實際操作人各一例，⑪A）、同半重複 409 E08；第二半簽完 → DONE、主表上次＝今天／下次＋180、
 //           歷史 REVIEW_DONE 帶 REVIEW_ID 與兩半簽核人；主表 0 筆 → 500 回滾
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a 審查修正：①A 交易內先鎖帳號列再讀狀態（InOrder）、進交易前的 400／403／E02 不鎖；
+//           M2 ③A IS_SELF_ACTION 兩半任一簽核人是原申請人就為 1（第一半是、第二半是各一例），都不是為 0
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -33,6 +37,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,6 +47,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 
@@ -112,6 +118,7 @@ class ReviewServiceTest {
 		assertStatus(() -> svc.sign(id(GARY), ACCT, form("GOV", 0)), HttpStatus.FORBIDDEN, AcctMsg.P01);
 		assertStatus(() -> svc.sign(id(TERRY), ACCT, form("INFRA", null)), HttpStatus.BAD_REQUEST, AcctMsg.E02_PREFIX + "版本號");
 		verify(fx.reviewDao, never()).findByAcct(any(), any());
+		verify(fx.acctDao, never()).lockForReview(any());
 	}
 
 	@Test
@@ -129,9 +136,13 @@ class ReviewServiceTest {
 	}
 
 	@Test
-	void 首簽_建本輪只簽本半_DUE_DATE為下次應審查日_不寫歷史_回OPEN版本0() {
+	void 首簽_先鎖帳號列再讀狀態_建本輪只簽本半_DUE_DATE為下次應審查日_不寫歷史_回OPEN版本0() {
 		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(due());
 		ReviewActionResult r = svc.sign(id(TERRY), ACCT, form("INFRA", 0));
+		// ①A：鎖在讀狀態之前，讀到的狀態與那一輪才算數
+		InOrder order = inOrder(fx.acctDao, fx.reviewDao);
+		order.verify(fx.acctDao).lockForReview(ACCT);
+		order.verify(fx.reviewDao).findByAcct(ACCT, TODAY);
 		verify(fx.reviewDao).insertOpen(101L, ACCT, TODAY.plusDays(10), "INFRA", TERRY, TERRY, NOW);
 		verify(fx.reviewDao, never()).signHalf(anyLong(), anyInt(), any(), any(), any(), any());
 		verify(fx.acctDao, never()).updateReviewDates(any(), any(), any(), any(), any());
@@ -246,13 +257,30 @@ class ReviewServiceTest {
 	}
 
 	@Test
-	void 第二半簽完_簽核人是原申請人時IS_SELF_ACTION為1() {
+	void 第二半簽完_兩半任一簽核人是原申請人時IS_SELF_ACTION為1_標籤自行審查() {
+		// 第二半（治理半 MOLLY）是原申請人
 		ReviewItem it = infraSigned(0);
 		it.setApplyBy(MOLLY);
 		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(it);
 		svc.sign(id(MOLLY), ACCT, form("GOV", 0));
 		assertThat(fx.hists).hasSize(1);
-		assertThat(fx.hists.get(0).getIsSelfAction()).isEqualTo(1);
+		AcctHist h = fx.hists.get(0);
+		assertThat(h.getIsSelfAction()).isEqualTo(1);
+		// 歷史畫面：來源 REVIEW 的自核列顯示「自行審查」，不是拿第二半操作人去比而得的「同人兼任」
+		h.setReqApplyBy(MOLLY);
+		assertThat(RequestService.selfLabel(h)).isEqualTo(AcctConst.SELF_LABEL_REVIEW);
+
+		// 第一半（Infra 半 TERRY）是原申請人、第二半不是：兩半判準一致，也標 1（M2 ③A）
+		fx.hists.clear();
+		ReviewItem byApplicant = infraSigned(0);
+		byApplicant.setApplyBy(TERRY);
+		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(byApplicant);
+		svc.sign(id(MOLLY), ACCT, form("GOV", 0));
+		assertThat(fx.hists).hasSize(1);
+		h = fx.hists.get(0);
+		assertThat(h.getIsSelfAction()).isEqualTo(1);
+		h.setReqApplyBy(TERRY);
+		assertThat(RequestService.selfLabel(h)).isEqualTo(AcctConst.SELF_LABEL_REVIEW);
 	}
 
 	@Test

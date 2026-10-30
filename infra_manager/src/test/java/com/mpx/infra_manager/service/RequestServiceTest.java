@@ -61,6 +61,9 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-10-29
 // 變更說明: 簽核流程調整：不符合審查條件（非審查條件碼、非特權、非門禁卡）於關卡 4 核准後跳過關卡 5 資訊主管——
 //           跳過案（H02／未分類、非特權）進待執行／關卡 6、發 TO_EXEC、歷史加註免簽；不跳過案（H01 非特權、H02 特權、門禁卡）進關卡 5
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a 審查修正 M2 ③A：selfLabel 對來源 REVIEW 的自核列回「自行審查」，與操作人是否為申請人無關
 // ============================================================
 
 import static com.mpx.infra_manager.support.TestFixture.ALAN;
@@ -968,6 +971,12 @@ class RequestServiceTest {
 		h.setActionCode(AcctConst.ACT_EMG_CLOSE_MODIFY);
 		h.setReqApplyBy(TERRY);
 		assertThat(RequestService.selfLabel(h)).isEqualTo(AcctConst.SELF_LABEL_SAME_PERSON);
+		// 來源 REVIEW（定期審查）的自核列一律「自行審查」：旗標代表兩半任一簽核人是原申請人，這列的操作人不一定是
+		h.setSourceCode(AcctConst.HIST_SRC_REVIEW);
+		h.setActionCode(AcctConst.ACT_REVIEW_DONE);
+		assertThat(RequestService.selfLabel(h)).isEqualTo(AcctConst.SELF_LABEL_REVIEW);
+		h.setReqApplyBy(KEVIN);
+		assertThat(RequestService.selfLabel(h)).isEqualTo(AcctConst.SELF_LABEL_REVIEW);
 		h.setIsSelfAction(0);
 		assertThat(RequestService.selfLabel(h)).isNull();
 	}

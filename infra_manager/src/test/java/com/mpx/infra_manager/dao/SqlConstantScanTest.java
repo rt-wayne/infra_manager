@@ -109,6 +109,10 @@ package com.mpx.infra_manager.dao;
 // 變更說明: BACKLOG 第 158 項 R3a：API 數 49 → 50（POST /reviews/{acctId}/sign）；歷史 INSERT／SELECT 須含 REVIEW_ID；
 //           簽核 SQL 斷言——INSERT_OPEN 建 OPEN、版本 0；UPDATE_SIGN_INFRA／GOV 帶版本、進行中、本半未簽並 VERSION_NO＋1；
 //           UPDATE_DONE 要兩半都已簽；清單多回兩半實際操作人
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a 審查修正：①A AcctDao.LOCK_FOR_REVIEW 鎖帳號列（FOR UPDATE、綁 :acctId）；
+//           M2 ③A 歷史查詢 REQ_APPLY_BY 第三個來源為帳號主表（只對 SOURCE_CODE = 'REVIEW' 的列 JOIN）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -562,6 +566,9 @@ class SqlConstantScanTest {
 		assertThat(ReviewDao.UPDATE_DONE).contains("REVIEW_STATE_CODE = 'DONE'").contains("DONE_DATE = :now")
 				.contains("NEXT_DUE_DATE = :nextDueDate").contains("VERSION_NO = :versionNo").contains("REVIEW_STATE_CODE = 'OPEN'")
 				.contains("INFRA_SIGN_BY IS NOT NULL").contains("GOV_SIGN_BY IS NOT NULL");
+		// ①A：簽核交易先鎖帳號主表那一列（列鎖、綁參數；不用 WAIT n，同帳號的寫入排隊）
+		assertThat(AcctDao.LOCK_FOR_REVIEW).contains("FROM IM_ACCT").contains("WHERE ACCT_ID = :acctId").contains("FOR UPDATE")
+				.doesNotContain("WAIT");
 		// 歷史（㉑A）：寫入與查詢都帶 REVIEW_ID
 		assertThat(AcctHistDao.INSERT_HIST).contains("REVIEW_ID").contains(":reviewId");
 		assertThat(AcctHistDao.FIND_BY_ACCT).contains("H.REVIEW_ID");
@@ -600,7 +607,9 @@ class SqlConstantScanTest {
 	void 帳號歷史_寫入帶EMG_ID_查詢取申請單或緊急存取單申請人() {
 		assertThat(AcctHistDao.INSERT_HIST).contains("EMG_ID").contains(":emgId");
 		assertThat(AcctHistDao.FIND_BY_ACCT).contains("LEFT JOIN IM_EMG_ACCESS EM ON EM.EMG_ID = H.EMG_ID")
-				.contains("COALESCE(R.APPLY_BY, EM.APPLY_BY) AS REQ_APPLY_BY");
+				.contains("COALESCE(R.APPLY_BY, EM.APPLY_BY, A.APPLY_BY) AS REQ_APPLY_BY")
+				// 第 158 項 R3a M2 ③A：定期審查列的原申請人取帳號主表，且只對 REVIEW 來源 JOIN（其他來源仍取各自那張單）
+				.contains("LEFT JOIN IM_ACCT A ON A.ACCT_ID = H.ACCT_ID AND H.SOURCE_CODE = 'REVIEW'");
 		assertThat(AcctDao.UPDATE_REVIEW_FLAG).contains("IS_REVIEW_FLAG = 1").contains("REVIEW_FLAG_SOURCE_CODE = :sourceCode")
 				.contains("REVIEW_FLAG_BY = :flagBy").doesNotContain("SYSDATE");
 		// S10：清旗標須 5 欄歸零／NULL，且帶 IS_REVIEW_FLAG = 1 條件（已被清過影響 0 筆、不重寫 FLAG_CLEAR 歷史）

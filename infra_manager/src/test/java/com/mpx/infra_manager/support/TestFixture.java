@@ -59,6 +59,9 @@ package com.mpx.infra_manager.support;
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a：ReviewService 建構子多傳 AcctDao、AcctHistDao、TransactionTemplate（簽核交易）；
 //           reviewDao.signHalf／markDone 與 acctDao.updateReviewDates 預設回 1、nextReviewId 預設回 101
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a 審查修正 S2：刪掉重複的 updateReviewDates 預設樁（同一行寫了兩次）
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -333,7 +336,6 @@ public class TestFixture {
 		when(acctDao.updateReviewDates(any(), any(), any(), any(), any())).thenReturn(1);
 		when(acctDao.flagReview(any(), any(), any(), any(), any(), any())).thenReturn(1);
 		when(acctDao.clearReview(any(), any(), any(), any())).thenReturn(1);
-		when(acctDao.updateReviewDates(any(), any(), any(), any(), any())).thenReturn(1);
 		when(reviewDao.nextReviewId()).thenReturn(101L);
 		when(reviewDao.signHalf(anyLong(), anyInt(), any(), any(), any(), any())).thenReturn(1);
 		when(reviewDao.markDone(anyLong(), anyInt(), any(), any(), any())).thenReturn(1);

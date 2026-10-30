@@ -41,6 +41,10 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a 審查裁示 ①A：LOCK_FOR_REVIEW 鎖帳號主表那一列（FOR UPDATE，不設等待上限），
+//           定期審查簽核交易一開始先鎖，讓同帳號的簽核、標旗標、關卡 6 取消進行中一輪排隊執行；R3b 駁回、R4 關卡 6 沿用同一把鎖
 // ============================================================
 
 import java.time.LocalDate;
@@ -57,6 +61,7 @@ import com.mpx.infra_manager.model.Acct;
 import com.mpx.infra_manager.model.AcctLookupBrief;
 import com.mpx.infra_manager.model.AcctReq;
 import com.mpx.infra_manager.model.CodeCountRow;
+import com.mpx.infra_manager.model.CodeRow;
 import com.mpx.infra_manager.model.CountRow;
 
 @Repository
@@ -225,6 +230,17 @@ public class AcctDao {
 			UPDATE IM_ACCT
 			   SET ACCT_NAME = :acctName, UPDATE_DATE = :now, UPDATE_BY = :userId
 			 WHERE ACCT_ID = :acctId
+			""";
+
+	/**
+	 * 鎖帳號主表一列（第 158 項 R3a 裁示 ①A）：定期審查簽核、駁回與關卡 6 取消進行中一輪都先拿這把鎖，
+	 * 同帳號的寫入排隊執行、不會互相看不到對方未提交的那一輪；列鎖不擋一般讀取。查無帳號回 0 列（由呼叫端的重讀回 404）
+	 */
+	public static final String LOCK_FOR_REVIEW = """
+			SELECT ACCT_ID AS CODE
+			  FROM IM_ACCT
+			 WHERE ACCT_ID = :acctId
+			   FOR UPDATE
 			""";
 
 	/** 審查日期（spec §4.7；第一次回報時符合條件才寫） */
@@ -418,6 +434,13 @@ public class AcctDao {
 		Map<String, Object> params = idParams(acctId, now, userId);
 		params.put("acctName", acctName);
 		return dbClient.update(itflowDb, UPDATE_ACCT_NAME, params);
+	}
+
+	/** 鎖帳號列；須在交易內呼叫，交易結束自動釋放 */
+	public void lockForReview(String acctId) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("acctId", acctId);
+		dbClient.query(itflowDb, LOCK_FOR_REVIEW, params, CodeRow.class);
 	}
 
 	public int updateReviewDates(String acctId, LocalDate last, LocalDate next, LocalDateTime now, String userId) {

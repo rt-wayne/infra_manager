@@ -25,6 +25,10 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a：寫入與查詢加 REVIEW_ID（SOURCE_CODE＝REVIEW 的定期審查事件，參照 IM_ACCT_REVIEW）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a 審查修正 M2 ③A：REQ_APPLY_BY 第三個來源——SOURCE_CODE＝REVIEW 的列 JOIN 帳號主表取原新增申請人
+//           （帳號單號＝新增申請單號，所以也等於那張單的 APPLY_BY）
 // ============================================================
 
 import java.util.HashMap;
@@ -49,15 +53,19 @@ public class AcctHistDao {
 			       :actAsId, :actAsName, :actDate, :applyDept, :resultDescr, :isSelfAction, :actDate, :createBy)
 			""";
 
-	/** REQ_APPLY_BY：該列來源單的申請人（申請單或緊急存取單），Service 算「自行核准／同人兼任」標籤用 */
+	/**
+	 * REQ_APPLY_BY：該列來源的申請人（申請單、緊急存取單；定期審查列為帳號原新增申請人），Service 算「自行核准／同人兼任／自行審查」標籤用。
+	 * 帳號主表只對 SOURCE_CODE＝REVIEW 的列 JOIN，其他來源仍取各自那張單
+	 */
 	static final String SELECT_BASE = """
 			SELECT H.HIST_ID, H.ACCT_ID, H.REQ_ID, H.EMG_ID, H.REVIEW_ID, H.SOURCE_CODE, H.ACTION_CODE, H.STAGE_ID, S.STAGE_NAME, H.ACT_BY,
 			       H.ACT_BY_NAME, H.ACT_AS_ID, H.ACT_AS_NAME, H.ACT_DATE, H.APPLY_DEPT, H.RESULT_DESCR, H.IS_SELF_ACTION,
-			       COALESCE(R.APPLY_BY, EM.APPLY_BY) AS REQ_APPLY_BY
+			       COALESCE(R.APPLY_BY, EM.APPLY_BY, A.APPLY_BY) AS REQ_APPLY_BY
 			  FROM IM_ACCT_HIST H
 			  LEFT JOIN IM_ACCT_APPR_STAGE S ON S.STAGE_ID = H.STAGE_ID
 			  LEFT JOIN IM_ACCT_REQ R ON R.REQ_ID = H.REQ_ID
 			  LEFT JOIN IM_EMG_ACCESS EM ON EM.EMG_ID = H.EMG_ID
+			  LEFT JOIN IM_ACCT A ON A.ACCT_ID = H.ACCT_ID AND H.SOURCE_CODE = 'REVIEW'
 			""";
 
 	public static final String FIND_BY_ACCT = SELECT_BASE + """

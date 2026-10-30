@@ -78,6 +78,10 @@ package com.mpx.infra_manager.service;
 // 變更說明: 簽核流程調整（使用者裁示 ①A ②A ③A ④A ⑥A）：關卡 4 核准時，申請內容不符合審查條件
 //           （ReviewRule.matches：審查條件碼、特權帳號、門禁卡皆否）就跳過關卡 5 資訊主管，直接待執行／關卡 6、
 //           發 TO_EXEC；所有申請類型適用，在途單於關卡 4 核准時自然套用；歷史 APPROVE 說明加註「；資訊主管免簽（非審查條件）」
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a 審查修正 M2 ③A：selfLabel 對來源 REVIEW（定期審查）的自核列顯示「自行審查」，
+//           不比對該列的實際操作人（旗標代表兩半任一簽核人是原申請人，第二半的操作人不一定是那個人）
 // ============================================================
 
 import java.nio.file.Path;
@@ -827,10 +831,16 @@ public class RequestService {
 		return 0;
 	}
 
-	/** 顯示標籤：條件 ① 成立「自行核准」（緊急存取結案登記異動為「自行結案」，S6-③），否則「同人兼任」；非 1 為 null */
+	/**
+	 * 顯示標籤：條件 ① 成立「自行核准」（緊急存取結案登記異動為「自行結案」，S6-③），否則「同人兼任」；非 1 為 null。
+	 * 來源 REVIEW（定期審查）一律「自行審查」——旗標代表兩半任一簽核人是原申請人，不能拿這列的操作人去比
+	 */
 	static String selfLabel(AcctHist h) {
 		if (!Integer.valueOf(1).equals(h.getIsSelfAction())) {
 			return null;
+		}
+		if (AcctConst.HIST_SRC_REVIEW.equals(h.getSourceCode())) {
+			return AcctConst.SELF_LABEL_REVIEW;
 		}
 		String eff = h.getActAsId() != null ? h.getActAsId() : h.getActBy();
 		if (eff == null || !eff.equals(h.getReqApplyBy())) {

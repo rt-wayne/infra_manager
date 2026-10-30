@@ -81,6 +81,9 @@ package com.mpx.infra_manager.common;
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a：簽核紀錄輪狀態 RR_OPEN／DONE／REJECTED／CANCELED、簽核半邊 HALF_INFRA／GOV；
 //           歷史來源 REVIEW 與動作 REVIEW_DONE（雙簽完成）／REVIEW_REJECT（駁回，R3b 用）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3a 審查修正 M2 ③A：歷史標籤加 SELF_LABEL_REVIEW「自行審查」（來源 REVIEW 且 IS_SELF_ACTION＝1）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -184,6 +187,8 @@ public final class AcctConst {
 	public static final String SELF_LABEL_SAME_PERSON = "同人兼任";
 	/** EMG_CLOSE_MODIFY 的結案人即申請人（S6-③） */
 	public static final String SELF_LABEL_CLOSE = "自行結案";
+	/** 來源 REVIEW（定期審查）兩半任一簽核人即該帳號原新增申請人（第 158 項 R3a M2 ③A） */
+	public static final String SELF_LABEL_REVIEW = "自行審查";
 
 	// 附件 ATTACH_TYPE_CODE
 	public static final String ATTACH_DOC = "DOC";

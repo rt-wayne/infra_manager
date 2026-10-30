@@ -325,7 +325,7 @@
 - 核准／退件判斷順序：① 沒有任何關卡 2～5 權限 → 403 ② 未帶 versionNo → 400 E02 ③ 狀態或版本不符 → 409 E08 ④ 沒有目前關卡的權限 → 403 ⑤ 退件原因 E10。回報執行、複驗同理：先驗權限，再做帶條件的 UPDATE。
 - **樂觀鎖**：狀態轉移 UPDATE 帶「單號＋版本號＋預期狀態＋預期關卡」條件；影響 0 筆 → 409 E08「此申請已由他人處理，請重新整理」，先送出者成功。前端收到 409 → toast 訊息並重新載入。
 - **同帳號一筆在途**：程式先查；併發競態由唯一函式索引 IND_IM_ACCT_REQ_04 擋下，ORA-00001 經 Spring 轉成 DuplicateKeyException 後，例外鏈訊息含「(擁有者.IND_IM_ACCT_REQ_04)」才回 409 E07（因此建表時不得改這個索引名）；送出與重送交易內其他唯一鍵衝突（例如其他表的主鍵重複）記 error log 後回 500。
-- **自行核准／同人兼任**（U12，只標示不阻擋）：對核准、退件、回報、複驗通過、複驗退回判斷；有效身分＝申請人 →「自行核准」；同單其他關已由同一有效身分處理 →「同人兼任」。緊急存取歷史：EMG_MODIFY 處理人即申請人 →「自行核准」；EMG_CLOSE_MODIFY 結案人即申請人 →「自行結案」。
+- **自行核准／同人兼任**（U12，只標示不阻擋）：對核准、退件、回報、複驗通過、複驗退回判斷；有效身分＝申請人 →「自行核准」；同單其他關已由同一有效身分處理 →「同人兼任」。緊急存取歷史：EMG_MODIFY 處理人即申請人 →「自行核准」；EMG_CLOSE_MODIFY 結案人即申請人 →「自行結案」。定期審查歷史：REVIEW_DONE 兩半任一簽核人（有效身分）是該帳號原新增申請人 →「自行審查」（標籤只看來源 REVIEW 與旗標，不比對該列的操作人，因為標 1 的可能是另一半）。
 - **退件重送**：只有原申請人看得到、能做（否則 403）；沿用同一單號；附新公文時舊公文失效、新公文一筆，不附則保留舊公文。申請類型與帳號類別不可變更：前端兩者都鎖定；新增申請重送時後端以原申請單的帳號類別為準，忽略表單值。
 
 **申請單狀態**：REVIEW＝審核中（關卡 2～5，畫面顯示 U10「審核中：待 {關卡名}」）、EXEC＝待執行（6）、VERIFY＝待複驗（7）、APPROVED＝已核准（無關卡）、REJECTED＝已退件（無關卡，可重送）。
@@ -566,10 +566,10 @@
 - **誰能看**：有 REVIEW_LIST 的人（初始資料：INFRA_MGR、GOV_MGR、IT_HEAD）看全部，沒有就 403；不做「只看自己的」。有 REVIEW_LIST 的人同時取得「可看帳號」第六條（見「2. 權限與資料範圍」），能開有審查狀態的帳號明細與歷史。
 - **清單**：`GET /reviews`，預設列需要處理的三種（異常、逾期未審、待複審），stateCode 給 NORMAL 才列正常的；每列帶進行中那一輪（IM_ACCT_REVIEW 的 OPEN 列）的流水號、版本、兩半簽核人（有效身分與實際操作人）與時間，還沒有人簽時皆為空。欄位與錯誤見「API 規格」。
 - **簽核（雙簽）**：`POST /reviews/{acctId}/sign`，half＝INFRA（需 REVIEW_SIGN_INFRA）或 GOV（需 REVIEW_SIGN_GOV），不需要 REVIEW_LIST。
-  - **只有待複審、逾期未審可以簽**（審查異常、正常、不在範圍都回 409「此帳號目前不在待複審或逾期未審狀態，不能簽核」）；狀態在交易內以簽核當天重算，不信任前端看到的。
+  - **只有待複審、逾期未審可以簽**（審查異常、正常、不在範圍都回 409「此帳號目前不在待複審或逾期未審狀態，不能簽核」）；狀態在交易內以簽核當天重算，不信任前端看到的。交易一開始先鎖該帳號主表那一列（FOR UPDATE、不設等待上限），同一帳號的另一半簽核、緊急存取標異常旗標、之後的關卡 6 取消本輪都排在它後面執行，不會出現「讀到舊狀態卻完成審查」或各建一輪；列鎖不影響一般讀取。
   - **本輪紀錄在第一次簽核時才建立**（IM_ACCT_REVIEW 一列：OPEN、DUE_DATE＝當時的下次應審查日、為空則當天、只填簽的那一半）。還沒有進行中一輪時 versionNo 帶 0；兩人同時首簽，後到者撞唯一索引後改為對既有那一輪簽另一半，不會建出兩輪。
   - **已有進行中一輪**：versionNo 須等於該輪版本（否則 409 E08）；同一半已有人簽 → 409 E08；**同一人不得簽兩半**——另一半的簽核人（有效身分）或實際操作人是我 → 409「同一人不得簽核兩半」（切換身分代簽也擋）。每次簽核版本＋1。
-  - **兩半都簽完＝完成**：本輪改 DONE（記完成時間、新下次應審查日，版本再＋1）；主表上次審查日＝完成當天、下次應審查日＝完成當天＋180；帳號歷史一筆 REVIEW_DONE（來源 REVIEW、帶 REVIEW_ID；ACT_BY＝第二半的實際操作人、ACT_AS＝代理身分、IS_SELF_ACTION＝第二半簽核人是該帳號原新增申請人；說明寫兩半簽核人與時間、新日期）。單半簽核不寫歷史、不寄信。主表更新 0 筆時整筆回滾、回 500。
+  - **兩半都簽完＝完成**：本輪改 DONE（記完成時間、新下次應審查日，版本再＋1）；主表上次審查日＝完成當天、下次應審查日＝完成當天＋180；帳號歷史一筆 REVIEW_DONE（來源 REVIEW、帶 REVIEW_ID；ACT_BY＝第二半的實際操作人、ACT_AS＝代理身分、IS_SELF_ACTION＝兩半任一簽核人（有效身分）是該帳號原新增申請人，歷史畫面標「自行審查」（U12）；說明寫兩半簽核人與時間、新日期）。單半簽核不寫歷史、不寄信。主表更新 0 筆時整筆回滾、回 500。
   - 驗證順序：簽核角色不是 INFRA／GOV 400 → 無對應權限 403 → 未帶 versionNo E02 → 查無帳號 404 → 不可簽 409 → 版本／同半／同人 409。
   - 完成後狀態自然回到「正常」（下次應審查日往後推），不另記「本輪已完成」；異常清除、駁回不在本節（駁回未上線）。
 - **已知限制**：清單 API 沒有筆數上限、不分頁，每次查詢對帳號主表全部算一次狀態（與緊急存取清單同一取捨）。審查範圍內的帳號量目前很小（測試 DB 3 筆、正式 DB 0 筆）；第 133 項舊資料轉入後量級變大再決定要不要分頁。
@@ -661,7 +661,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | U09 | 查詢失敗，請稍後再試 | 任何查詢失敗 |
 | U10 | 審核中：待 {關卡名} | 申請單狀態 |
 | U11 | 待複驗 | 帳號列表標記 |
-| U12 | 自行核准／同人兼任／自行結案 | 歷史標籤（自行結案只用於緊急存取結案登記異動） |
+| U12 | 自行核准／同人兼任／自行結案／自行審查 | 歷史標籤（自行結案只用於緊急存取結案登記異動；自行審查只用於定期審查完成） |
 | U13 | 目前沒有已逾期未處理的帳號 | J02 彙總 0 筆 |
 | U14 | 有 {n} 個帳號 30 天內到期或已逾期 | 帳號列表橫幅 |
 | — | 所選檔案沒有內容，視同未上傳 | 前端選到空檔時（`utils/attach.ts`） |
@@ -911,8 +911,8 @@ CREATE UNIQUE INDEX IND_IM_ACCT_REQ_04 ON RD_USER.IM_ACCT_REQ
 | REQ_ID | VARCHAR2(20) | | 來源申請單（SOURCE_CODE＝REQ） |
 | EMG_ID | VARCHAR2(20) | | 來源緊急存取單（SOURCE_CODE＝EMG） |
 | REVIEW_ID | NUMBER(12) | | 來源定期審查流水號（SOURCE_CODE＝REVIEW；→ IM_ACCT_REVIEW）；REVIEW_DONE 寫入 |
-| SOURCE_CODE | VARCHAR2(10) | ✓ | REQ、SYS、EMG、REVIEW（REVIEW 程式目前尚未寫入） |
-| ACTION_CODE | VARCHAR2(20) | ✓ | SUBMIT、RESUB、APPROVE、REJECT、EXEC_DONE、VERIFY_OK、VERIFY_REJECT、EXPIRE、EMG_MODIFY（緊急存取異動）、EMG_CLOSE_MODIFY（結案登記異動）、FLAG_CLEAR（審查異常旗標清除）、REVIEW_DONE（定期審查完成）、REVIEW_REJECT（定期審查駁回；兩者程式目前尚未寫入，第 158 項 R3 上線） |
+| SOURCE_CODE | VARCHAR2(10) | ✓ | REQ、SYS、EMG、REVIEW（定期審查） |
+| ACTION_CODE | VARCHAR2(20) | ✓ | SUBMIT、RESUB、APPROVE、REJECT、EXEC_DONE、VERIFY_OK、VERIFY_REJECT、EXPIRE、EMG_MODIFY（緊急存取異動）、EMG_CLOSE_MODIFY（結案登記異動）、FLAG_CLEAR（審查異常旗標清除）、REVIEW_DONE（定期審查完成）、REVIEW_REJECT（定期審查駁回；程式目前尚未寫入，第 158 項 R3b 上線） |
 | STAGE_ID | NUMBER(2) | | 發生關卡；系統事件為空，緊急存取事件亦為空 |
 | ACT_BY | VARCHAR2(30) | | 實際操作人；排程為空 |
 | ACT_BY_NAME | VARCHAR2(100 CHAR) | ✓ | 顯示名快照；排程為「系統排程」 |
@@ -921,7 +921,7 @@ CREATE UNIQUE INDEX IND_IM_ACCT_REQ_04 ON RD_USER.IM_ACCT_REQ
 | ACT_DATE | DATE | ✓ | 發生時間 |
 | APPLY_DEPT | VARCHAR2(50 CHAR) | | 申請單位快照 |
 | RESULT_DESCR | VARCHAR2(1000 CHAR) | | 結果文字 |
-| IS_SELF_ACTION | NUMBER(1) | ✓ | 自行核准／同人兼任；EMG_MODIFY＝處理人即申請人、EMG_CLOSE_MODIFY＝結案人即申請人（皆以有效身分比對），預設 0 |
+| IS_SELF_ACTION | NUMBER(1) | ✓ | 自行核准／同人兼任；EMG_MODIFY＝處理人即申請人、EMG_CLOSE_MODIFY＝結案人即申請人、REVIEW_DONE＝兩半任一簽核人即該帳號原新增申請人（皆以有效身分比對），預設 0 |
 
 索引：IND_IM_ACCT_HIST_01（ACCT_ID, ACT_DATE）、_02（REQ_ID）。
 
@@ -1219,11 +1219,11 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 
 | 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
 |---|---|---|---|---|---|
-| GET | `/reviews` | REVIEW_LIST（看全部，沒有就 403，不做「只看自己」） | query：keyword、stateCode（ABNORMAL／OVERDUE／DUE／NORMAL；不給＝ABNORMAL＋OVERDUE＋DUE） | [acctId、catgId、catgName、acctName、sysName、assetClassId、assetClassName、isPriv、holderName、holderDept、accessLevelCode、acctStateCode、applyBy、applyByName、lastReviewDate、nextReviewDate、isReviewFlag、reviewFlagReason、reviewFlagSourceCode、reviewFlagDate、reviewStateCode、reviewId、reviewVersionNo、infraSignBy、infraSignByName、infraSignDate、govSignBy、govSignByName、govSignDate（後 8 欄＝進行中那一輪，沒有就 null）] | 403、400 欄位內容不正確（狀態） |
+| GET | `/reviews` | REVIEW_LIST（看全部，沒有就 403，不做「只看自己」） | query：keyword、stateCode（ABNORMAL／OVERDUE／DUE／NORMAL；不給＝ABNORMAL＋OVERDUE＋DUE） | [acctId、catgId、catgName、acctName、sysName、assetClassId、assetClassName、isPriv、holderName、holderDept、accessLevelCode、acctStateCode、applyBy、applyByName、lastReviewDate、nextReviewDate、isReviewFlag、reviewFlagReason、reviewFlagSourceCode、reviewFlagDate、reviewStateCode、reviewId、reviewVersionNo、infraSignBy、infraSignByName、infraSignActBy、infraSignDate、govSignBy、govSignByName、govSignActBy、govSignDate（reviewId 起 10 欄＝進行中那一輪，沒有就 null）] | 403、400 欄位內容不正確（狀態） |
 
 | POST | `/reviews/{acctId}/sign` | half＝INFRA 需 REVIEW_SIGN_INFRA、GOV 需 REVIEW_SIGN_GOV | half（INFRA／GOV）、versionNo（進行中那一輪的版本；還沒有一輪時帶 0） | acctId、reviewId、reviewStateCode（OPEN＝還差另一半、DONE＝雙簽完成）、versionNo（動作後的版本） | 400 欄位內容不正確（簽核角色）、403、400 E02、404、409 此帳號目前不在待複審或逾期未審狀態，不能簽核、409 E08（版本不符、同一半已簽、以為沒有一輪卻帶了版本）、409 同一人不得簽核兩半、500 資料寫入未完成 |
 
-清單的 reviewId～govSignDate 八欄為進行中那一輪，沒有就 null（含 infraSignActBy／govSignActBy 兩個實際操作人）。keyword 以 LIKE 比對 ACCT_ID、ACCT_NAME、HOLDER_NAME、SYS_NAME（跳脫同上）。不在審查範圍（reviewStateCode 為空）的帳號不會出現；排序：審查異常 → 逾期未審（下次應審查日最舊先、空值最前）→ 待複審 → 正常，同狀態依下次應審查日、單號。審查狀態定義見「15. 定期審查」。
+清單的 reviewId～govSignDate 十欄（含 infraSignActBy／govSignActBy 兩個實際操作人）為進行中那一輪，沒有就 null。keyword 以 LIKE 比對 ACCT_ID、ACCT_NAME、HOLDER_NAME、SYS_NAME（跳脫同上）。不在審查範圍（reviewStateCode 為空）的帳號不會出現；排序：審查異常 → 逾期未審（下次應審查日最舊先、空值最前）→ 待複審 → 正常，同狀態依下次應審查日、單號。審查狀態定義見「15. 定期審查」。
 
 **排程**
 
