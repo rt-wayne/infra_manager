@@ -19,6 +19,11 @@
 // 變更說明: BACKLOG 第 46 項 S8：EMG_STATE_FILTER 加「未處理（含逾期）」（UNDECIDED＝PENDING＋OVERDUE），
 //           讓首頁卡帶 UNDECIDED 進清單時下拉有對應文字；新增 EMG_UNDECIDED、EMG_RETURNED 常數；
 //           PENDING 文字改「待補核准（未逾期）」，與首頁卡「緊急存取待補核准」（含逾期）區分（審查 ①C）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R5：定期審查狀態 REVIEW_STATE_LABEL／REVIEW_STATE_FILTER（預設「需處理」＝異常＋逾期＋待複審，
+//           後端 stateCode 不帶）、半邊名稱 REVIEW_HALF_LABEL、reviewStateTagClass（異常紅 tag-flag、逾期橘、待複審黃、正常綠；
+//           不併進 stateTagClass，因為 OVERDUE 在緊急存取是紅色）
 // ============================================================
 import type { ReqTypeCode } from '../types/account'
 
@@ -144,6 +149,42 @@ export const EMG_STATE_FILTER: { value: string; label: string }[] = [
   { value: EMG_UNDECIDED, label: '未處理（含逾期）' },
   ...Object.entries(EMG_STATE_LABEL).map(([value, text]) => ({ value, label: text }))
 ]
+
+/** 定期審查狀態（計算值 reviewStateCode；不存欄位） */
+export const REVIEW_STATE_LABEL: Record<string, string> = {
+  ABNORMAL: '審查異常',
+  OVERDUE: '逾期未審',
+  DUE: '待複審',
+  NORMAL: '正常'
+}
+
+/** 定期審查清單狀態篩選（空＝需處理：異常＋逾期＋待複審，後端不帶 stateCode 的預設） */
+export const REVIEW_STATE_FILTER: { value: string; label: string }[] = [
+  { value: '', label: '需處理（異常、逾期、待複審）' },
+  ...Object.entries(REVIEW_STATE_LABEL).map(([value, text]) => ({ value, label: text }))
+]
+
+/** 簽核半邊名稱（與後端 AcctConst.reviewHalfName 一致） */
+export const REVIEW_HALF_LABEL: Record<string, string> = {
+  INFRA: 'Infra 主管半',
+  GOV: '資訊治理主管半'
+}
+
+/** 定期審查狀態 → tag 樣式（獨立一組：OVERDUE 在這裡是橘色、在緊急存取是紅色） */
+export function reviewStateTagClass(code: string | null | undefined): string {
+  switch (code) {
+    case 'ABNORMAL':
+      return 'tag-flag'
+    case 'OVERDUE':
+      return 'tag-warn'
+    case 'DUE':
+      return 'tag-pending'
+    case 'NORMAL':
+      return 'tag-ok'
+    default:
+      return 'tag-gray'
+  }
+}
 
 /** 申請人回報（REPORT_TYPE_CODE） */
 export const EMG_REPORT_LABEL: Record<string, string> = {

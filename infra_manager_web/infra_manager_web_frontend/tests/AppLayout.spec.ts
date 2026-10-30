@@ -22,6 +22,9 @@
 // 變更說明: BACKLOG 第 46 項 S3：只有 GENERAL 時「緊急存取」照常顯示並連 /emergency
 // AI版本  : Claude Fable 5 (claude-fable-5)
 // 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 158 項 R5：只有 GENERAL 不顯示「定期審查」；有 REVIEW_LIST 顯示在「緊急存取」之後並連 /reviews
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S9（SA §7.2）：鈴鐺分類化三案——徽章合計與兩節標題、有 EMG_VIEW_ALL 點類別 3
 //           導清單（已退回篩選）、無 EMG_VIEW_ALL（原申請人）點類別 3 開明細彈窗、兩類都空的提示；
 //           既有到期案不動（R7 回歸：類別 1 行為不變）
@@ -125,6 +128,7 @@ async function mountLayout(me: Me, path = '/'): Promise<{ w: VueWrapper; router:
           { path: 'requests/new', component: Stub, meta: { need: 'ACC_APPLY' } },
           { path: 'assets', component: Stub },
           { path: 'emergency', component: Stub },
+          { path: 'reviews', component: Stub, meta: { need: 'REVIEW_LIST' } },
           { path: 'inspections', component: Stub, meta: { need: 'INSP_VIEW' } },
           { path: 'inspections/new', component: Stub, meta: { need: 'INSP_CREATE' } },
           { path: 'admin/roles', component: Stub, meta: { need: 'SYS_ROLE' } },
@@ -170,6 +174,7 @@ describe('AppLayout', () => {
     expect(w.find('.nav-requests').attributes('href')).toBe('/requests')
     expect(w.find('.nav-insp').exists()).toBe(false)
     expect(w.find('.nav-emergency').attributes('href')).toBe('/emergency')
+    expect(w.find('.nav-reviews').exists()).toBe(false)
     expect(w.find('.imp-start').exists()).toBe(false)
     expect(w.find('.imp-banner').exists()).toBe(false)
     expect(w.find('.who').text()).toContain('Kevin (李凱鈞)')
@@ -183,6 +188,17 @@ describe('AppLayout', () => {
     expect(w.find('.nav-accounts').attributes('href')).toBe('/accounts')
     expect(w.find('.nav-insp').exists()).toBe(true)
     expect(w.find('.nav-insp-new').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('有 REVIEW_LIST：「定期審查」出現在「緊急存取」之後並連 /reviews（第 158 項 R5）', async () => {
+    const { w } = await mountLayout(makeMe({ permissions: [...GENERAL_PERMS, 'REVIEW_LIST'] }), '/reviews')
+    const link = w.find('.nav-reviews')
+    expect(link.attributes('href')).toBe('/reviews')
+    expect(link.text()).toContain('定期審查')
+    expect(link.classes()).toContain('router-link-active')
+    const items = w.findAll('.nav-item').map(i => i.text())
+    expect(items.indexOf('🔁 定期審查')).toBe(items.indexOf('🚨 緊急存取') + 1)
     w.unmount()
   })
 

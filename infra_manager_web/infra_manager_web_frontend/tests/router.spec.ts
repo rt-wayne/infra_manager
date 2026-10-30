@@ -19,6 +19,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 6：/admin/executors 需 SYS_EXECUTOR（只有 SYS_ROLE 進不去）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R5：/reviews 需 REVIEW_LIST（並核對正式路由的 meta；只有簽核碼沒有 REVIEW_LIST 進不去）
 // ============================================================
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError } from 'axios'
@@ -67,6 +70,7 @@ function makeGuardedRouter(): Router {
       { path: '/inspections/new', component: Stub, meta: need('INSP_CREATE') },
       { path: '/emergency', component: Stub },
       { path: '/emergency/new', component: Stub, meta: need('EMG_APPLY') },
+      { path: '/reviews', component: Stub, meta: need('REVIEW_LIST') },
       { path: '/admin/roles', component: Stub, meta: need('SYS_ROLE') },
       { path: '/admin/role-perms', component: Stub, meta: need('SYS_ROLE') },
       { path: '/admin/executors', component: Stub, meta: need('SYS_EXECUTOR') },
@@ -150,6 +154,22 @@ describe('全域路由守衛', () => {
     expect(r.currentRoute.value.path).toBe('/emergency')
     await r.push('/emergency/new')
     expect(r.currentRoute.value.path).toBe('/no-access')
+  })
+
+  it('定期審查：正式路由需 REVIEW_LIST；只有簽核碼進不去、有 REVIEW_LIST 進得去', async () => {
+    expect(appRouter.resolve('/reviews').meta.need).toBe('REVIEW_LIST')
+    expect(appRouter.resolve('/reviews').meta.title).toBe('定期審查')
+    setToken('tok')
+    meMock.mockResolvedValue(makeMe({ permissions: ['ACC_SELF_SERVICE', 'REVIEW_SIGN_INFRA'] }))
+    let r = makeGuardedRouter()
+    await r.push('/reviews')
+    expect(r.currentRoute.value.path).toBe('/no-access')
+
+    resetSession()
+    meMock.mockResolvedValue(makeMe({ permissions: ['ACC_SELF_SERVICE', 'REVIEW_LIST'] }))
+    r = makeGuardedRouter()
+    await r.push('/reviews')
+    expect(r.currentRoute.value.path).toBe('/reviews')
   })
 
   it('緊急存取：GENERAL（有 EMG_APPLY）可進申請頁', async () => {

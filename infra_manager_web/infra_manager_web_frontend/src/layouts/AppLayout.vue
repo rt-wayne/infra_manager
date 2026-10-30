@@ -47,6 +47,9 @@
   AI版本  : Claude Fable 5 (claude-fable-5)
   修改日期: 2026-10-29
   變更說明: 側欄拿掉英文副標「Facility & Account Management」（登入頁同步，系統名稱只留中文）
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-10-30
+  變更說明: BACKLOG 第 158 項 R5：「帳號權限管理」區塊在「緊急存取」之後加「定期審查」（REVIEW_LIST 才顯示）
 -->
 <template>
   <div class="app">
@@ -61,6 +64,7 @@
       <RouterLink v-if="can('ACC_SELF_SERVICE')" class="nav-item nav-requests" to="/requests">📄 帳號申請單列表</RouterLink>
       <RouterLink v-if="can('ACC_APPLY')" class="nav-item" to="/requests/new">＋ 新增申請</RouterLink>
       <RouterLink class="nav-item nav-emergency" to="/emergency">🚨 緊急存取</RouterLink>
+      <RouterLink v-if="can('REVIEW_LIST')" class="nav-item nav-reviews" to="/reviews">🔁 定期審查</RouterLink>
       <RouterLink class="nav-item" to="/assets">📖 資產分類說明</RouterLink>
       <template v-if="can('INSP_VIEW')">
         <div class="nav-title nav-insp">機房巡檢</div>

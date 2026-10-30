@@ -28,6 +28,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 6：/admin/executors 執行人對照（需 SYS_EXECUTOR）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R5：/reviews 定期審查清單（需 REVIEW_LIST；與駁回信連結 #/reviews 一致）
 // ============================================================
 import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteLocationNormalized, RouteLocationRaw, RouteRecordRaw, Router } from 'vue-router'
@@ -82,6 +85,11 @@ const routes: RouteRecordRaw[] = [
         path: 'emergency/new',
         component: () => import('../views/EmergencyFormView.vue'),
         meta: { title: '緊急存取申請', need: 'EMG_APPLY' }
+      },
+      {
+        path: 'reviews',
+        component: () => import('../views/ReviewListView.vue'),
+        meta: { title: '定期審查', need: 'REVIEW_LIST' }
       },
       { path: 'assets', component: () => import('../views/AssetRefView.vue'), meta: { title: '資產分類說明' } },
       {

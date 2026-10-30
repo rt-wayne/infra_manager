@@ -18,6 +18,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 6：假路由加 /admin/executors
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R5：假路由加 /reviews
 // ============================================================
 import { AxiosError, AxiosHeaders } from 'axios'
 import type { AxiosResponse } from 'axios'
@@ -44,6 +47,7 @@ export async function makeRouter(path = '/'): Promise<Router> {
       '/inspections/new',
       '/emergency',
       '/emergency/new',
+      '/reviews',
       '/admin/roles',
       '/admin/role-perms',
       '/admin/executors',
