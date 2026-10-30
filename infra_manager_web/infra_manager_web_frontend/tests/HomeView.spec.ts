@@ -8,6 +8,9 @@
 // 修改日期: 2026-10-29
 // 變更說明: BACKLOG 第 148 項：主管（acctAll／emgAll）標題不變；一般人標題加「我的」；巡檢區依 inspVisible 顯示；
 //           緊急存取卡改人人可點（原「沒有 EMG_VIEW_ALL → 無權限頁」測試移除）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-30
+// 變更說明: 首頁配色：三區各帶區塊色 class；四張警示卡數字大於 0 才標 alert-red／alert-warn（0 與載入失敗不標）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -129,6 +132,29 @@ describe('首頁', () => {
     })
     expect(w.find('.card-insp').exists()).toBe(false)
     expect(lastToast(w)).toBe('資料庫連線失敗')
+    w.unmount()
+  })
+
+  it('配色：三區各帶區塊色；四張警示卡數字大於 0 才標警示，0 與載入失敗不標', async () => {
+    const ALERTS: [string, string][] = [
+      ['.card-expiring', 'alert-red'], ['.card-emg-undecided', 'alert-warn'],
+      ['.card-emg-returned', 'alert-red'], ['.card-insp-excpt', 'alert-warn']
+    ]
+    let w = await mountHome()
+    expect(w.findAll('.module-card').map(c => c.classes().find(k => k.startsWith('sec-')))).toEqual(['sec-acct', 'sec-emg', 'sec-insp'])
+    for (const [sel, cls] of ALERTS) expect(w.find(sel).classes(), sel).toContain(cls)
+    // 非警示卡永遠不標
+    expect(w.findAll('.stat-card').filter(c => c.classes().some(k => k.startsWith('alert-')))).toHaveLength(4)
+    w.unmount()
+
+    statsMock.mockResolvedValueOnce({ ...STATS, acctExpiring: 0, emgUndecided: 0, emgReturned: 0, inspExcptThisMonth: 0 })
+    w = await mountHome()
+    for (const [sel, cls] of ALERTS) expect(w.find(sel).classes(), sel).not.toContain(cls)
+    w.unmount()
+
+    statsMock.mockRejectedValueOnce(httpError(500, { message: '資料庫連線失敗' }))
+    w = await mountHome()
+    expect(w.findAll('.stat-card').filter(c => c.classes().some(k => k.startsWith('alert-')))).toHaveLength(0)
     w.unmount()
   })
 
