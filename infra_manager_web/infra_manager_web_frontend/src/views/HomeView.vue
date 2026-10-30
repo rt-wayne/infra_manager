@@ -118,8 +118,8 @@ onMounted(async () => {
 <style scoped>
 /* 各區主色：--sec 標題列與數字、--sec-bg 卡片底、--sec-line 卡片框 */
 .sec-acct { --sec: #2f5fad; --sec-bg: #eef3fb; --sec-line: #c9d8f0; }
-/* 緊急存取主色與警示同色系，淡底用中性暖灰，警示的淡橘底才分得出來 */
-.sec-emg { --sec: #c2410c; --sec-bg: #faf6f3; --sec-line: #ead9cc; }
+/* 緊急存取主色用深紫：橘紅底會吃掉 🚨 符號；淡底用中性暖灰，警示的淡橘底才分得出來 */
+.sec-emg { --sec: #6b3fa0; --sec-bg: #faf6f3; --sec-line: #ddd0ec; }
 .sec-insp { --sec: #2e8b57; --sec-bg: #edf8f1; --sec-line: #c3e6cf; }
 
 .sec { padding-top: 0; overflow: hidden; box-shadow: 0 1px 4px rgba(27, 42, 74, 0.08); border-color: var(--sec-line); }
