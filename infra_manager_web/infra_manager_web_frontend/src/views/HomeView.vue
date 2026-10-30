@@ -124,7 +124,7 @@ onMounted(async () => {
 
 .sec { padding-top: 0; overflow: hidden; box-shadow: 0 1px 4px rgba(27, 42, 74, 0.08); border-color: var(--sec-line); }
 /* 標題列貼齊卡片上緣與左右（抵銷 .module-card 的左右內距 18px） */
-.sec h2 { margin: 0 -18px 14px; padding: 10px 18px; background: var(--sec); color: #fff; }
+.sec h2 { margin: 0 -18px 14px; padding: 10px 18px; background: var(--sec); color: #fff; text-align: center; }
 
 .stat-card { --card-bg: var(--sec-bg); --card-line: var(--sec-line); background: var(--card-bg); border: 1px solid var(--card-line); }
 .stat-card .num { color: var(--sec); }
