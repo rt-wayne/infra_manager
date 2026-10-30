@@ -581,6 +581,7 @@
   - **提交後寄駁回信** REVIEW_REJECT 給原新增申請人與所有 REVIEW_SIGN_GOV 持有人（同一人只寄一封）；寄信失敗不影響駁回結果。信件內容見「通知」。
   - 驗證順序：簽核角色 400 → 403 → 原因空 E02 → 原因 500 字 E11 → 未帶 versionNo E02 → 404 → 不可簽 409 → 版本／已簽／同人 409。
   - 已知限制：旗標是單一旗標，駁回後再被緊急存取退回標記會覆寫原因與來源，駁回原因仍留在簽核紀錄表與 REVIEW_REJECT 歷史。「直接發起停用申請」捷徑由前端提供（R5）。
+- **名單維護的守門**：移除成員或拿掉角色權限會讓 REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 無人持有時，若有進行中且該半尚未簽的輪，照「最後一位持有人」規則回 E23 並列出帳號單號（見「系統管理——角色指派、執行人對照與角色權限設定」）。
 - **已知限制**：清單 API 沒有筆數上限、不分頁，每次查詢對帳號主表全部算一次狀態（與緊急存取清單同一取捨）。審查範圍內的帳號量目前很小（測試 DB 3 筆、正式 DB 0 筆）；第 133 項舊資料轉入後量級變大再決定要不要分頁。
 
 ### 使用者流程
@@ -1255,7 +1256,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | GET | `/admin/role-perms` | SYS_ROLE | — | modules[moduleCode、perms[permId、permName、sortSeq]]（只列可見碼——程式常數 `ADMIN_VISIBLE_PERMS` 的 23 碼且 IM_ACCT_PERM 啟用中，依 SORT_SEQ、模組依首次出現；5 個尚無功能的碼隱藏）；roles[roleId、roleName、roleDescr、readOnly（GENERAL 為 true）、memberCount（成員是有效使用者——本系統啟用且同步表查得到——的啟用中指派數；GENERAL＝有效使用者總數，不含尚未首次登入的資格內人員）、grantedPermIds[]（只列可見碼）、hiddenGrantedCount（已授予但隱藏的碼數；前端目前不顯示）]；含 GENERAL、不含停用角色 | 403（不寫軌跡） |
 | POST | `/admin/roles/{roleId}/perms` | SYS_ROLE | added[]、removed[]、reason（必填，500 字內）；只送差異、不帶版本欄 | roleId、added[]、removed[]、result＝SAVED | 依序：403（寫 DENY，只記 roleId 與碼數）、409 E25、400 E10／E11、欄位內容不正確：角色（不存在／停用／GENERAL）、400「沒有任何變更」、欄位內容不正確：權限碼（重複、同碼在兩邊、不在可見清單含隱藏碼）、409 E26、E27（任一格現況與請求不符）、E24（拿掉後無人持有 SYS_ROLE，寫 DENY、優先）、E23（拿掉的碼有在途單且無人接手，寫 DENY、依碼分組列單號） |
 
-寫入 API 的交易第一句對 IM_ACCT_ROLE 的 GENERAL 列 `SELECT … FOR UPDATE WAIT 5` 當全域互斥（等待逾時 → E26），取鎖後才做名單現況與持有人檢查；成功時名單與軌跡同一交易，E23／E24 先回滾再於交易外寫 DENY。角色權限存檔一次處理一個角色的差異：removed 的碼 UPDATE 1→0；added 的碼原列 STATUS＝0 則 UPDATE 0→1（保留 CREATE_*）、無列才 INSERT；每個拿掉的碼各自以「排除該角色＋該碼那一格」算持有人，一次收集所有被擋的碼；隱藏碼送來回 400、既有授予列原樣保留。移除的擋下條件（三者同時成立）：該角色授予的某權限碼在變更前有人持有、變更後無人持有、且有在途案件需要它（申請單依關卡 PERM_ID；EMG_DECIDE 另含緊急存取未處理與已退回未結案）；SYS_ROLE 由有人變無人則不論在途一律 E24。執行人對照用同一套三條件：「持有人」換成該類別的啟用中執行人、「在途」換成停在關卡 6（待執行）的同類別申請單。重新指派（原列 STATUS＝0）只更新 UPDATE_*、保留 CREATE_*；對象已停用或使用者表查無的列仍可移除；管理員可改自己。
+寫入 API 的交易第一句對 IM_ACCT_ROLE 的 GENERAL 列 `SELECT … FOR UPDATE WAIT 5` 當全域互斥（等待逾時 → E26），取鎖後才做名單現況與持有人檢查；成功時名單與軌跡同一交易，E23／E24 先回滾再於交易外寫 DENY。角色權限存檔一次處理一個角色的差異：removed 的碼 UPDATE 1→0；added 的碼原列 STATUS＝0 則 UPDATE 0→1（保留 CREATE_*）、無列才 INSERT；每個拿掉的碼各自以「排除該角色＋該碼那一格」算持有人，一次收集所有被擋的碼；隱藏碼送來回 400、既有授予列原樣保留。移除的擋下條件（三者同時成立）：該角色授予的某權限碼在變更前有人持有、變更後無人持有、且有在途案件需要它（申請單依關卡 PERM_ID；EMG_DECIDE 另含緊急存取未處理與已退回未結案；REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 另含「進行中且該半尚未簽」的定期審查輪，單號欄顯示帳號單號、關卡名「定期審查 Infra 半待簽」／「定期審查治理半待簽」；還沒有人簽過的待複審帳號不算在途）；SYS_ROLE 由有人變無人則不論在途一律 E24。執行人對照用同一套三條件：「持有人」換成該類別的啟用中執行人、「在途」換成停在關卡 6（待執行）的同類別申請單。重新指派（原列 STATUS＝0）只更新 UPDATE_*、保留 CREATE_*；對象已停用或使用者表查無的列仍可移除；管理員可改自己。
 
 **錯誤訊息**（後端 message，前端原樣顯示；文案來源 `common/AcctMsg.java`）
 

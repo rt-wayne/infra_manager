@@ -116,7 +116,8 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3b：API 數 50 → 51（POST /reviews/{acctId}/reject）；駁回 SQL 斷言——INSERT_REJECTED 直接 REJECTED 不寫簽核欄、
-//           UPDATE_REJECT 帶版本／進行中／被駁回那一半尚未簽（①A）且不動簽核欄（③A）、FIND_ROUND 以 REVIEW_ID 接並帶駁回欄、清單不帶駁回欄
+//           UPDATE_REJECT 帶版本／進行中／被駁回那一半尚未簽（①A）且不動簽核欄（③A）、FIND_ROUND 以 REVIEW_ID 接並帶駁回欄、清單不帶駁回欄；
+//           第 2 單位：RoleAdminDao.FIND_IN_FLIGHT_REVIEW（進行中且 :half 未簽、DOC_ID＝帳號單號）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -663,6 +664,10 @@ class SqlConstantScanTest {
 				.contains("S.PERM_ID = :permId").contains("JOIN IM_ACCT_APPR_STAGE S ON S.STAGE_ID = R.CURR_STAGE_ID");
 		assertThat(RoleAdminDao.FIND_IN_FLIGHT_EMG).contains(EmgDao.UNDECIDED_COND).contains(EmgDao.RETURNED_COND)
 				.doesNotContain(":now");
+		// 第 158 項 R3b：在途定期審查＝進行中且 :half 那一半尚未簽；單號欄放帳號單號
+		assertThat(RoleAdminDao.FIND_IN_FLIGHT_REVIEW).contains("R.ACCT_ID AS DOC_ID").contains("AS STAGE_NAME")
+				.contains("R.REVIEW_STATE_CODE = 'OPEN'").contains("R.STATUS = 1")
+				.contains("((:half = 'INFRA' AND R.INFRA_SIGN_BY IS NULL) OR (:half = 'GOV' AND R.GOV_SIGN_BY IS NULL))");
 		assertThat(RoleAdminDao.UPDATE_ROLE_MEMBER_STATUS).contains("STATUS = :newStatus").contains("AND STATUS = :oldStatus")
 				.contains("UPDATE_DATE = :now, UPDATE_BY = :userId").doesNotContain("CREATE_");
 		assertThat(RoleAdminDao.INSERT_ROLE_MEMBER).contains("STATUS, CREATE_DATE, CREATE_BY").doesNotContain("UPDATE_");

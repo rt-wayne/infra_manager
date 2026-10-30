@@ -14,6 +14,10 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-19
 // 變更說明: 階段 3 回合 2：checkRolePerms 每碼各自排除「角色＋該碼」；describeByPerm 依碼分組、每碼最多 20 筆、查不到名稱只放碼
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3b：REVIEW_SIGN_INFRA／GOV 的在途含「進行中且該半尚未簽」的定期審查輪（各查各的半邊）；
+//           其他碼不查定期審查；變更後仍有人不查
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,6 +54,7 @@ class HolderGuardTest {
 		guard = new HolderGuard(dao);
 		when(dao.findInFlightByStagePerm(anyString())).thenReturn(List.of());
 		when(dao.findInFlightEmg()).thenReturn(List.of());
+		when(dao.findInFlightReview(anyString())).thenReturn(List.of());
 	}
 
 	/** before：不排除的人數；after：排除後的人數 */
@@ -128,6 +133,29 @@ class HolderGuardTest {
 		assertThat(r.blockedTotal()).isEqualTo(3);
 		assertThat(HolderGuard.describe(r)).isEqualTo("AR0001（資訊治理）、EA0001（待補核准）、EA0002（已退回待結案）");
 		verify(dao).findInFlightEmg();
+	}
+
+	/** 第 158 項 R3b：拿掉 REVIEW_SIGN_* 時，在途＝進行中且該半尚未簽的定期審查輪，各查各的半邊；其他碼不查 */
+	@Test
+	void REVIEW_SIGN_在途含進行中且該半未簽的審查輪_各查各的半邊_其他碼不查() {
+		holders("REVIEW_SIGN_INFRA", 1, 0);
+		holders("REVIEW_SIGN_GOV", 1, 0);
+		holders("APPR_G4", 1, 0);
+		when(dao.findInFlightReview("INFRA")).thenReturn(List.of(new InFlightRow("AR20261001-001", "定期審查 Infra 半待簽")));
+		when(dao.findInFlightReview("GOV")).thenReturn(List.of(new InFlightRow("AR20261001-002", "定期審查治理半待簽"),
+				new InFlightRow("AR20261001-003", "定期審查治理半待簽")));
+		Result r = guard.check(List.of("APPR_G4", "REVIEW_SIGN_INFRA", "REVIEW_SIGN_GOV"), Exclusion.member("R", "U1"));
+		assertThat(r.blockedPermIds()).containsExactly("REVIEW_SIGN_INFRA", "REVIEW_SIGN_GOV");
+		assertThat(r.blockedTotal()).isEqualTo(3);
+		assertThat(HolderGuard.describe(r)).isEqualTo(
+				"AR20261001-001（定期審查 Infra 半待簽）、AR20261001-002（定期審查治理半待簽）、AR20261001-003（定期審查治理半待簽）");
+		verify(dao).findInFlightReview("INFRA");
+		verify(dao).findInFlightReview("GOV");
+		verify(dao, never()).findInFlightEmg();
+		// 變更後仍有人：不查
+		holders("REVIEW_SIGN_INFRA", 2, 1);
+		assertThat(guard.check(List.of("REVIEW_SIGN_INFRA"), Exclusion.member("R", "U1")).ok()).isTrue();
+		verify(dao, org.mockito.Mockito.times(1)).findInFlightReview("INFRA");
 	}
 
 	@Test

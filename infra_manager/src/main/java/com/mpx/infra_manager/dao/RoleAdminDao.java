@@ -36,6 +36,11 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 4 回合 1（裁示 E3、D7A）：COUNT_HOLDERS、COUNT_EXECUTORS、COUNT_ROLE_MEMBERS、COUNT_ACTIVE_USERS
 //           「使用者啟用中」改為有效使用者片段 EmpSql.activeUserCond（本系統 STATUS＝1 且同步表查得到）——離職者不再算持有人／執行人／成員數
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3b：在途定期審查 FIND_IN_FLIGHT_REVIEW——進行中（OPEN）且 :half 那一半尚未簽的輪，DOC_ID＝帳號單號、
+//           關卡名「定期審查 Infra 半待簽」／「定期審查治理半待簽」；HolderGuard 拿掉 REVIEW_SIGN_INFRA／GOV 時用。
+//           還沒有一輪（沒人簽過）的待複審帳號不算在途：沒有紀錄可列，且另一位主管加回權限後隨時可簽
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -193,6 +198,20 @@ public class RoleAdminDao {
 			    OR (""" + EmgDao.RETURNED_COND + """
 			)
 			 ORDER BY E.SUBMIT_DATE, E.EMG_ID
+			""";
+
+	/**
+	 * 需要 REVIEW_SIGN_INFRA／GOV 處理的在途定期審查（第 158 項 R3b）：進行中且 :half（INFRA／GOV）那一半尚未簽的輪；
+	 * 單號欄放帳號單號（一個帳號同時只有一筆進行中）
+	 */
+	public static final String FIND_IN_FLIGHT_REVIEW = """
+			SELECT R.ACCT_ID AS DOC_ID,
+			       CASE WHEN :half = 'INFRA' THEN '定期審查 Infra 半待簽' ELSE '定期審查治理半待簽' END AS STAGE_NAME
+			  FROM IM_ACCT_REVIEW R
+			 WHERE R.REVIEW_STATE_CODE = 'OPEN'
+			   AND R.STATUS = 1
+			   AND ((:half = 'INFRA' AND R.INFRA_SIGN_BY IS NULL) OR (:half = 'GOV' AND R.GOV_SIGN_BY IS NULL))
+			 ORDER BY R.DUE_DATE, R.ACCT_ID
 			""";
 
 	// ------------------------------------------------------------
@@ -409,6 +428,13 @@ public class RoleAdminDao {
 
 	public List<InFlightRow> findInFlightEmg() {
 		return dbClient.query(itflowDb, FIND_IN_FLIGHT_EMG, null, InFlightRow.class);
+	}
+
+	/** half＝INFRA／GOV：進行中且該半尚未簽的定期審查輪 */
+	public List<InFlightRow> findInFlightReview(String half) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("half", half);
+		return dbClient.query(itflowDb, FIND_IN_FLIGHT_REVIEW, params, InFlightRow.class);
 	}
 
 	// ------------------------------------------------------------

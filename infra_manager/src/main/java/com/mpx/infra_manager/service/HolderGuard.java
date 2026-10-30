@@ -20,6 +20,10 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-10-19
 // 變更說明: 階段 3 回合 2：角色權限設定頁拿掉多個碼 checkRolePerms——每碼各自排除「角色 R＋碼 p」那一格（一次存檔只動一個角色，
 //           碼之間沒有組合效應），三條件與 SYS_ROLE 歸零判斷同 check；E23 文案依碼分組 describeByPerm（每碼最多 20 筆單號）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3b：REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 的在途＝進行中且該半尚未簽的定期審查輪
+//           （RoleAdminDao.findInFlightReview；單號欄為帳號單號）。還沒有人簽過的待複審帳號不算在途
 // ============================================================
 
 import java.util.ArrayList;
@@ -143,11 +147,15 @@ public class HolderGuard {
 		return new Result(false, List.of(new Blocked(catgId, List.copyOf(docs.subList(0, keep)), docs.size())));
 	}
 
-	/** 需要 permId 才能處理的在途案件（沒有卡單概念的碼回空） */
+	/** 需要 permId 才能處理的在途案件（沒有卡單概念的碼回空）：關卡權限的申請單、EMG_DECIDE 的緊急存取、REVIEW_SIGN_* 的定期審查輪 */
 	List<InFlightRow> inFlight(String permId) {
 		List<InFlightRow> docs = new ArrayList<>(roleAdminDao.findInFlightByStagePerm(permId));
 		if (AcctConst.PERM_EMG_DECIDE.equals(permId)) {
 			docs.addAll(roleAdminDao.findInFlightEmg());
+		} else if (AcctConst.PERM_REVIEW_SIGN_INFRA.equals(permId)) {
+			docs.addAll(roleAdminDao.findInFlightReview(AcctConst.HALF_INFRA));
+		} else if (AcctConst.PERM_REVIEW_SIGN_GOV.equals(permId)) {
+			docs.addAll(roleAdminDao.findInFlightReview(AcctConst.HALF_GOV));
 		}
 		return docs;
 	}
