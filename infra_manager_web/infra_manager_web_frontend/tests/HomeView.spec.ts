@@ -11,6 +11,7 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-30
 // 變更說明: 首頁配色：三區各帶區塊色 class；四張警示卡數字大於 0 才標 alert-red／alert-warn（0 與載入失敗不標）
+//           BACKLOG 第 156 項：逐欄位只讓一個大於 0，鎖住每張警示卡綁的是自己的欄位
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -156,6 +157,25 @@ describe('首頁', () => {
     w = await mountHome()
     expect(w.findAll('.stat-card').filter(c => c.classes().some(k => k.startsWith('alert-')))).toHaveLength(0)
     w.unmount()
+  })
+
+  it('配色：每張警示卡只看自己的數字——一次只有一個欄位大於 0，只有對應那張標警示', async () => {
+    const ZERO = { acctExpiring: 0, emgUndecided: 0, emgReturned: 0, inspExcptThisMonth: 0 }
+    const CASES: [keyof typeof ZERO, string, string][] = [
+      ['acctExpiring', '.card-expiring', 'alert-red'],
+      ['emgUndecided', '.card-emg-undecided', 'alert-warn'],
+      ['emgReturned', '.card-emg-returned', 'alert-red'],
+      ['inspExcptThisMonth', '.card-insp-excpt', 'alert-warn']
+    ]
+    for (const [field, sel, cls] of CASES) {
+      statsMock.mockResolvedValueOnce({ ...STATS, ...ZERO, [field]: 1 })
+      const w = await mountHome()
+      const alerted = w.findAll('.stat-card').filter(c => c.classes().some(k => k.startsWith('alert-')))
+      expect(alerted, field).toHaveLength(1)
+      expect(alerted[0].classes(), field).toContain(sel.slice(1))
+      expect(alerted[0].classes(), field).toContain(cls)
+      w.unmount()
+    }
   })
 
   it('「30 天內到期」：有 ACC_LIST_FULL → 帳號列表到期篩選；沒有 → 無權限頁', async () => {
