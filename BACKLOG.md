@@ -17,9 +17,9 @@
 | 158 | 定期權限審查（SA §5.10、J04；從第 14 項拆出）：審查狀態即時計算、Infra／治理雙簽、駁回標旗標、J04 待複審信、J02 加逾期未審、待辦、首頁第四區兩張卡、鈴鐺類別 2。21 項裁示 2026-10-30 全部依 architect 建議，分 R0～R10 共 12 段 | [backlog/158-定期審查.md](backlog/158-定期審查.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：R4（關卡 6 生效取消 OPEN 輪、⑫B 重新啟用重寫審查日）程式與測試已 commit；接著 R4 收尾——平行派 code-reviewer（範圍 `9800824` 起）與 test-runner，必須修正修完才結案，然後 R5（前端畫面；部署點）。遺留：`GET /api/v1/reviews` 未登入回 401 要等使用者以新 jar 重啟 8989 後補驗
+- 下一步：R4 已結案（審查 M1／M2／S2 修完、測試 DB 驗過）；接著 R5 前端畫面（清單頁、簽核／駁回彈窗、帳號明細依審查狀態顯示；正式環境最早部署點，部署前 UAT／正式先跑 R1 腳本；開工時把 HEAD 記進計畫檔「本階段起點」）。遺留：`GET /api/v1/reviews` 未登入回 401 要等使用者以新 jar 重啟 8989 後補驗
 - 已改動（未 commit）：無
-- 本階段起點：R3b `aa917ac`（R0 `05865e0`、R1 `f2219ec`、R2 `146e78a`、R3a `53eb425`）
+- 本階段起點：R5 開工時填（R0 `05865e0`、R1 `f2219ec`、R2 `146e78a`、R3a `53eb425`、R3b `aa917ac`、R4 `9800824`）
 - 卡住／待確認：UAT／正式環境的 R1 腳本於 R5 部署前執行（SETUP 第 6 節已寫）
 
 ## 已拍板待實作
@@ -55,6 +55,7 @@
 | 164 | 定期審查簽核與駁回的四種 409（版本不符、同半已簽、以為沒有一輪卻帶版本、被駁回的那一半已有人簽）沿用 E08「此申請已由他人處理，請重新整理」，使用者操作的是定期審查不是申請，且第四種重新整理後再按結果一樣（`item` 已讀到該半 SIGN_BY，Java 端送 UPDATE 前就判斷得出，可改專屬文案；UPDATE 條件仍保留當並行最後防線）；R5 做畫面時另訂文案或前端改寫。第 158 項 R3a code-reviewer S3、R3b S3 | 2026-10-30 | — |
 | 165 | `JobAndNotifyTest` 定期審查駁回通知第二筆標題寫「未知事件不外拋」，但沒有 `findRound(89L)` 的樁，`reviewEvent` 在查無該輪就 return，`default -> throw IllegalArgumentException` 加 catch 那條路沒跑過；補樁即可。第 158 項 R3b code-reviewer S1 | 2026-10-30 | — |
 | 166 | `RoleAdminDao.FIND_IN_FLIGHT_REVIEW`（守門的在途定期審查）只看 OPEN＋該半未簽，沒 JOIN 帳號主表：帳號在有進行中一輪時被緊急存取標旗標（或 R4 前被停用／刪除）後沒人簽得成，卻仍算在途、擋下移除 REVIEW_SIGN_* 最後一位持有人（多擋不少擋）。R4 時評估改成只算狀態 DUE／OVERDUE 的帳號，或 PRD 註明「含已不可簽的進行中輪」。第 158 項 R3b code-reviewer S4 | 2026-10-30 | — |
+| 167 | `RequestServiceTest.assertLockApplyCancel`（關卡 6 回報「鎖帳號列 → 覆寫主表 → 取消審查輪」的共用檢查）的中間步驟是呼叫端傳進來的普通 `verify`，不在 InOrder 裡，重新啟用、停用、刪除三筆只能證明鎖在取消之前，證明不了覆寫主表夾在中間；改成 `Consumer<InOrder>` 參數，修改那筆內聯的四行一併改用此函式消重複。第 158 項 R4 code-reviewer S1 | 2026-10-30 | — |
 | 16 | 原始規格書缺件：子 README 與 `.example` 註解（範本已於 2026-10-14 刪除）引用 `spec_im_acct_insp_v2.0.md`、變更單 #1～#4，但 repo 與使用者手上都沒有；PRD 不引用 | 2026-10-10 | — |
 | 17 | `infra_manager_web\README.md` 第 2 節「兩包結構」表仍是範本初始描述：說 Controller 目錄只有 `package-info.java`、`src\types\` 與 `src\views\` 只有 `.gitkeep`、router 的 routes 是空陣列，實際都已有程式（4 個型別檔、10 個畫面、14 個 path） | 2026-10-10 | — |
 | 18 | 登入查詢後才被改成停用（STATUS＝0）的帳號，該次登入仍取得 token 與回應中的權限清單；下一次呼叫 API 即因 `TokenIdentityProvider` 檢查 STATUS 而回 A03，攻擊面接近零 | 2026-10-10 | — |

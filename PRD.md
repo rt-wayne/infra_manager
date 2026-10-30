@@ -744,7 +744,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | 重新送出 | 帶條件 UPDATE 申請單 → 新增類型 UPDATE 主表（覆寫、改回 REVIEW） → 舊公文失效＋新公文 → 歷史 RESUB | 寄 RESUB |
 | 核准 | 帶條件 UPDATE 申請單 → 歷史 APPROVE | 寄 NEXT_STAGE／TO_EXEC |
 | 退件 | 帶條件 UPDATE 申請單 → 新增類型主表改 REJECTED → 歷史 REJECT | 寄 REJECT |
-| 回報執行完畢 | 帶條件 UPDATE 申請單 → 舊佐證失效＋新佐證 → （新增以外先鎖帳號主表列）更新主表 → 取消進行中的定期審查輪 → 歷史 EXEC_DONE → 寫審查日期 | 寄 EXEC_DONE |
+| 回報執行完畢 | 帶條件 UPDATE 申請單 → 舊佐證失效＋新佐證 → 更新主表（新增以外先鎖帳號主表列、更新後取消進行中的定期審查輪）→ 歷史 EXEC_DONE → 寫審查日期 | 寄 EXEC_DONE |
 | 複驗通過／退回 | 帶條件 UPDATE 申請單 → 歷史 VERIFY_OK／VERIFY_REJECT → 通過且符合清除條件時帶條件 UPDATE 主表清旗標（`AcctDao.CLEAR_REVIEW_FLAG`）→ 影響 1 筆才寫歷史 FLAG_CLEAR（見「6. 7 關簽核」審查異常旗標清除） | 退回寄 VERIFY_REJECT |
 | 巡檢送出 | 取號 → INSERT 巡檢單 → INSERT 全部結果 | — |
 | 標記處理 | 帶條件 UPDATE 結果（異常且未處理） | — |
@@ -850,7 +850,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | ACCT_STATE_CODE | VARCHAR2(10) | ✓ | REVIEW、APPROVED、EXPIRED、DISABLED、REJECTED、DELETED |
 | SOURCE_CODE | VARCHAR2(10) | ✓ | APPLY；MIGRATE 為預留值；預設 'APPLY' |
 | APPLY_BY | VARCHAR2(30) | | 原新增申請人（之後異動不覆蓋） |
-| LAST_REVIEW_DATE | DATE | | 上次審查日（關卡 6 寫入規則見「7. 關卡 6 生效與主表同步」審查日期：新增、重新啟用一律重寫；定期審查雙簽完成時改為完成日） |
+| LAST_REVIEW_DATE | DATE | | 上次審查日（關卡 6 寫入規則見「7. 關卡 6 生效與主表同步」審查日期：新增、重新啟用在新內容符合審查條件時寫，修改另有條件；定期審查雙簽完成時改為完成日） |
 | NEXT_REVIEW_DATE | DATE | | 下次應審查日＝上次＋180 天（DB COMMENT 寫明審查狀態的即時計算規則，程式面於第 158 項 R2 上線） |
 | IS_REVIEW_FLAG | NUMBER(1) | ✓ | 審查異常標記（1＝有異常），預設 0 |
 | REVIEW_FLAG_REASON | VARCHAR2(500 CHAR) | | 審查異常原因 |
