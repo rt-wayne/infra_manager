@@ -22,6 +22,10 @@
   變更說明: 首頁配色（裁示 ①A ②A ③A）：三區各一主色（帳號藍、緊急存取橘紅、巡檢綠），區塊標題列塗滿主色白字、
             卡片淡色底；四張警示卡（到期、待補核准、異常待追蹤、巡檢異常）數字大於 0 時整張卡換淡紅／淡橘底加外框；
             樣式只寫在本頁（共用的 .module-card／.stat-card 其他頁也在用，不動）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-30
+  變更說明: BACKLOG 第 154、155 項：橘色數字改深橘 #92400e（原 --orange 在淡底上對比不到 3:1）；
+            緊急存取區淡底改中性暖灰、淡橘警示底加深一階，警示時底色看得出變化
 -->
 <template>
   <main>
@@ -114,7 +118,8 @@ onMounted(async () => {
 <style scoped>
 /* 各區主色：--sec 標題列與數字、--sec-bg 卡片底、--sec-line 卡片框 */
 .sec-acct { --sec: #2f5fad; --sec-bg: #eef3fb; --sec-line: #c9d8f0; }
-.sec-emg { --sec: #c2410c; --sec-bg: #fff4ec; --sec-line: #fbd5bb; }
+/* 緊急存取主色與警示同色系，淡底用中性暖灰，警示的淡橘底才分得出來 */
+.sec-emg { --sec: #c2410c; --sec-bg: #faf6f3; --sec-line: #ead9cc; }
 .sec-insp { --sec: #2e8b57; --sec-bg: #edf8f1; --sec-line: #c3e6cf; }
 
 .sec { padding-top: 0; overflow: hidden; box-shadow: 0 1px 4px rgba(27, 42, 74, 0.08); border-color: var(--sec-line); }
@@ -131,7 +136,8 @@ onMounted(async () => {
 /* 警示卡（數字大於 0）：放在主色之後，蓋掉卡片底與框 */
 /* 外框加粗 1px，內距少 1px 抵銷，卡片大小不變 */
 .stat-card.alert-red { --card-bg: #fdecec; --card-line: var(--red); border-width: 2px; padding: 11px 13px; }
-.stat-card.alert-warn { --card-bg: #fff3dc; --card-line: var(--orange); border-width: 2px; padding: 11px 13px; }
+.stat-card.alert-warn { --card-bg: #ffe9c2; --card-line: var(--orange); border-width: 2px; padding: 11px 13px; }
 .stat-card .num.red { color: var(--red); }
-.stat-card .num.warn { color: var(--orange); }
+/* 全站 --orange 在淡底上對比不到大字 3:1，數字改用深橘（同 .hint.warn、.btn-warn） */
+.stat-card .num.warn { color: #92400e; }
 </style>
