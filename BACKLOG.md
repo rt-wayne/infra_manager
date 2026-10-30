@@ -17,9 +17,9 @@
 | 158 | 定期權限審查（SA §5.10、J04；從第 14 項拆出）：審查狀態即時計算、Infra／治理雙簽、駁回標旗標、J04 待複審信、J02 加逾期未審、待辦、首頁第四區兩張卡、鈴鐺類別 2。21 項裁示 2026-10-30 全部依 architect 建議，分 R0～R10 共 12 段 | [backlog/158-定期審查.md](backlog/158-定期審查.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：R2 程式與文件已 commit；接著 R2 收尾——平行派 code-reviewer（範圍 `146e78a` 起）與 test-runner（後端完整套件、前端型別檢查與測試；測試 DB 實跑 `GET /reviews`，需暫改幾筆帳號 NEXT_REVIEW_DATE 製造 DUE／OVERDUE，四種狀態各至少一筆、無 REVIEW_LIST 回 403），必須修正修完才算 R2 結束
+- 下一步：R2 結案（審查 M1 已修、後端 433／前端 262 筆通過、測試 DB 實跑四種狀態正確）。接著 R3a 簽核 API，開工前先列理解與檔案清單等使用者確認。遺留：`GET /api/v1/reviews` 未登入回 401 要等使用者以新 jar 重啟 8989 後補驗
 - 已改動（未 commit）：無
-- 本階段起點：`146e78a`（R2；R0 `05865e0`、R1 `f2219ec`）
+- 本階段起點：R3a 開工時記（R0 `05865e0`、R1 `f2219ec`、R2 `146e78a`）
 - 卡住／待確認：UAT／正式環境的 R1 腳本於 R5 部署前執行（SETUP 第 6 節已寫）
 
 ## 已拍板待實作
@@ -48,6 +48,9 @@
 | 12 | DAO 以參數顯式綁定 NULL 會蓋過 DB DEFAULT（IS_PRIV、EXPIRY_TYPE_CODE、IS_UNIQUE_CONF 等必填欄）；目前 Service 都先填值所以沒出事，日後新路徑漏填會直接 ORA-01400 | 2026-10-10 | — |
 | 14 | 第二階段功能：統計頁、批次匯出帳號歷史（SA 第 8.2 節，同用 ACC_EXPORT）、巡檢匯出、資產分類與巡檢項目維護（緊急存取已拆出為第 46 項、定期審查已拆出為第 158 項；帳號權限清單匯出已於第 80 項完成）；目前只有權限碼與預留欄位，無程式 | 2026-10-10 | — |
 | 159 | `JobService.java:9` 檔頭註解仍寫「code 限 J01／J02」，J03 加入後已過時（第 158 項 R7 加 J04 時順手改）。第 158 項 architect 盤點時發現 | 2026-10-30 | — |
+| 160 | `ReviewServiceTest.有審查狀態_與ReviewRule範圍同口徑` 其實是 Java 比 Java（`PermissionService.hasReviewState` 內部就呼叫 `ReviewRule.matches`），名實不符；Java↔SQL 審查範圍對齊目前只靠 `SqlConstantScanTest` 字串斷言。建議：測試改名為「只看 APPROVED、旗標與刪除」；下次測試 DB 實跑時補兩筆（APPROVED、非 DOOR、非特權、分類 IS_REVIEW_TRIGGER＝1 但分類 STATUS＝0；ASSET_CLASS_ID 為空）確認不出現在 `/reviews` 且只有 INFRA_MGR 的人開明細回 403。第 158 項 R2 code-reviewer S1 | 2026-10-30 | — |
+| 161 | 所有清單 API（`/accounts`、`/requests`、`/emergencies`、`/reviews`…）的 keyword 只修剪與 LIKE 跳脫、沒有長度上限（`security.md`「字串輸入要限制長度」）；既有共同寫法，非單一 API 問題。第 158 項 R2 code-reviewer S5 | 2026-10-30 | — |
+| 162 | 前端 `permGroups.ts` 的分組順序（帳號 → 簽核 → 巡檢 → 緊急存取 → 定期審查 → 系統管理）沒有測試鎖住，`AdminViews.spec.ts` 的 `groupPerms` 案例只涵蓋 SYS 與未知模組；補一筆含 EMG、REVIEW、SYS 的案例。第 158 項 R2 code-reviewer S6 | 2026-10-30 | — |
 | 16 | 原始規格書缺件：子 README 與 `.example` 註解（範本已於 2026-10-14 刪除）引用 `spec_im_acct_insp_v2.0.md`、變更單 #1～#4，但 repo 與使用者手上都沒有；PRD 不引用 | 2026-10-10 | — |
 | 17 | `infra_manager_web\README.md` 第 2 節「兩包結構」表仍是範本初始描述：說 Controller 目錄只有 `package-info.java`、`src\types\` 與 `src\views\` 只有 `.gitkeep`、router 的 routes 是空陣列，實際都已有程式（4 個型別檔、10 個畫面、14 個 path） | 2026-10-10 | — |
 | 18 | 登入查詢後才被改成停用（STATUS＝0）的帳號，該次登入仍取得 token 與回應中的權限清單；下一次呼叫 API 即因 `TokenIdentityProvider` 檢查 STATUS 而回 A03，攻擊面接近零 | 2026-10-10 | — |
