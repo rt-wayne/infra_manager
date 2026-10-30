@@ -60,6 +60,11 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3b：NotificationService 建構子多傳 ReviewDao；新增定期審查駁回通知測試——寄原申請人＋REVIEW_SIGN_GOV 持有人
+//           （同一人去重）、主旨「審查駁回」、本文 11 列（另一半已簽／尚未簽兩種文字）與提醒句、值跳脫、連結定期審查頁、
+//           紀錄事件 REVIEW_REJECT／參照 REVIEW／REF_ID＝REVIEW_ID；查無該輪不寄；未知事件不外拋
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -115,6 +120,7 @@ import com.mpx.infra_manager.model.Emg;
 import com.mpx.infra_manager.model.EmgDetail;
 import com.mpx.infra_manager.model.JobRunResult;
 import com.mpx.infra_manager.model.Recipient;
+import com.mpx.infra_manager.model.ReviewRound;
 import com.mpx.infra_manager.service.NotificationService.OverdueResult;
 import com.mpx.infra_manager.service.NotificationService.SendResult;
 import com.mpx.infra_manager.support.TestFixture;
@@ -1014,6 +1020,82 @@ class JobAndNotifyTest {
 	}
 
 	@Test
+	void 定期審查_駁回通知寄原申請人與治理半權限持有人去重_主旨審查駁回_本文含駁回欄與另一半已簽_值跳脫_連結定期審查_紀錄REVIEW_REJECT() {
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		ReviewRound r = rejectedRound(88L);
+		when(fx.reviewDao.findRound(eq(88L), any())).thenReturn(r);
+		when(fx.permDao.findActiveUser(KEVIN)).thenReturn(rcpt(KEVIN, "k@example.com"));
+		// 治理半持有人含原申請人 KEVIN 本人（去重後只寄一封）與 GARY
+		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_REVIEW_SIGN_GOV))
+				.thenReturn(List.of(rcpt(GARY, "g@example.com"), rcpt(KEVIN, "k@example.com")));
+
+		n.reviewEvent(AcctConst.EV_REVIEW_REJECT, 88L, HANK);
+		ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+		verify(sender).send(eq("k@example.com"), eq("【定期審查】AR20261001-001 審查駁回"), body.capture());
+		verify(sender).send(eq("g@example.com"), eq("【定期審查】AR20261001-001 審查駁回"), any());
+		verify(sender, times(2)).send(any(), any(), any());
+		assertThat(body.getValue()).startsWith("<!DOCTYPE html>")
+				.contains("帳號單號", "AR20261001-001").contains("帳號類別", "資料庫").contains("帳號名稱", "prod &lt;root&gt;")
+				.contains("所屬系統", "ERP").contains("使用人", "王小明").contains("原申請人", "凱文 &amp; 測試")
+				.contains("駁回半邊", "資訊治理主管半").contains("駁回人", "莫莉 &lt;治理&gt;").doesNotContain("0000030")
+				.contains("駁回時間", "2026-10-07 10:30").contains("駁回原因", "權限過大<br>&lt;請縮減&gt;")
+				.contains("另一半簽核", "Infra 主管半已由 泰瑞 於 2026-10-07 09:30 簽核")
+				.contains("<p>" + NotificationService.REVIEW_REJECT_FOOTER + "</p>")
+				.contains("<a href=\"http://h/ctx/#/reviews\"", "前往「定期審查」", FOOTER);
+		// 紀錄事件 REVIEW_REJECT、參照 REVIEW、REF_ID＝REVIEW_ID、CREATE_BY 為實際操作人；兩位收件人各一筆
+		verify(fx.notifyLogDao).insert(eq("REVIEW_REJECT"), eq("REVIEW"), eq("88"), eq(KEVIN), eq("k@example.com"), eq("SUCCESS"),
+				isNull(), any(), eq(HANK));
+		verify(fx.notifyLogDao).insert(eq("REVIEW_REJECT"), eq("REVIEW"), eq("88"), eq(GARY), eq("g@example.com"), eq("SUCCESS"),
+				isNull(), any(), eq(HANK));
+		verify(fx.notifyLogDao, times(2)).insert(any(), any(), any(), any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void 定期審查_駁回通知_另一半尚未簽的文字_駁回人無姓名顯示工號_查無該輪不寄_未知事件不外拋() {
+		ReviewRound r = rejectedRound(89L);
+		r.setRejectHalfCode(AcctConst.HALF_INFRA);
+		r.setGovSignBy(null);
+		r.setGovSignByName(null);
+		r.setGovSignDate(null);
+		r.setRejectByName(null);
+		r.setRejectReason(null);
+		assertThat(NotificationService.otherHalfText(r)).isEqualTo("資訊治理主管半尚未簽核");
+		assertThat(NotificationService.reviewRejectBody(r)).contains("Infra 主管半", "0000030").doesNotContain("null");
+
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		n.reviewEvent(AcctConst.EV_REVIEW_REJECT, 404L, HANK);
+		n.reviewEvent("REVIEW_WHAT", 89L, HANK);
+		verify(sender, never()).send(any(), any(), any());
+		verify(fx.notifyLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any(), any());
+	}
+
+	/** 治理半駁回、Infra 半已由泰瑞簽的一輪；值含 HTML 特殊字元 */
+	static ReviewRound rejectedRound(long reviewId) {
+		ReviewRound r = new ReviewRound();
+		r.setReviewId(reviewId);
+		r.setAcctId("AR20261001-001");
+		r.setCatgId("DB");
+		r.setCatgName("資料庫");
+		r.setAcctName("prod <root>");
+		r.setSysName("ERP");
+		r.setHolderName("王小明");
+		r.setApplyBy(KEVIN);
+		r.setApplyByName("凱文 & 測試");
+		r.setInfraSignBy("0000020");
+		r.setInfraSignByName("泰瑞");
+		r.setInfraSignDate(NOW.minusHours(1));
+		r.setRoundStateCode(AcctConst.RR_REJECTED);
+		r.setRejectHalfCode(AcctConst.HALF_GOV);
+		r.setRejectBy("0000030");
+		r.setRejectByName("莫莉 <治理>");
+		r.setRejectDate(NOW);
+		r.setRejectReason("權限過大\n<請縮減>");
+		return r;
+	}
+
+	@Test
 	void 緊急存取_逾期通知寄給補核准權限持有人_主旨含期限_本文8列加回報結果與提醒_以基準時間點重讀_紀錄EMG_OVERDUE由系統建立() {
 		MailSender sender = mock(MailSender.class);
 		NotificationService n = notifier(sender, SEND_ALL);
@@ -1158,8 +1240,8 @@ class JobAndNotifyTest {
 	}
 
 	NotificationService notifier(MailSender sender, MailAllowList allowList) {
-		return new NotificationService(fx.permDao, fx.acctReqDao, fx.emgDao, fx.codeService, fx.notifyLogDao, sender, allowList,
-				new MailHtml(SITE, fx.clock), fx.clock);
+		return new NotificationService(fx.permDao, fx.acctReqDao, fx.emgDao, fx.reviewDao, fx.codeService, fx.notifyLogDao, sender,
+				allowList, new MailHtml(SITE, fx.clock), fx.clock);
 	}
 
 	static Recipient rcpt(String id, String email) {

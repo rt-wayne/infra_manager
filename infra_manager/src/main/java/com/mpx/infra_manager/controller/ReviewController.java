@@ -7,6 +7,9 @@ package com.mpx.infra_manager.controller;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a：POST /reviews/{acctId}/sign（簽一半；half＝INFRA／GOV、versionNo）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3b：POST /reviews/{acctId}/reject（駁回；half、reason、versionNo）
 // ============================================================
 
 import java.util.List;
@@ -22,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.mpx.infra_manager.common.Identity;
 import com.mpx.infra_manager.model.ReviewActionResult;
 import com.mpx.infra_manager.model.ReviewItem;
+import com.mpx.infra_manager.model.request.ReviewRejectForm;
 import com.mpx.infra_manager.model.request.ReviewSignForm;
 import com.mpx.infra_manager.service.ReviewService;
 
@@ -44,5 +48,11 @@ public class ReviewController {
 	@PostMapping("/reviews/{acctId}/sign")
 	public ReviewActionResult sign(Identity id, @PathVariable String acctId, @RequestBody(required = false) ReviewSignForm form) {
 		return reviewService.sign(id, acctId, form);
+	}
+
+	@PostMapping("/reviews/{acctId}/reject")
+	public ReviewActionResult reject(Identity id, @PathVariable String acctId,
+			@RequestBody(required = false) ReviewRejectForm form) {
+		return reviewService.reject(id, acctId, form);
 	}
 }

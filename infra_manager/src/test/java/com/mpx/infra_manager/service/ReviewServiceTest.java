@@ -17,6 +17,12 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a 審查修正：①A 交易內先鎖帳號列再讀狀態（InOrder）、進交易前的 400／403／E02 不鎖；
 //           M2 ③A IS_SELF_ACTION 兩半任一簽核人是原申請人就為 1（第一半是、第二半是各一例），都不是為 0
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3b 駁回：角色非法 400、無權限 403、原因空 E02、原因 501 字 E11、缺版本號 E02（都不查 DB）；
+//           不可簽狀態 409；沒有一輪：鎖 → 直接 INSERT REJECTED、旗標來源 REVIEW 原因帶前綴、歷史 REVIEW_REJECT、提交後寄 REVIEW_REJECT；
+//           帶版本 409；已有一輪：UPDATE 成 REJECTED 版本＋1、另一半簽核人是我 409（②A）、被駁回那一半已簽 UPDATE 0 筆 409（①A）；
+//           旗標 0 筆 500 回滾不寄信；IS_SELF_ACTION 判準同完成
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -57,6 +63,7 @@ import com.mpx.infra_manager.model.Acct;
 import com.mpx.infra_manager.model.AcctHist;
 import com.mpx.infra_manager.model.ReviewActionResult;
 import com.mpx.infra_manager.model.ReviewItem;
+import com.mpx.infra_manager.model.request.ReviewRejectForm;
 import com.mpx.infra_manager.model.request.ReviewSignForm;
 import com.mpx.infra_manager.support.TestFixture;
 
@@ -104,6 +111,147 @@ class ReviewServiceTest {
 		f.setHalf(half);
 		f.setVersionNo(v);
 		return f;
+	}
+
+	static ReviewRejectForm rejectForm(String half, String reason, Integer v) {
+		ReviewRejectForm f = new ReviewRejectForm();
+		f.setHalf(half);
+		f.setReason(reason);
+		f.setVersionNo(v);
+		return f;
+	}
+
+	// ---- 駁回（R3b）
+
+	@Test
+	void 駁回_角色非法400_無權限403_原因空E02_原因超長E11_缺版本號E02_都不查DB() {
+		assertStatus(() -> svc.reject(id(TERRY), ACCT, rejectForm("ALL", "x", 0)), HttpStatus.BAD_REQUEST,
+				AcctMsg.BAD_CODE_PREFIX + "簽核角色");
+		assertStatus(() -> svc.reject(id(TERRY), ACCT, null), HttpStatus.BAD_REQUEST, AcctMsg.BAD_CODE_PREFIX + "簽核角色");
+		assertStatus(() -> svc.reject(id(TERRY), ACCT, rejectForm("GOV", "x", 0)), HttpStatus.FORBIDDEN, AcctMsg.P01);
+		assertStatus(() -> svc.reject(id(MOLLY), ACCT, rejectForm("INFRA", "x", 0)), HttpStatus.FORBIDDEN, AcctMsg.P01);
+		assertStatus(() -> svc.reject(id(TERRY), ACCT, rejectForm("INFRA", "  ", 0)), HttpStatus.BAD_REQUEST, AcctMsg.E02_PREFIX + "駁回原因");
+		assertStatus(() -> svc.reject(id(TERRY), ACCT, rejectForm("INFRA", "字".repeat(501), 0)), HttpStatus.BAD_REQUEST,
+				AcctMsg.E11_PREFIX + "駁回原因");
+		assertStatus(() -> svc.reject(id(TERRY), ACCT, rejectForm("INFRA", "x", null)), HttpStatus.BAD_REQUEST,
+				AcctMsg.E02_PREFIX + "版本號");
+		verify(fx.acctDao, never()).lockForReview(any());
+		verify(fx.reviewDao, never()).findByAcct(any(), any());
+		verify(fx.notificationService, never()).reviewEvent(any(), anyLong(), any());
+	}
+
+	@Test
+	void 駁回_不在待複審或逾期未審409_不建輪不標旗標() {
+		for (String state : new String[] { AcctConst.RVS_NORMAL, AcctConst.RVS_ABNORMAL, null }) {
+			ReviewItem it = due();
+			it.setReviewStateCode(state);
+			when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(it);
+			assertStatus(() -> svc.reject(id(TERRY), ACCT, rejectForm("INFRA", "帳號已離職", 0)), HttpStatus.CONFLICT,
+					AcctMsg.REVIEW_NOT_SIGNABLE);
+		}
+		verify(fx.reviewDao, never()).insertRejected(anyLong(), any(), any(), any(), any(), any(), any(), any());
+		verify(fx.acctDao, never()).flagReview(any(), any(), any(), any(), any(), any());
+		assertThat(fx.hists).isEmpty();
+	}
+
+	@Test
+	void 駁回_沒有一輪_先鎖再讀_直接建REJECTED列_旗標來源REVIEW_歷史REVIEW_REJECT_提交後寄信() {
+		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(due());
+		ReviewActionResult r = svc.reject(impersonate(TESTER, TERRY), ACCT, rejectForm("INFRA", " 使用人已調單位 ", 0));
+
+		InOrder order = inOrder(fx.acctDao, fx.reviewDao, fx.notificationService);
+		order.verify(fx.acctDao).lockForReview(ACCT);
+		order.verify(fx.reviewDao).findByAcct(ACCT, TODAY);
+		order.verify(fx.reviewDao).insertRejected(101L, ACCT, TODAY.plusDays(10), "INFRA", TERRY, TESTER, "使用人已調單位", NOW);
+		order.verify(fx.acctDao).flagReview(ACCT, "定期審查駁回：使用人已調單位", "REVIEW", TERRY, NOW, TESTER);
+		// 寄信在交易之後
+		order.verify(fx.notificationService).reviewEvent(AcctConst.EV_REVIEW_REJECT, 101L, TESTER);
+		verify(fx.reviewDao, never()).rejectRound(anyLong(), anyInt(), any(), any(), any(), any(), any());
+		verify(fx.acctDao, never()).updateReviewDates(any(), any(), any(), any(), any());
+
+		assertThat(r.getReviewId()).isEqualTo(101L);
+		assertThat(r.getReviewStateCode()).isEqualTo("REJECTED");
+		assertThat(r.getVersionNo()).isZero();
+		assertThat(fx.hists).hasSize(1);
+		AcctHist h = fx.hists.get(0);
+		assertThat(h.getSourceCode()).isEqualTo("REVIEW");
+		assertThat(h.getActionCode()).isEqualTo("REVIEW_REJECT");
+		assertThat(h.getReviewId()).isEqualTo(101L);
+		assertThat(h.getReqId()).isNull();
+		assertThat(h.getActBy()).isEqualTo(TESTER);
+		assertThat(h.getActAsId()).isEqualTo(TERRY);
+		assertThat(h.getIsSelfAction()).isZero();
+		assertThat(h.getResultDescr()).isEqualTo("定期審查駁回（Infra 主管半）；駁回人 " + NAMES.get(TERRY) + "；原因：使用人已調單位；資訊治理主管半尚未簽核");
+		assertThat(fx.txm.commits).isEqualTo(1);
+		assertThat(fx.txm.rollbacks).isZero();
+	}
+
+	@Test
+	void 駁回_沒有一輪卻帶版本409_不建輪() {
+		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(due());
+		assertStatus(() -> svc.reject(id(TERRY), ACCT, rejectForm("INFRA", "x", 1)), HttpStatus.CONFLICT, AcctMsg.E08);
+		verify(fx.reviewDao, never()).insertRejected(anyLong(), any(), any(), any(), any(), any(), any(), any());
+		verify(fx.notificationService, never()).reviewEvent(any(), anyLong(), any());
+	}
+
+	@Test
+	void 駁回_已有一輪_治理半駁回_UPDATE成REJECTED版本加1_歷史寫另一半已簽_旗標與寄信() {
+		// Infra 半 TERRY 已簽（版本 3），MOLLY 以治理半駁回
+		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(infraSigned(3));
+		ReviewActionResult r = svc.reject(id(MOLLY), ACCT, rejectForm("GOV", "權限過大", 3));
+		verify(fx.reviewDao).rejectRound(55L, 3, "GOV", MOLLY, MOLLY, "權限過大", NOW);
+		verify(fx.reviewDao, never()).insertRejected(anyLong(), any(), any(), any(), any(), any(), any(), any());
+		verify(fx.acctDao).flagReview(ACCT, "定期審查駁回：權限過大", "REVIEW", MOLLY, NOW, MOLLY);
+		verify(fx.notificationService).reviewEvent(AcctConst.EV_REVIEW_REJECT, 55L, MOLLY);
+		assertThat(r.getReviewStateCode()).isEqualTo("REJECTED");
+		assertThat(r.getVersionNo()).isEqualTo(4);
+		assertThat(fx.hists.get(0).getResultDescr()).isEqualTo("定期審查駁回（資訊治理主管半）；駁回人 " + NAMES.get(MOLLY)
+				+ "；原因：權限過大；Infra 主管半已由 " + NAMES.get(TERRY) + " 於 2026-10-07 09:30:00 簽核（本輪結束，下輪兩半重簽）");
+	}
+
+	@Test
+	void 駁回_已有一輪_版本不符409_另一半是我簽的409_被駁回那一半已簽UPDATE0筆409() {
+		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(infraSigned(3));
+		assertStatus(() -> svc.reject(id(MOLLY), ACCT, rejectForm("GOV", "x", 2)), HttpStatus.CONFLICT, AcctMsg.E08);
+		// ②A：Infra 半是 TERRY 簽的，TERRY 切成 MOLLY 以治理半駁回 → 實際操作人相同 → 409
+		assertStatus(() -> svc.reject(impersonate(TERRY, MOLLY), ACCT, rejectForm("GOV", "x", 3)), HttpStatus.CONFLICT,
+				AcctMsg.REVIEW_SAME_SIGNER);
+		verify(fx.reviewDao, never()).rejectRound(anyLong(), anyInt(), any(), any(), any(), any(), any());
+		// ①A：WENSEN 想以 Infra 半駁回，但 Infra 半已由 TERRY 簽 → UPDATE 條件不成立 0 筆 → 409
+		when(fx.reviewDao.rejectRound(anyLong(), anyInt(), any(), any(), any(), any(), any())).thenReturn(0);
+		assertStatus(() -> svc.reject(id(WENSEN), ACCT, rejectForm("INFRA", "x", 3)), HttpStatus.CONFLICT, AcctMsg.E08);
+		verify(fx.reviewDao).rejectRound(55L, 3, "INFRA", WENSEN, WENSEN, "x", NOW);
+		verify(fx.acctDao, never()).flagReview(any(), any(), any(), any(), any(), any());
+		verify(fx.notificationService, never()).reviewEvent(any(), anyLong(), any());
+		assertThat(fx.hists).isEmpty();
+	}
+
+	@Test
+	void 駁回_旗標0筆_500整筆回滾_不留歷史不寄信() {
+		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(infraSigned(0));
+		when(fx.acctDao.flagReview(any(), any(), any(), any(), any(), any())).thenReturn(0);
+		assertStatus(() -> svc.reject(id(MOLLY), ACCT, rejectForm("GOV", "x", 0)), HttpStatus.INTERNAL_SERVER_ERROR, null);
+		assertThat(fx.hists).isEmpty();
+		verify(fx.notificationService, never()).reviewEvent(any(), anyLong(), any());
+		assertThat(fx.txm.rollbacks).isEqualTo(1);
+		assertThat(fx.txm.commits).isZero();
+	}
+
+	@Test
+	void 駁回_駁回人或另一半簽核人是原申請人_IS_SELF_ACTION為1() {
+		// 駁回人 MOLLY 是原申請人
+		ReviewItem it = due();
+		it.setApplyBy(MOLLY);
+		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(it);
+		svc.reject(id(MOLLY), ACCT, rejectForm("GOV", "x", 0));
+		assertThat(fx.hists.get(0).getIsSelfAction()).isEqualTo(1);
+		// 另一半（Infra，TERRY 已簽）是原申請人、駁回人不是
+		fx.hists.clear();
+		ReviewItem byApplicant = infraSigned(0);
+		byApplicant.setApplyBy(TERRY);
+		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(byApplicant);
+		svc.reject(id(MOLLY), ACCT, rejectForm("GOV", "x", 0));
+		assertThat(fx.hists.get(0).getIsSelfAction()).isEqualTo(1);
 	}
 
 	@Test

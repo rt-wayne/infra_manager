@@ -19,6 +19,9 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3b：新增前端路徑 PATH_REVIEW（#/reviews，連結文字「定期審查」；頁面於 R5 上線，裁示 ③A）
 // ============================================================
 
 import java.net.URI;
@@ -46,6 +49,8 @@ public class MailHtml {
 	public static final String PATH_REQUESTS = "#/requests";
 	public static final String PATH_HOME = "#/";
 	public static final String PATH_EMG = "#/emergency";
+	/** 定期審查頁（第 158 項 R5 才有畫面；R3b 駁回信先指向它，裁示 ③A） */
+	public static final String PATH_REVIEW = "#/reviews";
 	private static final DateTimeFormatter SENT_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	/** 字型；表格欄位要各自再指定一次（Outlook 的表格不繼承 body 字型，會退回新細明體等襯線字） */
 	private static final String FONT = "font-family: 'Microsoft JhengHei', Arial, sans-serif;";
@@ -139,6 +144,7 @@ public class MailHtml {
 		case PATH_TODO -> "待辦簽核";
 		case PATH_REQUESTS -> "申請單列表";
 		case PATH_EMG -> "緊急存取";
+		case PATH_REVIEW -> "定期審查";
 		default -> SITE_NAME;
 		};
 	}

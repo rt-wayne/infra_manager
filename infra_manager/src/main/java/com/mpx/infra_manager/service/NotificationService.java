@@ -56,6 +56,13 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3b：建構子加 ReviewDao；新增定期審查事件 reviewEvent（交易提交後呼叫）——REVIEW_REJECT 以 REVIEW_ID
+//           重讀該輪（ReviewDao.findRound），寄原新增申請人＋所有 REVIEW_SIGN_GOV 持有人（⑯A 慣例，同一人去重），主旨「{帳號單號} 審查駁回」，
+//           本文列帳號單號、類別、帳號名稱、所屬系統、使用人、原申請人、駁回半邊、駁回人（有效身分姓名）、駁回時間、駁回原因、
+//           另一半簽核狀況，信末提醒「帳號已標記審查異常，請提出修改或停用申請，複驗通過後自動清除」；連結「定期審查」（③A）；
+//           參照 REVIEW／REVIEW_ID。寄失敗沿用 sendAll，不影響駁回結果
 // ============================================================
 
 import java.time.Clock;
@@ -78,11 +85,13 @@ import com.mpx.infra_manager.dao.AcctReqDao;
 import com.mpx.infra_manager.dao.EmgDao;
 import com.mpx.infra_manager.dao.NotifyLogDao;
 import com.mpx.infra_manager.dao.PermDao;
+import com.mpx.infra_manager.dao.ReviewDao;
 import com.mpx.infra_manager.model.Acct;
 import com.mpx.infra_manager.model.AcctReq;
 import com.mpx.infra_manager.model.ApprStage;
 import com.mpx.infra_manager.model.Emg;
 import com.mpx.infra_manager.model.Recipient;
+import com.mpx.infra_manager.model.ReviewRound;
 
 @Service
 public class NotificationService {
@@ -126,6 +135,7 @@ public class NotificationService {
 	private final PermDao permDao;
 	private final AcctReqDao acctReqDao;
 	private final EmgDao emgDao;
+	private final ReviewDao reviewDao;
 	private final CodeService codeService;
 	private final NotifyLogDao notifyLogDao;
 	private final MailSender mailSender;
@@ -133,11 +143,13 @@ public class NotificationService {
 	private final MailHtml html;
 	private final Clock clock;
 
-	public NotificationService(PermDao permDao, AcctReqDao acctReqDao, EmgDao emgDao, CodeService codeService,
-			NotifyLogDao notifyLogDao, MailSender mailSender, MailAllowList allowList, MailHtml html, Clock clock) {
+	public NotificationService(PermDao permDao, AcctReqDao acctReqDao, EmgDao emgDao, ReviewDao reviewDao,
+			CodeService codeService, NotifyLogDao notifyLogDao, MailSender mailSender, MailAllowList allowList, MailHtml html,
+			Clock clock) {
 		this.permDao = permDao;
 		this.acctReqDao = acctReqDao;
 		this.emgDao = emgDao;
+		this.reviewDao = reviewDao;
 		this.codeService = codeService;
 		this.notifyLogDao = notifyLogDao;
 		this.mailSender = mailSender;
@@ -354,6 +366,70 @@ public class NotificationService {
 
 	private static String dateTimeText(LocalDateTime t) {
 		return t == null ? "" : t.format(DATE_TIME);
+	}
+
+	// ------------------------------------------------------------
+	// 定期審查事件（交易提交後呼叫；BACKLOG 第 158 項 R3b）
+	// ------------------------------------------------------------
+
+	/**
+	 * @param event    REVIEW_REJECT（REVIEW_DUE 由排程 J04 走，R7 補）
+	 * @param reviewId 該輪流水號（重新讀取提交後的內容）
+	 * @param createBy 寫通知紀錄的 CREATE_BY（實際操作人）
+	 */
+	public void reviewEvent(String event, long reviewId, String createBy) {
+		try {
+			ReviewRound r = reviewDao.findRound(reviewId, LocalDate.now(clock));
+			if (r == null) {
+				return;
+			}
+			List<Recipient> rcpts;
+			String subject;
+			String body;
+			switch (event) {
+			case AcctConst.EV_REVIEW_REJECT -> {
+				// 原新增申請人＋所有治理半簽核權限持有人（⑯A 慣例）；sendAll 依工號去重
+				rcpts = new ArrayList<>(single(r.getApplyBy()));
+				rcpts.addAll(withPerm(AcctConst.PERM_REVIEW_SIGN_GOV));
+				subject = "【定期審查】" + r.getAcctId() + " 審查駁回";
+				body = reviewRejectBody(r);
+			}
+			default -> throw new IllegalArgumentException("未知的通知事件 " + event);
+			}
+			sendAll(event, AcctConst.REF_REVIEW, String.valueOf(reviewId), rcpts, subject,
+					html.page(subject, body, MailHtml.PATH_REVIEW), createBy);
+		} catch (RuntimeException ex) {
+			log.error("通知失敗 event={} reviewId={} 例外={}", event, reviewId, ex.getClass().getSimpleName());
+		}
+	}
+
+	/** 駁回信本文：帳號 6 列＋駁回 4 列＋另一半簽核狀況，信末提醒處理方式 */
+	static String reviewRejectBody(ReviewRound r) {
+		List<String[]> rows = new ArrayList<>();
+		rows.add(new String[] { "帳號單號", r.getAcctId() });
+		rows.add(new String[] { "帳號類別", nvl(r.getCatgName(), r.getCatgId()) });
+		rows.add(new String[] { "帳號名稱", acctNameText(r.getCatgId(), r.getAcctName()) });
+		rows.add(new String[] { "所屬系統", nvl(r.getSysName(), "") });
+		rows.add(new String[] { "使用人", nvl(r.getHolderName(), "") });
+		rows.add(new String[] { "原申請人", nvl(r.getApplyByName(), nvl(r.getApplyBy(), "")) });
+		rows.add(new String[] { "駁回半邊", AcctConst.reviewHalfName(r.getRejectHalfCode()) });
+		rows.add(new String[] { "駁回人", nvl(r.getRejectByName(), nvl(r.getRejectBy(), "")) });
+		rows.add(new String[] { "駁回時間", dateTimeText(r.getRejectDate()) });
+		rows.add(new String[] { "駁回原因", nvl(r.getRejectReason(), "") });
+		rows.add(new String[] { "另一半簽核", otherHalfText(r) });
+		return MailHtml.table(rows) + MailHtml.para(REVIEW_REJECT_FOOTER);
+	}
+
+	/** 駁回信信末提醒（異常只在修改／停用／重新啟用申請複驗通過時清除，D42） */
+	static final String REVIEW_REJECT_FOOTER = "此帳號已標記審查異常；請確認後提出修改或停用申請，複驗通過後異常會自動清除";
+
+	/** 被駁回那一半以外的那一半：「{半邊名}已由 {姓名} 於 {時間} 簽核」或「{半邊名}尚未簽核」 */
+	static String otherHalfText(ReviewRound r) {
+		boolean rejectInfra = AcctConst.HALF_INFRA.equals(r.getRejectHalfCode());
+		String half = AcctConst.reviewHalfName(rejectInfra ? AcctConst.HALF_GOV : AcctConst.HALF_INFRA);
+		String by = rejectInfra ? nvl(r.getGovSignByName(), r.getGovSignBy()) : nvl(r.getInfraSignByName(), r.getInfraSignBy());
+		LocalDateTime at = rejectInfra ? r.getGovSignDate() : r.getInfraSignDate();
+		return by == null ? half + "尚未簽核" : half + "已由 " + by + " 於 " + dateTimeText(at) + " 簽核";
 	}
 
 	// ------------------------------------------------------------

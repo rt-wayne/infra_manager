@@ -84,6 +84,10 @@ package com.mpx.infra_manager.common;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a 審查修正 M2 ③A：歷史標籤加 SELF_LABEL_REVIEW「自行審查」（來源 REVIEW 且 IS_SELF_ACTION＝1）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3b（駁回）：旗標來源 FLAG_SRC_REVIEW、通知事件 EV_REVIEW_REJECT 與參照 REF_REVIEW（REF_ID＝REVIEW_ID）、
+//           駁回原因上限 REVIEW_REASON_MAX＝500（對齊 REJECT_REASON 500 CHAR）、半邊中文名 reviewHalfName（信件與歷史用）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -209,11 +213,14 @@ public final class AcctConst {
 	public static final String EV_EMG_SUBMIT = "EMG_SUBMIT";
 	public static final String EV_EMG_OVERDUE = "EMG_OVERDUE";
 	public static final String EV_EMG_RETURN = "EMG_RETURN";
+	/** 定期審查駁回（第 158 項 R3b）：寄原新增申請人＋所有 REVIEW_SIGN_GOV 持有人；REF_ID＝REVIEW_ID */
+	public static final String EV_REVIEW_REJECT = "REVIEW_REJECT";
 	public static final String REF_REQ = "REQ";
 	public static final String REF_ACCT = "ACCT";
 	public static final String REF_WEEK = "WEEK";
 	public static final String REF_JOB = "JOB";
 	public static final String REF_EMG = "EMG";
+	public static final String REF_REVIEW = "REVIEW";
 	public static final String NR_SUCCESS = "SUCCESS";
 	public static final String NR_FAIL = "FAIL";
 	public static final String NR_SKIP = "SKIP";
@@ -341,6 +348,19 @@ public final class AcctConst {
 	public static final String HALF_INFRA = "INFRA";
 	public static final String HALF_GOV = "GOV";
 	public static final List<String> REVIEW_HALVES = List.of(HALF_INFRA, HALF_GOV);
+	/** 駁回原因上限（對齊 IM_ACCT_REVIEW.REJECT_REASON VARCHAR2(500 CHAR)；按碼點） */
+	public static final int REVIEW_REASON_MAX = 500;
+	/** 主表旗標原因的前綴：REVIEW_FLAG_REASON＝「定期審查駁回：{原因}」截 500 */
+	public static final String REVIEW_FLAG_PREFIX = "定期審查駁回：";
+
+	/** 半邊中文名（信件、歷史說明用）：INFRA 主管半、資訊治理主管半；其他值原樣回 */
+	public static String reviewHalfName(String half) {
+		if (HALF_INFRA.equals(half)) {
+			return "Infra 主管半";
+		}
+		return HALF_GOV.equals(half) ? "資訊治理主管半" : half;
+	}
+
 	/** 到期提醒範圍：到期日 ≤ 今天＋30（spec §4.11） */
 	public static final int EXPIRY_WARN_DAYS = 30;
 	/** J01 到期前 7 天信 */
@@ -381,6 +401,8 @@ public final class AcctConst {
 	public static final String AFFECT_CLOSE = "CLOSE";
 	/** 審查異常旗標來源 IM_ACCT.REVIEW_FLAG_SOURCE_CODE：緊急存取（退回且申請人回報為異動，S4-①） */
 	public static final String FLAG_SRC_EMG = "EMG";
+	/** 審查異常旗標來源：定期審查駁回（第 158 項 R3b；單一旗標，後標記者覆蓋） */
+	public static final String FLAG_SRC_REVIEW = "REVIEW";
 	/** 補核准期限＝送出＋24 小時（SA §5.11） */
 	public static final int EMG_DUE_HOURS = 24;
 	/** 預估時長（小時，整數）的範圍（裁示②） */

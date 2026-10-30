@@ -121,8 +121,10 @@ public final class AcctMsg {
 	public static final String WHAT_REVIEW_HALF = "簽核角色";
 	/** 409：帳號目前的審查狀態不是待複審或逾期未審（含審查異常、正常、不在審查範圍；裁示 ②A、⑨A） */
 	public static final String REVIEW_NOT_SIGNABLE = "此帳號目前不在待複審或逾期未審狀態，不能簽核";
-	/** 409：另一半已由同一有效身分或同一實際操作人簽過（裁示 ⑪A） */
+	/** 409：另一半已由同一有效身分或同一實際操作人簽過（裁示 ⑪A；駁回也適用，R3b 裁示 ②A） */
 	public static final String REVIEW_SAME_SIGNER = "同一人不得簽核兩半";
+	/** 定期審查駁回（R3b）：E02／E11 的受詞 */
+	public static final String WHAT_REVIEW_REASON = "駁回原因";
 
 	// 文件未定文案、由 developer 補的（400 類）
 	public static final String BAD_CODE_PREFIX = "欄位內容不正確：";

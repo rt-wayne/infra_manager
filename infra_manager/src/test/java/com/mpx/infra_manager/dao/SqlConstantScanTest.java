@@ -113,6 +113,10 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a 審查修正：①A AcctDao.LOCK_FOR_REVIEW 鎖帳號列（FOR UPDATE、綁 :acctId）；
 //           M2 ③A 歷史查詢 REQ_APPLY_BY 第三個來源為帳號主表（只對 SOURCE_CODE = 'REVIEW' 的列 JOIN）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3b：API 數 50 → 51（POST /reviews/{acctId}/reject）；駁回 SQL 斷言——INSERT_REJECTED 直接 REJECTED 不寫簽核欄、
+//           UPDATE_REJECT 帶版本／進行中／被駁回那一半尚未簽（①A）且不動簽核欄（③A）、FIND_ROUND 以 REVIEW_ID 接並帶駁回欄、清單不帶駁回欄
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -576,6 +580,32 @@ class SqlConstantScanTest {
 		assertThat(AcctConst.REVIEW_HALVES).containsExactly("INFRA", "GOV");
 	}
 
+	/** 第 158 項 R3b：駁回 SQL——首次動作就是駁回直接建 REJECTED、駁回進行中一輪（①A 被駁回那一半尚未簽）、單輪查詢 */
+	@Test
+	void 定期審查SQL_駁回_直接建REJECTED_駁回進行中一輪條件_單輪查詢帶駁回欄() {
+		// 首次動作就是駁回：狀態 REJECTED、駁回五欄都綁參數、版本 0；不寫兩半簽核欄
+		assertThat(ReviewDao.INSERT_REJECTED).contains("INSERT INTO IM_ACCT_REVIEW").contains("'REJECTED'")
+				.contains("REJECT_HALF_CODE, REJECT_BY, REJECT_ACT_BY, REJECT_DATE, REJECT_REASON")
+				.contains(":half, :rejectBy, :actBy, :now, :reason").contains("0, 1, :now, :actBy")
+				.doesNotContain("SIGN").doesNotContain("'OPEN'").doesNotContain("SYSDATE");
+		// 駁回進行中一輪：版本相符、進行中、被駁回的那一半尚未有人簽（①A）；VERSION_NO＋1；不動兩半簽核欄（③A 已簽的留存）
+		assertThat(ReviewDao.UPDATE_REJECT).contains("REVIEW_STATE_CODE = 'REJECTED'")
+				.contains("REJECT_HALF_CODE = :half, REJECT_BY = :rejectBy, REJECT_ACT_BY = :actBy")
+				.contains("REJECT_DATE = :now, REJECT_REASON = :reason").contains("VERSION_NO = VERSION_NO + 1")
+				.contains("VERSION_NO = :versionNo").contains("REVIEW_STATE_CODE = 'OPEN'")
+				.contains("((:half = 'INFRA' AND INFRA_SIGN_BY IS NULL) OR (:half = 'GOV' AND GOV_SIGN_BY IS NULL))")
+				.doesNotContain("INFRA_SIGN_BY =").doesNotContain("GOV_SIGN_BY =");
+		// 單輪查詢：以 REVIEW_ID 接、不限該輪狀態，多帶該輪結果與駁回五欄（含駁回人姓名）；仍含帳號審查狀態欄
+		assertThat(ReviewDao.FIND_ROUND).contains("R.REVIEW_ID = :reviewId").contains("R.REVIEW_STATE_CODE AS ROUND_STATE_CODE")
+				.contains("R.REJECT_HALF_CODE, R.REJECT_BY").contains("AS REJECT_BY_NAME").contains("R.REJECT_ACT_BY, R.REJECT_DATE, R.REJECT_REASON")
+				.contains(ReviewDao.REVIEW_STATE_EXPR).doesNotContain("REVIEW_STATE_CODE = 'OPEN'");
+		// 清單仍只接進行中那一輪，不帶駁回欄
+		assertThat(ReviewDao.SELECT_BASE).contains("R.REVIEW_STATE_CODE = 'OPEN' AND R.STATUS = 1").doesNotContain("REJECT_");
+		assertThat(AcctConst.FLAG_SRC_REVIEW).isEqualTo("REVIEW");
+		assertThat(AcctConst.EV_REVIEW_REJECT).isEqualTo("REVIEW_REJECT");
+		assertThat(AcctConst.REF_REVIEW).isEqualTo("REVIEW");
+	}
+
 	@Test
 	void 樂觀鎖_狀態轉移都帶版本與預期狀態並遞增版本() {
 		for (String sql : List.of(AcctReqDao.UPDATE_APPROVE, AcctReqDao.UPDATE_REJECT, AcctReqDao.UPDATE_EXEC_DONE,
@@ -742,8 +772,8 @@ class SqlConstantScanTest {
 		// 第 89 項階段 1：/admin/roles、/admin/users、/admin/roles/{roleId}/members、…/{userId}/revoke（39 → 43）
 		// 第 89 項階段 2：/admin/executors、/admin/executors/{catgId}/members、…/{userId}/revoke（43 → 46）
 		// 第 89 項階段 3：/admin/role-perms、/admin/roles/{roleId}/perms（46 → 48）
-		// 第 158 項 R2：GET /reviews（48 → 49）；R3a：POST /reviews/{acctId}/sign（49 → 50）
-		assertThat(apis).isEqualTo(50);
+		// 第 158 項 R2：GET /reviews（48 → 49）；R3a：POST /reviews/{acctId}/sign（49 → 50）；R3b：POST /reviews/{acctId}/reject（50 → 51）
+		assertThat(apis).isEqualTo(51);
 		assertThat(missing).isEmpty();
 	}
 }

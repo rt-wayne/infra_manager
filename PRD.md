@@ -34,6 +34,7 @@
 | 12 | §5.14 第 652 行：導覽「帳號列表」對無權限者改指向「帳號申請單列表」 | 只對有 ACC_LIST_FULL 者顯示、一律連帳號列表；無權限者不顯示，新增申請表單的申請類型提示也只寫「帳號申請單列表」。理由：使用者 2026-10-12 裁示，避免與「帳號申請單列表」重複 |
 | 13 | 附錄 D 第 1208 行：只有「未回報即退回」要求結案登記異動；補核准不以申請人回報為前提 | 補核准必須先有申請人回報（回報結果有值），否則 400「申請人尚未回報，不能補核准」；退回不限。理由同 SA 附錄 D 第 1208 行「避免實際異動完全沒有紀錄」：沒有回報就補核准，異動永遠進不了帳號歷史。使用者 2026-10-13 裁示維持，SA 附錄 D 已加「緊急存取補核准」一列 |
 | 14 | 緊急存取退回信（EMG_RETURN）內容 SA 未定 | 寄原申請人；本文＝送出信 8 列＋處理人、退回原因、回報結果，信末提醒「後續由主管異常結案，若有帳號異動請告知處理主管」（見「通知」） |
+| 15 | 定期審查駁回信（REVIEW_REJECT）內容 SA 未定 | 寄原新增申請人＋REVIEW_SIGN_GOV 持有人；本文＝帳號單號、類別、帳號名稱、所屬系統、使用人、原申請人、駁回半邊、駁回人（有效身分姓名）、駁回時間、駁回原因、另一半簽核狀況，信末提醒「此帳號已標記審查異常；請確認後提出修改或停用申請，複驗通過後異常會自動清除」，連結「定期審查」頁（R5 上線前為空白路由；兩者同批部署） |
 | 15 | §5.11 第 604 行：緊急存取狀態名稱「待補核准」 | 畫面（清單狀態欄、篩選下拉、詳情彈窗）顯示「待補核准（未逾期）」；狀態語意不變。理由：首頁卡「緊急存取待補核准」（SA §7.1）含逾期，同名不同筆數易被當成錯誤。使用者 2026-10-13 裁示（第 46 項 S8 審查 ①C） |
 | 16 | §5.10、決策 D42：審查異常旗標在修改或停用申請關卡 7 複驗通過時清除 | 重新啟用申請也清（見功能清單「6. 7 關簽核」審查異常旗標清除）。理由：修改限已核准、停用限已核准或已逾期，已停用帳號只能提重新啟用，不加的話其旗標沒有正規清除路徑。使用者 2026-10-13 裁示（第 46 項 S10 開工） |
 | 17 | §5.10、決策 D42：清除不看旗標是何時標上的 | 只清本單關卡 6 回報時就已存在的旗標（標記時間 ≤ 回報時間，同一秒視為回報前）。理由：回報後才標上（或被覆蓋）的異常不可能是本單的處理結果，不能被本單的複驗清掉，也避免清錯、FLAG_CLEAR 歷史記錯原因。使用者 2026-10-13 裁示（第 46 項 S10 審查） |
@@ -325,7 +326,7 @@
 - 核准／退件判斷順序：① 沒有任何關卡 2～5 權限 → 403 ② 未帶 versionNo → 400 E02 ③ 狀態或版本不符 → 409 E08 ④ 沒有目前關卡的權限 → 403 ⑤ 退件原因 E10。回報執行、複驗同理：先驗權限，再做帶條件的 UPDATE。
 - **樂觀鎖**：狀態轉移 UPDATE 帶「單號＋版本號＋預期狀態＋預期關卡」條件；影響 0 筆 → 409 E08「此申請已由他人處理，請重新整理」，先送出者成功。前端收到 409 → toast 訊息並重新載入。
 - **同帳號一筆在途**：程式先查；併發競態由唯一函式索引 IND_IM_ACCT_REQ_04 擋下，ORA-00001 經 Spring 轉成 DuplicateKeyException 後，例外鏈訊息含「(擁有者.IND_IM_ACCT_REQ_04)」才回 409 E07（因此建表時不得改這個索引名）；送出與重送交易內其他唯一鍵衝突（例如其他表的主鍵重複）記 error log 後回 500。
-- **自行核准／同人兼任**（U12，只標示不阻擋）：對核准、退件、回報、複驗通過、複驗退回判斷；有效身分＝申請人 →「自行核准」；同單其他關已由同一有效身分處理 →「同人兼任」。緊急存取歷史：EMG_MODIFY 處理人即申請人 →「自行核准」；EMG_CLOSE_MODIFY 結案人即申請人 →「自行結案」。定期審查歷史：REVIEW_DONE 兩半任一簽核人（有效身分）是該帳號原新增申請人 →「自行審查」（標籤只看來源 REVIEW 與旗標，不比對該列的操作人，因為標 1 的可能是另一半）。
+- **自行核准／同人兼任**（U12，只標示不阻擋）：對核准、退件、回報、複驗通過、複驗退回判斷；有效身分＝申請人 →「自行核准」；同單其他關已由同一有效身分處理 →「同人兼任」。緊急存取歷史：EMG_MODIFY 處理人即申請人 →「自行核准」；EMG_CLOSE_MODIFY 結案人即申請人 →「自行結案」。定期審查歷史：REVIEW_DONE／REVIEW_REJECT 本輪兩半任一簽核人或駁回人（有效身分）是該帳號原新增申請人 →「自行審查」（標籤只看來源 REVIEW 與旗標，不比對該列的操作人，因為標 1 的可能是另一半）。
 - **退件重送**：只有原申請人看得到、能做（否則 403）；沿用同一單號；附新公文時舊公文失效、新公文一筆，不附則保留舊公文。申請類型與帳號類別不可變更：前端兩者都鎖定；新增申請重送時後端以原申請單的帳號類別為準，忽略表單值。
 
 **申請單狀態**：REVIEW＝審核中（關卡 2～5，畫面顯示 U10「審核中：待 {關卡名}」）、EXEC＝待執行（6）、VERIFY＝待複驗（7）、APPROVED＝已核准（無關卡）、REJECTED＝已退件（無關卡，可重送）。
@@ -434,6 +435,7 @@
 | JOB_FAIL＝排程失敗 | SYS_ADMIN 成員 | 【排程失敗】{排程代碼} 執行{部分}失敗；只有結束紀錄寫入失敗時為【排程失敗】{排程代碼} 結束紀錄寫入失敗 |
 | EMG_SUBMIT＝緊急存取送出 | 有 EMG_DECIDE 的人 | 【緊急存取】{單號} 已送出，待您補核准（期限 {yyyy-MM-dd HH:mm}） |
 | EMG_RETURN＝緊急存取退回 | 原申請人（有效身分） | 【緊急存取】{單號} 已退回 |
+| REVIEW_REJECT＝定期審查駁回 | 帳號原新增申請人＋有 REVIEW_SIGN_GOV 的人（同一人只寄一封） | 【定期審查】{帳號單號} 審查駁回 |
 | EMG_OVERDUE＝緊急存取逾期未補核准（排程 J03） | 有 EMG_DECIDE 的人 | 【緊急存取】{單號} 已逾期未補核准（期限 {yyyy-MM-dd HH:mm}） |
 
 - 緊急存取信本文（兩欄表）：單號、帳號類別、帳號或系統、申請人（有效身分）、緊急事由、預估時長（N 小時）、送出時間、補核准期限；退回信再加處理人（有效身分姓名，代理時是被代理主管）、退回原因、回報結果（「未回報」／「無異動」／「有異動：{回報說明}」），表後一段「後續由主管異常結案，若有帳號異動請告知處理主管」；逾期信再加回報結果（同退回信三種文字），表後一段「補核准須申請人先回報；逾期後仍可補核准或退回」。參照類型 EMG、參照鍵＝單號；通知紀錄的建立者＝實際操作人，逾期信為 SYSTEM。補核准不寄信；回報不寄信。逾期信每案只寄一次，規則見第 8 節 J03。
@@ -571,7 +573,14 @@
   - **已有進行中一輪**：versionNo 須等於該輪版本（否則 409 E08）；同一半已有人簽 → 409 E08；**同一人不得簽兩半**——另一半的簽核人（有效身分）或實際操作人是我 → 409「同一人不得簽核兩半」（切換身分代簽也擋）。每次簽核版本＋1。
   - **兩半都簽完＝完成**：本輪改 DONE（記完成時間、新下次應審查日，版本再＋1）；主表上次審查日＝完成當天、下次應審查日＝完成當天＋180；帳號歷史一筆 REVIEW_DONE（來源 REVIEW、帶 REVIEW_ID；ACT_BY＝第二半的實際操作人、ACT_AS＝代理身分、IS_SELF_ACTION＝兩半任一簽核人（有效身分）是該帳號原新增申請人，歷史畫面標「自行審查」（U12）；說明寫兩半簽核人與時間、新日期）。單半簽核不寫歷史、不寄信。主表更新 0 筆時整筆回滾、回 500。
   - 驗證順序：簽核角色不是 INFRA／GOV 400 → 無對應權限 403 → 未帶 versionNo E02 → 查無帳號 404 → 不可簽 409 → 版本／同半／同人 409。
-  - 完成後狀態自然回到「正常」（下次應審查日往後推），不另記「本輪已完成」；異常清除、駁回不在本節（駁回未上線）。
+  - 完成後狀態自然回到「正常」（下次應審查日往後推），不另記「本輪已完成」。
+- **駁回**：`POST /reviews/{acctId}/reject`，half 與權限同簽核；reason 必填、500 字（按碼點）；versionNo 規則同簽核。
+  - **任一半駁回，整輪結束**：本輪改 REJECTED（記駁回半邊、駁回人有效身分與實際操作人、時間、原因），已簽的另一半留存、不帶到下一輪（下輪兩半重簽）。還沒有進行中一輪就直接建一列 REJECTED（靠同一把帳號列鎖，不會與同時的首簽各建一輪）。
+  - **擋的情況（409）**：帳號不在待複審／逾期未審；版本不符；被駁回的那一半已有人簽（簽了就是簽了，同半主管不能再推翻）；另一半是我簽的（同一人不得出現在同一輪的兩半，含切換身分）。
+  - **同交易**：帳號主表標審查異常旗標，來源 REVIEW、原因「定期審查駁回：{原因}」截 500 字（主表 0 筆時整筆回滾、回 500）；帳號歷史一筆 REVIEW_REJECT（來源 REVIEW、帶 REVIEW_ID；說明寫駁回半邊、駁回人、原因、另一半簽核狀況；IS_SELF_ACTION 判準同完成）。**不動審查日**：異常清除後回到依日期判斷（見「審查狀態」）。
+  - **提交後寄駁回信** REVIEW_REJECT 給原新增申請人與所有 REVIEW_SIGN_GOV 持有人（同一人只寄一封）；寄信失敗不影響駁回結果。信件內容見「通知」。
+  - 驗證順序：簽核角色 400 → 403 → 原因空 E02 → 原因 500 字 E11 → 未帶 versionNo E02 → 404 → 不可簽 409 → 版本／已簽／同人 409。
+  - 已知限制：旗標是單一旗標，駁回後再被緊急存取退回標記會覆寫原因與來源，駁回原因仍留在簽核紀錄表與 REVIEW_REJECT 歷史。「直接發起停用申請」捷徑由前端提供（R5）。
 - **已知限制**：清單 API 沒有筆數上限、不分頁，每次查詢對帳號主表全部算一次狀態（與緊急存取清單同一取捨）。審查範圍內的帳號量目前很小（測試 DB 3 筆、正式 DB 0 筆）；第 133 項舊資料轉入後量級變大再決定要不要分頁。
 
 ### 使用者流程
@@ -661,7 +670,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | U09 | 查詢失敗，請稍後再試 | 任何查詢失敗 |
 | U10 | 審核中：待 {關卡名} | 申請單狀態 |
 | U11 | 待複驗 | 帳號列表標記 |
-| U12 | 自行核准／同人兼任／自行結案／自行審查 | 歷史標籤（自行結案只用於緊急存取結案登記異動；自行審查只用於定期審查完成） |
+| U12 | 自行核准／同人兼任／自行結案／自行審查 | 歷史標籤（自行結案只用於緊急存取結案登記異動；自行審查只用於定期審查完成與駁回） |
 | U13 | 目前沒有已逾期未處理的帳號 | J02 彙總 0 筆 |
 | U14 | 有 {n} 個帳號 30 天內到期或已逾期 | 帳號列表橫幅 |
 | — | 所選檔案沒有內容，視同未上傳 | 前端選到空檔時（`utils/attach.ts`） |
@@ -840,7 +849,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | NEXT_REVIEW_DATE | DATE | | 下次應審查日＝上次＋180 天（DB COMMENT 寫明審查狀態的即時計算規則，程式面於第 158 項 R2 上線） |
 | IS_REVIEW_FLAG | NUMBER(1) | ✓ | 審查異常標記（1＝有異常），預設 0 |
 | REVIEW_FLAG_REASON | VARCHAR2(500 CHAR) | | 審查異常原因 |
-| REVIEW_FLAG_SOURCE_CODE | VARCHAR2(10) | | 異常來源：EMG＝緊急存取、REVIEW＝定期審查駁回（單一旗標，後標記者覆蓋；程式目前只寫 EMG，REVIEW 於第 158 項 R3b 上線） |
+| REVIEW_FLAG_SOURCE_CODE | VARCHAR2(10) | | 異常來源：EMG＝緊急存取、REVIEW＝定期審查駁回（單一旗標，後標記者覆蓋） |
 | REVIEW_FLAG_DATE | DATE | | 標記時間 |
 | REVIEW_FLAG_BY | VARCHAR2(30) | | 標記人（有效身分） |
 
@@ -912,7 +921,7 @@ CREATE UNIQUE INDEX IND_IM_ACCT_REQ_04 ON RD_USER.IM_ACCT_REQ
 | EMG_ID | VARCHAR2(20) | | 來源緊急存取單（SOURCE_CODE＝EMG） |
 | REVIEW_ID | NUMBER(12) | | 來源定期審查流水號（SOURCE_CODE＝REVIEW；→ IM_ACCT_REVIEW）；REVIEW_DONE 寫入 |
 | SOURCE_CODE | VARCHAR2(10) | ✓ | REQ、SYS、EMG、REVIEW（定期審查） |
-| ACTION_CODE | VARCHAR2(20) | ✓ | SUBMIT、RESUB、APPROVE、REJECT、EXEC_DONE、VERIFY_OK、VERIFY_REJECT、EXPIRE、EMG_MODIFY（緊急存取異動）、EMG_CLOSE_MODIFY（結案登記異動）、FLAG_CLEAR（審查異常旗標清除）、REVIEW_DONE（定期審查完成）、REVIEW_REJECT（定期審查駁回；程式目前尚未寫入，第 158 項 R3b 上線） |
+| ACTION_CODE | VARCHAR2(20) | ✓ | SUBMIT、RESUB、APPROVE、REJECT、EXEC_DONE、VERIFY_OK、VERIFY_REJECT、EXPIRE、EMG_MODIFY（緊急存取異動）、EMG_CLOSE_MODIFY（結案登記異動）、FLAG_CLEAR（審查異常旗標清除）、REVIEW_DONE（定期審查完成）、REVIEW_REJECT（定期審查駁回） |
 | STAGE_ID | NUMBER(2) | | 發生關卡；系統事件為空，緊急存取事件亦為空 |
 | ACT_BY | VARCHAR2(30) | | 實際操作人；排程為空 |
 | ACT_BY_NAME | VARCHAR2(100 CHAR) | ✓ | 顯示名快照；排程為「系統排程」 |
@@ -921,7 +930,7 @@ CREATE UNIQUE INDEX IND_IM_ACCT_REQ_04 ON RD_USER.IM_ACCT_REQ
 | ACT_DATE | DATE | ✓ | 發生時間 |
 | APPLY_DEPT | VARCHAR2(50 CHAR) | | 申請單位快照 |
 | RESULT_DESCR | VARCHAR2(1000 CHAR) | | 結果文字 |
-| IS_SELF_ACTION | NUMBER(1) | ✓ | 自行核准／同人兼任；EMG_MODIFY＝處理人即申請人、EMG_CLOSE_MODIFY＝結案人即申請人、REVIEW_DONE＝兩半任一簽核人即該帳號原新增申請人（皆以有效身分比對），預設 0 |
+| IS_SELF_ACTION | NUMBER(1) | ✓ | 自行核准／同人兼任；EMG_MODIFY＝處理人即申請人、EMG_CLOSE_MODIFY＝結案人即申請人、REVIEW_DONE／REVIEW_REJECT＝本輪兩半任一簽核人或駁回人即該帳號原新增申請人（皆以有效身分比對），預設 0 |
 
 索引：IND_IM_ACCT_HIST_01（ACCT_ID, ACT_DATE）、_02（REQ_ID）。
 
@@ -960,7 +969,7 @@ END
 | 欄 | 型別 | 必 | 說明 |
 |---|---|---|---|
 | NOTIFY_ID（PK） | NUMBER(12) | ✓ | 流水號 |
-| EVENT_CODE | VARCHAR2(20) | ✓ | 11 種事件（見「通知」）；緊急存取另有 EMG_SUBMIT、EMG_OVERDUE、EMG_RETURN（EMG_OVERDUE 防重寄只看 EVENT_CODE＋REF_ID，每案一次）；DB COMMENT 已列定期審查的 REVIEW_DUE（進入待複審）、REVIEW_REJECT（駁回），程式於第 158 項 R3b、R7 上線 |
+| EVENT_CODE | VARCHAR2(20) | ✓ | 11 種事件（見「通知」）；緊急存取另有 EMG_SUBMIT、EMG_OVERDUE、EMG_RETURN（EMG_OVERDUE 防重寄只看 EVENT_CODE＋REF_ID，每案一次）；定期審查 REVIEW_REJECT（駁回）；DB COMMENT 另列 REVIEW_DUE（進入待複審），程式於第 158 項 R7 上線 |
 | REF_TYPE_CODE | VARCHAR2(10) | ✓ | REQ、ACCT、WEEK、JOB、EMG、REVIEW（REVIEW 程式目前尚未寫入） |
 | REF_ID | VARCHAR2(40) | ✓ | REQ＝單號；ACCT＝`ACCT_ID_到期日yyyymmdd`；WEEK＝週一 yyyymmdd；JOB＝RUN_ID；EMG＝EMG_ID；REVIEW＝REVIEW_DUE 為 `ACCT_ID_下次應審查日yyyymmdd`（本輪防重寄鍵）、REVIEW_REJECT 為 REVIEW_ID |
 | RCPT_USER_ID | VARCHAR2(30) | ✓ | 收件人 |
@@ -1007,7 +1016,7 @@ END
 
 **IM_EMG_AFFECT_ACCT 緊急存取受影響帳號**（只增不改；STATUS 固定 1；回報與結案登記各自成列、互不覆蓋）：EMG_ID（PK）VARCHAR2(20)；AFFECT_TYPE_CODE（PK）VARCHAR2(10)（REPORT＝申請人回報、CLOSE＝異常結案登記）；ACCT_ID（PK）VARCHAR2(20)；AFFECT_DESCR VARCHAR2(500 CHAR)（該帳號的異動說明；REPORT 與 CLOSE 皆選填）；RECORD_BY VARCHAR2(30) 必（有效身分）；RECORD_DATE DATE 必。索引 IND_IM_EMG_AFFECT_ACCT_01（ACCT_ID）。
 
-**IM_ACCT_REVIEW 定期審查簽核紀錄**（每帳號每輪一筆；SEQ_IM_ACCT_REVIEW；STATUS 固定 1。程式寫入：首簽建 OPEN 列、簽半更新對應三欄並 VERSION_NO＋1、雙簽完成改 DONE 寫 DONE_DATE／NEXT_DUE_DATE；駁回欄與取消欄尚無程式寫入。定期審查功能分批施工中，進度見 `BACKLOG.md` 第 158 項）
+**IM_ACCT_REVIEW 定期審查簽核紀錄**（每帳號每輪一筆；SEQ_IM_ACCT_REVIEW；STATUS 固定 1。程式寫入：首簽建 OPEN 列、簽半更新對應三欄並 VERSION_NO＋1、雙簽完成改 DONE 寫 DONE_DATE／NEXT_DUE_DATE、駁回改 REJECTED 寫 REJECT_* 五欄（還沒有一輪時直接建 REJECTED 列）；取消欄尚無程式寫入（R4）。定期審查功能分批施工中，進度見 `BACKLOG.md` 第 158 項）
 
 | 欄 | 型別 | 必 | 說明 |
 |---|---|---|---|
@@ -1222,6 +1231,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | GET | `/reviews` | REVIEW_LIST（看全部，沒有就 403，不做「只看自己」） | query：keyword、stateCode（ABNORMAL／OVERDUE／DUE／NORMAL；不給＝ABNORMAL＋OVERDUE＋DUE） | [acctId、catgId、catgName、acctName、sysName、assetClassId、assetClassName、isPriv、holderName、holderDept、accessLevelCode、acctStateCode、applyBy、applyByName、lastReviewDate、nextReviewDate、isReviewFlag、reviewFlagReason、reviewFlagSourceCode、reviewFlagDate、reviewStateCode、reviewId、reviewVersionNo、infraSignBy、infraSignByName、infraSignActBy、infraSignDate、govSignBy、govSignByName、govSignActBy、govSignDate（reviewId 起 10 欄＝進行中那一輪，沒有就 null）] | 403、400 欄位內容不正確（狀態） |
 
 | POST | `/reviews/{acctId}/sign` | half＝INFRA 需 REVIEW_SIGN_INFRA、GOV 需 REVIEW_SIGN_GOV | half（INFRA／GOV）、versionNo（進行中那一輪的版本；還沒有一輪時帶 0） | acctId、reviewId、reviewStateCode（OPEN＝還差另一半、DONE＝雙簽完成）、versionNo（動作後的版本） | 400 欄位內容不正確（簽核角色）、403、400 E02、404、409 此帳號目前不在待複審或逾期未審狀態，不能簽核、409 E08（版本不符、同一半已簽、以為沒有一輪卻帶了版本）、409 同一人不得簽核兩半、500 資料寫入未完成 |
+| POST | `/reviews/{acctId}/reject` | 同 sign | half、reason（必填、500 字）、versionNo（同 sign） | 同 sign，reviewStateCode＝REJECTED | 同 sign，另有 400 E02／E11 駁回原因；409 E08 多一種：被駁回的那一半已有人簽 |
 
 清單的 reviewId～govSignDate 十欄（含 infraSignActBy／govSignActBy 兩個實際操作人）為進行中那一輪，沒有就 null。keyword 以 LIKE 比對 ACCT_ID、ACCT_NAME、HOLDER_NAME、SYS_NAME（跳脫同上）。不在審查範圍（reviewStateCode 為空）的帳號不會出現；排序：審查異常 → 逾期未審（下次應審查日最舊先、空值最前）→ 待複審 → 正常，同狀態依下次應審查日、單號。審查狀態定義見「15. 定期審查」。
 

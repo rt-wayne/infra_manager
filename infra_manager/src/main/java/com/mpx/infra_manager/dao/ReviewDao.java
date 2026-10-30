@@ -17,6 +17,11 @@ package com.mpx.infra_manager.dao;
 //           序列取號 NEXT_REVIEW_ID；首簽建本輪 INSERT_OPEN（⑮A；撞 IND_IM_ACCT_REVIEW_02 由 Service 重讀改 UPDATE）；
 //           簽半 UPDATE_SIGN_INFRA／GOV（條件：版本相符、進行中、本半尚未簽；VERSION_NO＋1，0 筆＝409）；
 //           雙簽完成 UPDATE_DONE（條件：版本相符、進行中、兩半都已簽）。所有時間綁參數
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3b（駁回）：欄位清單抽成 SELECT_COLS 讓清單（接進行中一輪）與單輪查詢 FIND_ROUND（以 REVIEW_ID 接、
+//           不限狀態、多帶該輪結果與駁回五欄，駁回信提交後重讀用）共用；首次動作就是駁回 INSERT_REJECTED（直接 REJECTED、不佔 IND_02，
+//           靠 Service 先鎖帳號列避免與同時的首簽各建一輪）；已有一輪 UPDATE_REJECT（版本相符、進行中、被駁回的那一半尚未簽，裁示 ①A）
 // ============================================================
 
 import java.time.LocalDate;
@@ -32,6 +37,7 @@ import com.mpx.common.db.DbClient;
 import com.mpx.infra_manager.common.AcctConst;
 import com.mpx.infra_manager.model.CountRow;
 import com.mpx.infra_manager.model.ReviewItem;
+import com.mpx.infra_manager.model.ReviewRound;
 
 @Repository
 public class ReviewDao {
@@ -62,10 +68,11 @@ public class ReviewDao {
 			+ "       END";
 
 	/**
-	 * 清單（R2）：帳號主表要顯示的欄位＋類別名、分類名、原申請人姓名、審查狀態，並帶進行中那一輪（R，同帳號最多一筆）的
-	 * 兩半簽核人與時間（R3 簽核後前端用來顯示「Infra 已簽／治理未簽」）；姓名一律 LEFT JOIN 同步表 PX_SYNC_EMP
+	 * 共用欄位（R2／R3b）：帳號主表要顯示的欄位＋類別名、分類名、原申請人姓名、審查狀態，加某一輪（R）的流水號、版本、
+	 * 兩半簽核人與時間（前端顯示「Infra 已簽／治理未簽」）；姓名一律 LEFT JOIN 同步表 PX_SYNC_EMP。
+	 * R 接哪一輪由 SELECT_BASE（進行中那一輪）或 FIND_ROUND（指定 REVIEW_ID）決定
 	 */
-	static final String SELECT_BASE = """
+	static final String SELECT_COLS = """
 			SELECT A.ACCT_ID, A.CATG_ID, C.CATG_NAME, A.ACCT_NAME, A.SYS_NAME, A.ASSET_CLASS_ID, AC.ASSET_CLASS_NAME, A.IS_PRIV,
 			       A.HOLDER_NAME, A.HOLDER_DEPT, A.ACCESS_LEVEL_CODE, A.ACCT_STATE_CODE, A.APPLY_BY,
 			""" + "       " + EmpSql.nameExpr("UA", "A.APPLY_BY") + " AS APPLY_BY_NAME,\n" + """
@@ -76,14 +83,33 @@ public class ReviewDao {
 			""" + "       " + EmpSql.nameExpr("UI", "R.INFRA_SIGN_BY") + " AS INFRA_SIGN_BY_NAME,\n" + """
 			       R.INFRA_SIGN_ACT_BY, R.INFRA_SIGN_DATE, R.GOV_SIGN_BY,
 			""" + "       " + EmpSql.nameExpr("UG", "R.GOV_SIGN_BY") + " AS GOV_SIGN_BY_NAME,\n" + """
-			       R.GOV_SIGN_ACT_BY, R.GOV_SIGN_DATE
+			       R.GOV_SIGN_ACT_BY, R.GOV_SIGN_DATE""";
+
+	/** 帳號主表起手的 FROM／JOIN（不含 R）：類別、啟用中分類、三組姓名 */
+	private static final String FROM_ACCT = """
 			  FROM IM_ACCT A
 			  LEFT JOIN IM_ACCT_CATG C ON C.CATG_ID = A.CATG_ID
-			""" + "  " + JOIN_ASSET_CLASS + "\n" + """
-			  LEFT JOIN IM_ACCT_REVIEW R ON R.ACCT_ID = A.ACCT_ID AND R.REVIEW_STATE_CODE = 'OPEN' AND R.STATUS = 1
-			""" + "  " + EmpSql.joinEmp("UA", "A.APPLY_BY") + "\n"
+			""" + "  " + JOIN_ASSET_CLASS + "\n";
+
+	private static final String JOIN_NAMES = "  " + EmpSql.joinEmp("UA", "A.APPLY_BY") + "\n"
 			+ "  " + EmpSql.joinEmp("UI", "R.INFRA_SIGN_BY") + "\n"
 			+ "  " + EmpSql.joinEmp("UG", "R.GOV_SIGN_BY") + "\n";
+
+	/** 清單與簽核重讀：R＝進行中那一輪（同帳號最多一筆，沒有就 NULL） */
+	static final String SELECT_BASE = SELECT_COLS + "\n" + FROM_ACCT
+			+ "  LEFT JOIN IM_ACCT_REVIEW R ON R.ACCT_ID = A.ACCT_ID AND R.REVIEW_STATE_CODE = 'OPEN' AND R.STATUS = 1\n"
+			+ JOIN_NAMES;
+
+	/**
+	 * 某一輪（R3b；駁回信提交後重讀）：以 REVIEW_ID 接、不限該輪狀態，多帶該輪結果 ROUND_STATE_CODE 與駁回五欄（駁回人姓名 UR）。
+	 * 仍需綁 :today（帳號的審查狀態欄用）
+	 */
+	public static final String FIND_ROUND = SELECT_COLS + ",\n"
+			+ "       R.REVIEW_STATE_CODE AS ROUND_STATE_CODE, R.REJECT_HALF_CODE, R.REJECT_BY,\n"
+			+ "       " + EmpSql.nameExpr("UR", "R.REJECT_BY") + " AS REJECT_BY_NAME,\n"
+			+ "       R.REJECT_ACT_BY, R.REJECT_DATE, R.REJECT_REASON\n" + FROM_ACCT
+			+ "  JOIN IM_ACCT_REVIEW R ON R.ACCT_ID = A.ACCT_ID AND R.REVIEW_ID = :reviewId AND R.STATUS = 1\n"
+			+ JOIN_NAMES + "  " + EmpSql.joinEmp("UR", "R.REJECT_BY") + "\n";
 
 	/** :stateCode 為空＝需要處理的三種（異常、逾期、待複審）；給 NORMAL 才看正常的 */
 	public static final String FIND_LIST = """
@@ -155,6 +181,34 @@ public class ReviewDao {
 			   AND GOV_SIGN_BY IS NOT NULL
 			""";
 
+	/**
+	 * 首次動作就是駁回（R3b）：直接建一列 REJECTED，兩半簽核欄皆空、駁回五欄都有值；VERSION_NO＝0。
+	 * 不是 OPEN 所以不受 IND_IM_ACCT_REVIEW_02 約束——與同時的首簽互斥靠 Service 先鎖帳號列（R3a 裁示 ①A）
+	 */
+	public static final String INSERT_REJECTED = """
+			INSERT INTO IM_ACCT_REVIEW (REVIEW_ID, ACCT_ID, DUE_DATE, REVIEW_STATE_CODE,
+			       REJECT_HALF_CODE, REJECT_BY, REJECT_ACT_BY, REJECT_DATE, REJECT_REASON,
+			       VERSION_NO, STATUS, CREATE_DATE, CREATE_BY)
+			VALUES (:reviewId, :acctId, :dueDate, 'REJECTED',
+			       :half, :rejectBy, :actBy, :now, :reason,
+			       0, 1, :now, :actBy)
+			""";
+
+	/**
+	 * 駁回進行中的一輪（R3b；裁示 ③A 整輪結束、已簽那一半留存）：版本相符、進行中、且被駁回的那一半尚未有人簽（裁示 ①A：
+	 * 簽了就是簽了，同半的人不能再推翻，0 筆＝409）；VERSION_NO＋1
+	 */
+	public static final String UPDATE_REJECT = """
+			UPDATE IM_ACCT_REVIEW
+			   SET REVIEW_STATE_CODE = 'REJECTED', REJECT_HALF_CODE = :half, REJECT_BY = :rejectBy, REJECT_ACT_BY = :actBy,
+			       REJECT_DATE = :now, REJECT_REASON = :reason,
+			       VERSION_NO = VERSION_NO + 1, UPDATE_DATE = :now, UPDATE_BY = :actBy
+			 WHERE REVIEW_ID = :reviewId
+			   AND VERSION_NO = :versionNo
+			   AND REVIEW_STATE_CODE = 'OPEN'
+			   AND ((:half = 'INFRA' AND INFRA_SIGN_BY IS NULL) OR (:half = 'GOV' AND GOV_SIGN_BY IS NULL))
+			""";
+
 	private final DbClient dbClient;
 	private final String itflowDb;
 
@@ -178,6 +232,14 @@ public class ReviewDao {
 		params.put("acctId", acctId);
 		params.put("today", DaoSupport.ts(today));
 		return DaoSupport.first(dbClient.query(itflowDb, FIND_BY_ACCT, params, ReviewItem.class));
+	}
+
+	/** 某一輪（不限狀態）；查無回 null */
+	public ReviewRound findRound(long reviewId, LocalDate today) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("reviewId", reviewId);
+		params.put("today", DaoSupport.ts(today));
+		return DaoSupport.first(dbClient.query(itflowDb, FIND_ROUND, params, ReviewRound.class));
 	}
 
 	public long nextReviewId() {
@@ -212,6 +274,35 @@ public class ReviewDao {
 		params.put("actBy", actBy);
 		params.put("now", DaoSupport.ts(now));
 		return dbClient.update(itflowDb, AcctConst.HALF_INFRA.equals(half) ? UPDATE_SIGN_INFRA : UPDATE_SIGN_GOV, params);
+	}
+
+	/** 首次動作就是駁回：建 REJECTED 列；rejectBy 有效身分、actBy 實際操作人（同時是 CREATE_BY）；reason 已由 Service 檢查長度 */
+	public int insertRejected(long reviewId, String acctId, LocalDate dueDate, String half, String rejectBy, String actBy,
+			String reason, LocalDateTime now) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("reviewId", reviewId);
+		params.put("acctId", acctId);
+		params.put("dueDate", DaoSupport.ts(dueDate));
+		params.put("half", half);
+		params.put("rejectBy", rejectBy);
+		params.put("actBy", actBy);
+		params.put("reason", reason);
+		params.put("now", DaoSupport.ts(now));
+		return dbClient.update(itflowDb, INSERT_REJECTED, params);
+	}
+
+	/** 駁回進行中的一輪；版本不符、已結束或被駁回的那一半已有人簽回 0 */
+	public int rejectRound(long reviewId, int versionNo, String half, String rejectBy, String actBy, String reason,
+			LocalDateTime now) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("reviewId", reviewId);
+		params.put("versionNo", versionNo);
+		params.put("half", half);
+		params.put("rejectBy", rejectBy);
+		params.put("actBy", actBy);
+		params.put("reason", reason);
+		params.put("now", DaoSupport.ts(now));
+		return dbClient.update(itflowDb, UPDATE_REJECT, params);
 	}
 
 	/** 雙簽完成；versionNo＝簽第二半之後的版本；兩半未齊或版本不符回 0 */

@@ -19,6 +19,13 @@ package com.mpx.infra_manager.service;
 // 變更說明: BACKLOG 第 158 項 R3a 審查修正：①A 簽核交易一開始先鎖帳號主表那一列（AcctDao.lockForReview），
 //           同帳號的簽核、標旗標、關卡 6 取消進行中一輪排隊執行，讀到的狀態與那一輪才算數；
 //           M2 ③A REVIEW_DONE 的 IS_SELF_ACTION 改為「兩半任一簽核人（有效身分）是原新增申請人」，標籤改顯示「自行審查」
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R3b：駁回 reject（half 各需 REVIEW_SIGN_*；reason 必填 E02、500 字 E11；versionNo 必帶）。
+//           順序：400 → 403 → E02／E11 → 交易內：鎖帳號列 → 404 → 409 不可簽 → 沒有一輪：v 須 0、直接 INSERT 一列 REJECTED →
+//           有一輪：版本相符、②A 另一半簽核人不是我（沿用 ⑪A）→ UPDATE 成 REJECTED（①A 被駁回那一半已有人簽＝0 筆＝409）→
+//           主表標旗標來源 REVIEW（原因「定期審查駁回：…」截 500；0 筆 500 回滾）→ 歷史 REVIEW_REJECT（㉑A）；
+//           提交後寄 REVIEW_REJECT（原申請人＋REVIEW_SIGN_GOV 持有人）。駁回不動審查日（④B），狀態自然變成審查異常
 // ============================================================
 
 import java.time.Clock;
@@ -45,6 +52,7 @@ import com.mpx.infra_manager.dao.ReviewDao;
 import com.mpx.infra_manager.model.AcctHist;
 import com.mpx.infra_manager.model.ReviewActionResult;
 import com.mpx.infra_manager.model.ReviewItem;
+import com.mpx.infra_manager.model.request.ReviewRejectForm;
 import com.mpx.infra_manager.model.request.ReviewSignForm;
 
 @Service
@@ -58,6 +66,8 @@ public class ReviewService {
 	static final String IDX_OPEN_ROUND = "IND_IM_ACCT_REVIEW_02";
 	/** IM_ACCT_HIST.RESULT_DESCR 欄寬（與 RequestService 同） */
 	static final int RESULT_DESCR_MAX = 1000;
+	/** IM_ACCT.REVIEW_FLAG_REASON 欄寬（與 EmergencyService 同） */
+	static final int FLAG_REASON_MAX = 500;
 	private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 	private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -65,15 +75,17 @@ public class ReviewService {
 	private final ReviewDao reviewDao;
 	private final AcctDao acctDao;
 	private final AcctHistDao acctHistDao;
+	private final NotificationService notificationService;
 	private final TransactionTemplate tx;
 	private final Clock clock;
 
 	public ReviewService(PermissionService perm, ReviewDao reviewDao, AcctDao acctDao, AcctHistDao acctHistDao,
-			TransactionTemplate tx, Clock clock) {
+			NotificationService notificationService, TransactionTemplate tx, Clock clock) {
 		this.perm = perm;
 		this.reviewDao = reviewDao;
 		this.acctDao = acctDao;
 		this.acctHistDao = acctHistDao;
+		this.notificationService = notificationService;
 		this.tx = tx;
 		this.clock = clock;
 	}
@@ -93,12 +105,8 @@ public class ReviewService {
 	 * versionNo＝進行中那一輪的版本，還沒有一輪時帶 0（①B）
 	 */
 	public ReviewActionResult sign(Identity id, String acctId, ReviewSignForm form) {
-		String half = Texts.trimToNull(form == null ? null : form.getHalf());
-		if (half == null || !AcctConst.REVIEW_HALVES.contains(half)) {
-			throw AcctMsg.badCode(AcctMsg.WHAT_REVIEW_HALF);
-		}
+		String half = requireHalf(id, form == null ? null : form.getHalf());
 		boolean infra = AcctConst.HALF_INFRA.equals(half);
-		perm.require(id, infra ? AcctConst.PERM_REVIEW_SIGN_INFRA : AcctConst.PERM_REVIEW_SIGN_GOV);
 		if (form.getVersionNo() == null) {
 			throw AcctMsg.required(LABEL_VERSION);
 		}
@@ -165,6 +173,77 @@ public class ReviewService {
 		return r;
 	}
 
+	/**
+	 * 駁回一半（R3b；權限同簽核）：任一半駁回整輪結束（③A），帳號標審查異常旗標（來源 REVIEW）、寫 REVIEW_REJECT 歷史，
+	 * 提交後寄駁回信。不動審查日（④B）。versionNo 規則同簽核（①B）
+	 */
+	public ReviewActionResult reject(Identity id, String acctId, ReviewRejectForm form) {
+		String half = requireHalf(id, form == null ? null : form.getHalf());
+		boolean infra = AcctConst.HALF_INFRA.equals(half);
+		String reason = Texts.trimToNull(form.getReason());
+		if (reason == null) {
+			throw AcctMsg.required(AcctMsg.WHAT_REVIEW_REASON);
+		}
+		Texts.maxChars(AcctMsg.WHAT_REVIEW_REASON, reason, AcctConst.REVIEW_REASON_MAX);
+		if (form.getVersionNo() == null) {
+			throw AcctMsg.required(LABEL_VERSION);
+		}
+		int v = form.getVersionNo();
+		LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+		LocalDate today = now.toLocalDate();
+		String flagReason = Texts.truncate(AcctConst.REVIEW_FLAG_PREFIX + reason, FLAG_REASON_MAX);
+
+		ReviewActionResult r = tx.execute(s -> {
+			// ①A：先鎖帳號列——首次動作就是駁回會直接 INSERT 一列 REJECTED（不受 IND_02 約束），只能靠這把鎖與同時的首簽互斥
+			acctDao.lockForReview(acctId);
+			ReviewItem item = loadSignable(acctId, today);
+			long reviewId;
+			int version;
+			if (item.getReviewId() == null) {
+				if (v != 0) {
+					throw AcctMsg.concurrent();
+				}
+				reviewId = reviewDao.nextReviewId();
+				LocalDate due = item.getNextReviewDate() == null ? today : item.getNextReviewDate().toLocalDate();
+				reviewDao.insertRejected(reviewId, acctId, due, half, id.getUserId(), id.getRealUserId(), reason, now);
+				version = 0;
+			} else {
+				if (v != item.getReviewVersionNo()) {
+					throw AcctMsg.concurrent();
+				}
+				reviewId = item.getReviewId();
+				// ②A：另一半是我簽的就不能再由我駁回（⑪A 延伸）
+				checkSameSigner(id, item, infra);
+				// ①A：被駁回的那一半已有人簽 → 0 筆 → 409
+				if (reviewDao.rejectRound(reviewId, v, half, id.getUserId(), id.getRealUserId(), reason, now) != 1) {
+					throw AcctMsg.concurrent();
+				}
+				version = v + 1;
+			}
+			int rows = acctDao.flagReview(acctId, flagReason, AcctConst.FLAG_SRC_REVIEW, id.getUserId(), now, id.getRealUserId());
+			if (rows != 1) {
+				log.error("定期審查駁回標旗標影響筆數 {}（預期 1），交易回復 acctId={} reviewId={}", rows, acctId, reviewId);
+				throw ApiException.internal("資料寫入未完成（帳號 " + acctId + "），請聯絡系統管理員");
+			}
+			acctHistDao.insert(rejectHist(id, item, reviewId, half, reason, now));
+			return result(acctId, reviewId, AcctConst.RR_REJECTED, version);
+		});
+		log.info("定期審查駁回 acctId={} half={} reviewId={} rejectBy={} realUser={}", acctId, half, r.getReviewId(),
+				id.getUserId(), id.getRealUserId());
+		notificationService.reviewEvent(AcctConst.EV_REVIEW_REJECT, r.getReviewId(), id.getRealUserId());
+		return r;
+	}
+
+	/** half 不是 INFRA／GOV → 400；再依半邊要求 REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV（簽核與駁回同一組權限） */
+	private String requireHalf(Identity id, String raw) {
+		String half = Texts.trimToNull(raw);
+		if (half == null || !AcctConst.REVIEW_HALVES.contains(half)) {
+			throw AcctMsg.badCode(AcctMsg.WHAT_REVIEW_HALF);
+		}
+		perm.require(id, AcctConst.HALF_INFRA.equals(half) ? AcctConst.PERM_REVIEW_SIGN_INFRA : AcctConst.PERM_REVIEW_SIGN_GOV);
+		return half;
+	}
+
 	/** 交易內重讀：查無 404；狀態不是待複審／逾期未審 409（含異常、正常、不在範圍） */
 	private ReviewItem loadSignable(String acctId, LocalDate today) {
 		ReviewItem item = reviewDao.findByAcct(acctId, today);
@@ -203,18 +282,47 @@ public class ReviewService {
 		sb.append("定期審查完成（雙簽）；Infra 半 ").append(infraName).append(" 於 ").append(DATE_TIME_FMT.format(infraDate));
 		sb.append("；治理半 ").append(govName).append(" 於 ").append(DATE_TIME_FMT.format(govDate));
 		sb.append("；上次審查日改為 ").append(DATE_FMT.format(today)).append("、下次應審查日 ").append(DATE_FMT.format(next));
+		return reviewHist(id, item, reviewId, AcctConst.ACT_REVIEW_DONE, infra, sb.toString(), now);
+	}
 
+	/**
+	 * REVIEW_REJECT 歷史（㉑A）：說明寫駁回半邊、駁回人（有效身分）、原因、另一半簽核狀況；IS_SELF_ACTION 判準同完成
+	 * （駁回人或另一半的簽核人是原申請人）
+	 */
+	private static AcctHist rejectHist(Identity id, ReviewItem item, long reviewId, String half, String reason, LocalDateTime now) {
+		boolean infra = AcctConst.HALF_INFRA.equals(half);
+		String otherName = infra ? item.getGovSignByName() : item.getInfraSignByName();
+		LocalDateTime otherDate = infra ? item.getGovSignDate() : item.getInfraSignDate();
+		String otherHalf = AcctConst.reviewHalfName(infra ? AcctConst.HALF_GOV : AcctConst.HALF_INFRA);
+		StringBuilder sb = new StringBuilder();
+		sb.append("定期審查駁回（").append(AcctConst.reviewHalfName(half)).append("）；駁回人 ").append(id.getUserName());
+		sb.append("；原因：").append(reason);
+		if (otherDate == null) {
+			sb.append("；").append(otherHalf).append("尚未簽核");
+		} else {
+			sb.append("；").append(otherHalf).append("已由 ").append(otherName).append(" 於 ").append(DATE_TIME_FMT.format(otherDate))
+					.append(" 簽核（本輪結束，下輪兩半重簽）");
+		}
+		return reviewHist(id, item, reviewId, AcctConst.ACT_REVIEW_REJECT, infra, sb.toString(), now);
+	}
+
+	/**
+	 * 定期審查歷史共用欄：SOURCE_CODE＝REVIEW、REVIEW_ID＝本輪；REQ_ID／EMG_ID／STAGE_ID／APPLY_DEPT 空；
+	 * ACT_BY＝實際操作人、ACT_AS＝代理身分；IS_SELF_ACTION＝我（有效身分）或另一半的簽核人是該帳號原新增申請人（M2 ③A，兩半判準一致）
+	 */
+	private static AcctHist reviewHist(Identity id, ReviewItem item, long reviewId, String action, boolean infra, String descr,
+			LocalDateTime now) {
 		AcctHist h = new AcctHist();
 		h.setAcctId(item.getAcctId());
 		h.setReviewId(reviewId);
 		h.setSourceCode(AcctConst.HIST_SRC_REVIEW);
-		h.setActionCode(AcctConst.ACT_REVIEW_DONE);
+		h.setActionCode(action);
 		h.setActBy(id.getRealUserId());
 		h.setActByName(id.getRealUserName());
 		h.setActAsId(id.actAsId());
 		h.setActAsName(id.actAsName());
 		h.setActDate(now);
-		h.setResultDescr(Texts.truncate(sb.toString(), RESULT_DESCR_MAX));
+		h.setResultDescr(Texts.truncate(descr, RESULT_DESCR_MAX));
 		String otherBy = infra ? item.getGovSignBy() : item.getInfraSignBy();
 		String applyBy = item.getApplyBy();
 		h.setIsSelfAction(applyBy != null && (applyBy.equals(id.getUserId()) || applyBy.equals(otherBy)) ? 1 : 0);

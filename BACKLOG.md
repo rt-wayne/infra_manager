@@ -17,9 +17,9 @@
 | 158 | 定期權限審查（SA §5.10、J04；從第 14 項拆出）：審查狀態即時計算、Infra／治理雙簽、駁回標旗標、J04 待複審信、J02 加逾期未審、待辦、首頁第四區兩張卡、鈴鐺類別 2。21 項裁示 2026-10-30 全部依 architect 建議，分 R0～R10 共 12 段 | [backlog/158-定期審查.md](backlog/158-定期審查.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：R3a 已結案（審查修正 ①A 鎖帳號列、M2 ③A 自行審查、PRD 四處已 commit）；接著 R3b（`POST /reviews/{acctId}/reject`），開工前先讀 `backlog/158-定期審查.md` 交接段的「R3b／R4 設計前提」（寫入交易先 `AcctDao.lockForReview`，鎖序帳號主表 → IM_ACCT_REVIEW）。遺留：`GET /api/v1/reviews` 未登入回 401 要等使用者以新 jar 重啟 8989 後補驗
+- 下一步：R3b 第 1 單位（駁回 API `POST /reviews/{acctId}/reject`＋駁回信 REVIEW_REJECT）已 commit；接著第 2 單位 HolderGuard 守門（拿掉 REVIEW_SIGN_* 時列出進行中且該半未簽的輪），再 R3b 收尾派 code-reviewer（範圍 `aa917ac` 起）與 test-runner。遺留：`GET /api/v1/reviews` 未登入回 401 要等使用者以新 jar 重啟 8989 後補驗
 - 已改動（未 commit）：無
-- 本階段起點：R3b 尚未開工（R0 `05865e0`、R1 `f2219ec`、R2 `146e78a`、R3a `53eb425`）
+- 本階段起點：R3b `aa917ac`（R0 `05865e0`、R1 `f2219ec`、R2 `146e78a`、R3a `53eb425`）
 - 卡住／待確認：UAT／正式環境的 R1 腳本於 R5 部署前執行（SETUP 第 6 節已寫）
 
 ## 已拍板待實作
