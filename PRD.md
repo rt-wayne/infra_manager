@@ -127,14 +127,14 @@
 | SYS_IMPERSONATE＝切換身分 | SYS | 1 |
 | SYS_JOB_RUN＝手動觸發排程 | SYS | 1 |
 | ACC_EXPORT＝帳號權限清單匯出（帳號列表「匯出 Excel」） | ACCT | 1（同碼的「批次匯出帳號歷史」仍為階段 2，見 BACKLOG 第 14 項） |
-| REVIEW_LIST、REVIEW_SIGN_INFRA、REVIEW_SIGN_GOV＝定期審查清單／Infra 半簽核／治理半簽核 | REVIEW | 2 |
+| REVIEW_LIST、REVIEW_SIGN_INFRA、REVIEW_SIGN_GOV＝定期審查清單／Infra 半簽核／治理半簽核 | REVIEW | 1（REVIEW_LIST 見「15. 定期審查」；REVIEW_SIGN_* 已進可見清單，簽核判斷點隨簽核 API 上線，進度見 BACKLOG 第 158 項） |
 | EMG_APPLY、EMG_VIEW_ALL、EMG_DECIDE＝緊急存取申請／看全部／補核准退回結案 | EMG | 1（見「14. 緊急存取」） |
 | STATS_VIEW＝統計頁 | STATS | 2 |
 | INSP_EXPORT＝巡檢紀錄匯出 | INSP | 2 |
 | MAINT_ASSET_CODE＝資產分類說明維護 | ACCT | 3 |
 | MAINT_INSP_ITEM＝巡檢項目維護 | INSP | 3 |
 
-「階段」欄以程式現況為準：標 2、3 的權限碼只存在於資料，程式沒有對應功能。程式不讀 IM_ACCT_PERM 的 PHASE_CODE，所以兩者可能不同——ACC_EXPORT 與 EMG_APPLY、EMG_VIEW_ALL、EMG_DECIDE 在初始資料的 PHASE_CODE 為 2。有功能的碼以程式常數 `ADMIN_VISIBLE_PERMS`（20 碼）為準，角色權限設定頁只顯示這 20 碼；其餘 8 碼（SYS_AUDIT_VIEW 與標 2、3 的 7 碼）在頁上隱藏、不能勾選，既有授予原樣保留。MAINT_ASSET_CODE、MAINT_INSP_ITEM 初始資料不授予任何角色。
+「階段」欄以程式現況為準：標 2、3 的權限碼只存在於資料，程式沒有對應功能。程式不讀 IM_ACCT_PERM 的 PHASE_CODE，所以兩者可能不同——ACC_EXPORT 與 EMG_APPLY、EMG_VIEW_ALL、EMG_DECIDE 在初始資料的 PHASE_CODE 為 2。有功能的碼以程式常數 `ADMIN_VISIBLE_PERMS`（23 碼）為準，角色權限設定頁只顯示這 23 碼；其餘 5 碼（SYS_AUDIT_VIEW 與標 2、3 的 4 碼）在頁上隱藏、不能勾選，既有授予原樣保留。MAINT_ASSET_CODE、MAINT_INSP_ITEM 初始資料不授予任何角色。
 
 **角色 × 權限**（初始資料 35 列，隨 `db\infra_manager_init_data.sql` 建立；上線後可在角色權限設定頁調整（GENERAL 除外，只能 DB 維護），現況以 DB 的 IM_ACCT_ROLE_PERM 為準，查詢 SQL 見 `SETUP.md` 第 6 節「查某個權限碼給了哪些角色」）
 
@@ -174,7 +174,7 @@
 | 指派候選人 | SYS_ROLE 或 SYS_EXECUTOR | 有效使用者（本系統啟用且同步表 `PX_SYNC_EMP` 查得到），含自己；只回工號與姓名 |
 
 - **可看申請單**（任一）：我是申請人；我有 ACC_LIST_FULL；申請單在途且我此刻能處理目前關卡；我曾在這張單上操作過（歷史的實際操作人或代理身分是我）。
-- **可看帳號**（任一）：我有 ACC_LIST_FULL；我是原新增申請人；我曾對該帳號送過申請；我可看該帳號的任一張申請單（依上一條第 3、4 款）；該帳號在到期提醒範圍內，且我有 ACC_EXPIRY_ALL 或是該類別執行人。
+- **可看帳號**（任一）：我有 ACC_LIST_FULL；我是原新增申請人；我曾對該帳號送過申請；我可看該帳號的任一張申請單（依上一條第 3、4 款）；該帳號在到期提醒範圍內，且我有 ACC_EXPIRY_ALL 或是該類別執行人；我有 REVIEW_LIST 且該帳號有審查狀態（在審查範圍內或掛審查異常旗標且未刪除，定義見「15. 定期審查」）。
 
 **執行人對照（關卡 6）**：IM_EXEC_MAP 中類別＝申請單類別、工號＝有效身分、STATUS＝1；同類別多人時任一人可執行；名單在執行人對照頁（`/admin/executors`）維護。同一人可兼簽核人與執行人（系統不阻擋，只在歷史記 IS_SELF_ACTION）。
 
@@ -550,6 +550,20 @@
   - 送單量：所有員工都有 EMG_APPLY 且沒有送單次數上限，EA 單號每日 999 可被一人用光。濫用靠登入與申請人／建立者欄位、log 追責；真被濫用再做每人未補核准張數上限。
   - 清單：API 與畫面都沒有筆數上限、不分頁，預設全部日期。單量預估很小（只在緊急時送），資料量真的變大再加分頁或改預設近 30 天。
   - 詳情彈窗送出補核准或退回期間，主、子彈窗的關閉鈕與遮罩外觀照常但按了無效、沒有提示；請求有 120 秒逾時，成功路徑最多等送出加重載約 240 秒，不會卡死。要改須讓共用彈窗元件 `BaseModal` 多一個停用關閉鈕的參數（11 個彈窗要重測），日後獨立成一個單位處理。
+
+#### 15. 定期審查（SA §5.10）
+
+**本功能分批施工中，進度見 `BACKLOG.md` 第 158 項**；本節只寫已上線的部分：審查狀態定義與清單 API。簽核、駁回、帳號異動時取消進行中一輪、待複審通知（J04）、待辦、首頁第四區、鈴鐺與畫面尚未上線。
+
+- **審查範圍**：帳號狀態為 APPROVED（生效中），且符合任一——資產分類的 IS_REVIEW_TRIGGER＝1（只看啟用中的分類，分類停用或查無視同不符）、類別為門禁卡（DOOR）、IS_PRIV＝1。與「6. 7 關簽核」的審查日期寫入條件、關卡 5 免簽判斷是同一個判斷（程式共用 `ReviewRule.matches`；SQL 片段 `ReviewDao.REVIEW_SCOPE_COND` 對齊，有測試鎖住）。已逾期（EXPIRED）、停用、刪除、審核中的帳號都不在範圍。
+- **審查狀態**（不存欄位，每次查詢以當天日期即時計算，SQL 片段 `ReviewDao.REVIEW_STATE_EXPR`；清單、之後的首頁卡、排程、鈴鐺、簽核都用同一句），依序判斷：
+  1. **ABNORMAL 審查異常**：IS_REVIEW_FLAG＝1 且帳號未刪除——不分旗標來源、不分帳號狀態（停用中的也算），優先於其他狀態；
+  2. 不在審查範圍 → **沒有審查狀態**（清單不列、不適用）；
+  3. **OVERDUE 逾期未審**：LAST_REVIEW_DATE 或 NEXT_REVIEW_DATE 為空，或 NEXT_REVIEW_DATE < 今天；
+  4. **DUE 待複審**：NEXT_REVIEW_DATE ≤ 今天＋30（含當天）；
+  5. **NORMAL 正常**：其餘。
+- **誰能看**：有 REVIEW_LIST 的人（初始資料：INFRA_MGR、GOV_MGR、IT_HEAD）看全部，沒有就 403；不做「只看自己的」。有 REVIEW_LIST 的人同時取得「可看帳號」第六條（見「2. 權限與資料範圍」），能開有審查狀態的帳號明細與歷史。
+- **清單**：`GET /reviews`，預設列需要處理的三種（異常、逾期未審、待複審），stateCode 給 NORMAL 才列正常的；每列帶進行中那一輪（IM_ACCT_REVIEW 的 OPEN 列）的兩半簽核人與時間，目前沒有程式會寫入這張表，所以皆為空。欄位與錯誤見「API 規格」。
 
 ### 使用者流程
 
@@ -984,7 +998,7 @@ END
 
 **IM_EMG_AFFECT_ACCT 緊急存取受影響帳號**（只增不改；STATUS 固定 1；回報與結案登記各自成列、互不覆蓋）：EMG_ID（PK）VARCHAR2(20)；AFFECT_TYPE_CODE（PK）VARCHAR2(10)（REPORT＝申請人回報、CLOSE＝異常結案登記）；ACCT_ID（PK）VARCHAR2(20)；AFFECT_DESCR VARCHAR2(500 CHAR)（該帳號的異動說明；REPORT 與 CLOSE 皆選填）；RECORD_BY VARCHAR2(30) 必（有效身分）；RECORD_DATE DATE 必。索引 IND_IM_EMG_AFFECT_ACCT_01（ACCT_ID）。
 
-**IM_ACCT_REVIEW 定期審查簽核紀錄**（每帳號每輪一筆；SEQ_IM_ACCT_REVIEW；STATUS 固定 1。**本表只有結構、尚無程式讀寫**：定期審查功能分批施工中，簽核與駁回（R3）、帳號異動取消（R4）、畫面（R5）等進度見 `BACKLOG.md` 第 158 項）
+**IM_ACCT_REVIEW 定期審查簽核紀錄**（每帳號每輪一筆；SEQ_IM_ACCT_REVIEW；STATUS 固定 1。**程式目前只讀不寫**：`GET /reviews` 帶出進行中（OPEN）那一輪的兩半簽核人；寫入隨簽核與駁回 API 上線。定期審查功能分批施工中，進度見 `BACKLOG.md` 第 158 項）
 
 | 欄 | 型別 | 必 | 說明 |
 |---|---|---|---|
@@ -1192,6 +1206,14 @@ keyword 以 LIKE 比對 INSP_ID、INSP_BY_NAME、ACT_AS_NAME（跳脫 `\ % _`，
 
 keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）。狀態由 DECIDE_CODE、CLOSE_DATE、DUE_DATE 與查詢當下時間計算（時間以參數綁定，不用 SYSDATE）。
 
+**定期審查**（功能分批施工中，進度見 `BACKLOG.md` 第 158 項）
+
+| 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
+|---|---|---|---|---|---|
+| GET | `/reviews` | REVIEW_LIST（看全部，沒有就 403，不做「只看自己」） | query：keyword、stateCode（ABNORMAL／OVERDUE／DUE／NORMAL；不給＝ABNORMAL＋OVERDUE＋DUE） | [acctId、catgId、catgName、acctName、sysName、assetClassId、assetClassName、isPriv、holderName、holderDept、accessLevelCode、acctStateCode、applyBy、applyByName、lastReviewDate、nextReviewDate、isReviewFlag、reviewFlagReason、reviewFlagSourceCode、reviewFlagDate、reviewStateCode、reviewId、reviewVersionNo、infraSignBy、infraSignByName、infraSignDate、govSignBy、govSignByName、govSignDate（後 8 欄＝進行中那一輪，沒有就 null）] | 403、400 欄位內容不正確（狀態） |
+
+keyword 以 LIKE 比對 ACCT_ID、ACCT_NAME、HOLDER_NAME、SYS_NAME（跳脫同上）。不在審查範圍（reviewStateCode 為空）的帳號不會出現；排序：審查異常 → 逾期未審（下次應審查日最舊先、空值最前）→ 待複審 → 正常，同狀態依下次應審查日、單號。審查狀態定義見「15. 定期審查」。
+
 **排程**
 
 | 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
@@ -1209,7 +1231,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | GET | `/admin/executors` | SYS_EXECUTOR | — | [catgId、catgName、enabled（是否開放新申請）、sortSeq、members[同上]]；8 類全列（含 enabled＝false——關閉新申請的類別仍可能有在途單要執行），依 SORT_SEQ | 403（不寫軌跡） |
 | POST | `/admin/executors/{catgId}/members` | SYS_EXECUTOR | userId、reason（必填，500 字內） | catgId、userId、result＝GRANTED | 403（寫 DENY）、409 E25、400 E02「對象」、E10／E11「原因」、欄位內容不正確：帳號類別（不存在或 STATUS＝0；enabled＝false 仍可指派）、404 N01、409 E26、E21 |
 | POST | `/admin/executors/{catgId}/members/{userId}/revoke` | SYS_EXECUTOR | reason（必填，500 字內） | catgId、userId、result＝REVOKED | 403（寫 DENY）、409 E25、400 E10／E11、欄位內容不正確：帳號類別、409 E26、E22、E23（寫 DENY；執行人對照與 SYS_ROLE 無關，不會有 E24） |
-| GET | `/admin/role-perms` | SYS_ROLE | — | modules[moduleCode、perms[permId、permName、sortSeq]]（只列可見碼——程式常數 `ADMIN_VISIBLE_PERMS` 的 20 碼且 IM_ACCT_PERM 啟用中，依 SORT_SEQ、模組依首次出現；8 個尚無功能的碼隱藏）；roles[roleId、roleName、roleDescr、readOnly（GENERAL 為 true）、memberCount（成員是有效使用者——本系統啟用且同步表查得到——的啟用中指派數；GENERAL＝有效使用者總數，不含尚未首次登入的資格內人員）、grantedPermIds[]（只列可見碼）、hiddenGrantedCount（已授予但隱藏的碼數；前端目前不顯示）]；含 GENERAL、不含停用角色 | 403（不寫軌跡） |
+| GET | `/admin/role-perms` | SYS_ROLE | — | modules[moduleCode、perms[permId、permName、sortSeq]]（只列可見碼——程式常數 `ADMIN_VISIBLE_PERMS` 的 23 碼且 IM_ACCT_PERM 啟用中，依 SORT_SEQ、模組依首次出現；5 個尚無功能的碼隱藏）；roles[roleId、roleName、roleDescr、readOnly（GENERAL 為 true）、memberCount（成員是有效使用者——本系統啟用且同步表查得到——的啟用中指派數；GENERAL＝有效使用者總數，不含尚未首次登入的資格內人員）、grantedPermIds[]（只列可見碼）、hiddenGrantedCount（已授予但隱藏的碼數；前端目前不顯示）]；含 GENERAL、不含停用角色 | 403（不寫軌跡） |
 | POST | `/admin/roles/{roleId}/perms` | SYS_ROLE | added[]、removed[]、reason（必填，500 字內）；只送差異、不帶版本欄 | roleId、added[]、removed[]、result＝SAVED | 依序：403（寫 DENY，只記 roleId 與碼數）、409 E25、400 E10／E11、欄位內容不正確：角色（不存在／停用／GENERAL）、400「沒有任何變更」、欄位內容不正確：權限碼（重複、同碼在兩邊、不在可見清單含隱藏碼）、409 E26、E27（任一格現況與請求不符）、E24（拿掉後無人持有 SYS_ROLE，寫 DENY、優先）、E23（拿掉的碼有在途單且無人接手，寫 DENY、依碼分組列單號） |
 
 寫入 API 的交易第一句對 IM_ACCT_ROLE 的 GENERAL 列 `SELECT … FOR UPDATE WAIT 5` 當全域互斥（等待逾時 → E26），取鎖後才做名單現況與持有人檢查；成功時名單與軌跡同一交易，E23／E24 先回滾再於交易外寫 DENY。角色權限存檔一次處理一個角色的差異：removed 的碼 UPDATE 1→0；added 的碼原列 STATUS＝0 則 UPDATE 0→1（保留 CREATE_*）、無列才 INSERT；每個拿掉的碼各自以「排除該角色＋該碼那一格」算持有人，一次收集所有被擋的碼；隱藏碼送來回 400、既有授予列原樣保留。移除的擋下條件（三者同時成立）：該角色授予的某權限碼在變更前有人持有、變更後無人持有、且有在途案件需要它（申請單依關卡 PERM_ID；EMG_DECIDE 另含緊急存取未處理與已退回未結案）；SYS_ROLE 由有人變無人則不論在途一律 E24。執行人對照用同一套三條件：「持有人」換成該類別的啟用中執行人、「在途」換成停在關卡 6（待執行）的同類別申請單。重新指派（原列 STATUS＝0）只更新 UPDATE_*、保留 CREATE_*；對象已停用或使用者表查無的列仍可移除；管理員可改自己。

@@ -11,6 +11,10 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R2：可看帳號多一條——有 REVIEW_LIST 的人可看審查範圍內（APPROVED 且符合 ReviewRule.matches）
+//           或掛審查異常旗標且未刪除的帳號（與 ReviewDao.REVIEW_STATE_EXPR 不為 NULL 同口徑）；建構子多傳 CodeService 查資產分類
 // ============================================================
 
 import java.time.LocalDate;
@@ -41,11 +45,13 @@ public class PermissionService {
 	private final PermDao permDao;
 	private final AcctReqDao acctReqDao;
 	private final AcctHistDao acctHistDao;
+	private final CodeService codeService;
 
-	public PermissionService(PermDao permDao, AcctReqDao acctReqDao, AcctHistDao acctHistDao) {
+	public PermissionService(PermDao permDao, AcctReqDao acctReqDao, AcctHistDao acctHistDao, CodeService codeService) {
 		this.permDao = permDao;
 		this.acctReqDao = acctReqDao;
 		this.acctHistDao = acctHistDao;
+		this.codeService = codeService;
 	}
 
 	/** 自 DB 讀取當下的權限（spec §2.3：每次請求依當下名單判斷，不跨請求快取） */
@@ -139,10 +145,13 @@ public class PermissionService {
 
 	/**
 	 * 可看帳號：ACC_LIST_FULL、原新增申請人、曾對該帳號送過申請、可看該帳號的任一張申請單（此刻能處理在途單或曾操作過）、
-	 * 在到期提醒範圍且有 ACC_EXPIRY_ALL 或是該類別執行人
+	 * 在到期提醒範圍且有 ACC_EXPIRY_ALL 或是該類別執行人、有 REVIEW_LIST 且帳號有審查狀態（在審查範圍或掛旗標）
 	 */
 	public boolean canViewAccount(Identity id, Acct a, Map<Integer, ApprStage> stages, LocalDate today) {
 		if (can(id, AcctConst.PERM_ACC_LIST_FULL) || id.getUserId().equals(a.getApplyBy())) {
+			return true;
+		}
+		if (can(id, AcctConst.PERM_REVIEW_LIST) && hasReviewState(a)) {
 			return true;
 		}
 		if (inExpiringRange(a.getAcctStateCode(), a.getExpiryTypeCode(), a.getExpiryDate() == null ? null
@@ -154,6 +163,18 @@ public class PermissionService {
 		}
 		AcctReq inFlight = acctReqDao.findInFlightByAcct(a.getAcctId());
 		return inFlight != null && canHandleNow(id, inFlight, stages);
+	}
+
+	/**
+	 * 帳號有審查狀態（與 ReviewDao.REVIEW_STATE_EXPR 不為 NULL 同口徑）：掛審查異常旗標且未刪除，或在審查範圍
+	 * （APPROVED 且分類為審查觸發／門禁卡／特權；分類只取啟用中的，停用分類視同不符）
+	 */
+	boolean hasReviewState(Acct a) {
+		if (Integer.valueOf(1).equals(a.getIsReviewFlag()) && !AcctConst.AS_DELETED.equals(a.getAcctStateCode())) {
+			return true;
+		}
+		return AcctConst.AS_APPROVED.equals(a.getAcctStateCode())
+				&& ReviewRule.matches(codeService.findAssetClass(a.getAssetClassId()), a.getCatgId(), a.getIsPriv());
 	}
 
 	/** 鈴鐺逐筆相關（spec §4.13）：ACC_EXPIRY_ALL、原新增申請人、該類別執行人 */

@@ -73,6 +73,10 @@ package com.mpx.infra_manager.common;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-29
 // 變更說明: 加 STAGE_HEAD_DECIDE（關卡 4 核准時判斷是否跳過關卡 5 資訊主管；不符合審查條件即跳過）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R2（定期權限審查）：權限碼 REVIEW_LIST／REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 進可見清單（20 → 23 碼）；
+//           審查狀態碼 4 種（ABNORMAL／OVERDUE／DUE／NORMAL，由 ReviewDao.REVIEW_STATE_EXPR 算出）與待複審天數 REVIEW_DUE_DAYS＝30
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -267,10 +271,14 @@ public final class AcctConst {
 	public static final String PERM_EMG_APPLY = "EMG_APPLY";
 	public static final String PERM_EMG_VIEW_ALL = "EMG_VIEW_ALL";
 	public static final String PERM_EMG_DECIDE = "EMG_DECIDE";
+	/** 定期審查（BACKLOG 第 158 項）：清單與看全部（裁示 ⑬A）、Infra 半簽核、治理半簽核（簽核判斷點 R3 上線） */
+	public static final String PERM_REVIEW_LIST = "REVIEW_LIST";
+	public static final String PERM_REVIEW_SIGN_INFRA = "REVIEW_SIGN_INFRA";
+	public static final String PERM_REVIEW_SIGN_GOV = "REVIEW_SIGN_GOV";
 	/** 關卡 2～5 核准與關卡 7 複驗：程式從 IM_ACCT_APPR_STAGE.PERM_ID 取，不另設 PERM_* 常數；角色權限設定頁要能授予，所以列在這裡 */
 	public static final List<String> PERM_STAGE_CODES = List.of("APPR_G2", "APPR_G3", "APPR_G4", "APPR_G5", "VERIFY_G7");
 	/**
-	 * 角色權限設定頁可見的權限碼（裁示 ⑩A／⑮A）：目前有功能的 20 碼，隱藏的 8 碼（SYS_AUDIT_VIEW、REVIEW_*、STATS_VIEW、INSP_EXPORT、
+	 * 角色權限設定頁可見的權限碼（裁示 ⑩A／⑮A）：目前有功能的 23 碼，隱藏的 5 碼（SYS_AUDIT_VIEW、STATS_VIEW、INSP_EXPORT、
 	 * MAINT_*）沒有判斷點，授了也沒效果，不放出來；隱藏碼既有的授予列原樣保留。可見與否不看 DB 的 PHASE_CODE（語意對不上）。
 	 * 新功能上線時：加 PERM_* 常數的同一 commit 要加進這裡（SqlConstantScanTest 強制）
 	 */
@@ -278,7 +286,8 @@ public final class AcctConst {
 			Stream.of(PERM_ACC_APPLY, PERM_ACC_SELF_SERVICE, PERM_ACC_LIST_FULL, PERM_ACC_EXPIRY_ALL, PERM_ACC_EXPORT),
 			Stream.concat(PERM_STAGE_CODES.stream(),
 					Stream.of(PERM_INSP_VIEW, PERM_INSP_CREATE, PERM_INSP_RESOLVE, PERM_SYS_ROLE, PERM_SYS_EXECUTOR,
-							PERM_SYS_IMPERSONATE, PERM_SYS_JOB_RUN, PERM_EMG_APPLY, PERM_EMG_VIEW_ALL, PERM_EMG_DECIDE)))
+							PERM_SYS_IMPERSONATE, PERM_SYS_JOB_RUN, PERM_EMG_APPLY, PERM_EMG_VIEW_ALL, PERM_EMG_DECIDE,
+							PERM_REVIEW_LIST, PERM_REVIEW_SIGN_INFRA, PERM_REVIEW_SIGN_GOV)))
 			.toList();
 
 	// 類別、期限、門禁（Table 6.5、spec §4.9）
@@ -295,6 +304,17 @@ public final class AcctConst {
 
 	// 審查、到期
 	public static final int REVIEW_CYCLE_DAYS = 180;
+	/** 待複審範圍：下次應審查日 ≤ 今天＋30（SA §5.10；BACKLOG 第 158 項） */
+	public static final int REVIEW_DUE_DAYS = 30;
+	/**
+	 * 審查狀態（不存欄位，由 ReviewDao.REVIEW_STATE_EXPR 算出；BACKLOG 第 158 項裁示 ⑨A／⑥A／⑩A）：
+	 * 審查異常（掛旗標且未刪除，優先）、逾期未審（上次或下次為空、或下次 < 今天）、待複審（下次 ≤ 今天＋30）、正常；不在審查範圍為 null
+	 */
+	public static final String RVS_ABNORMAL = "ABNORMAL";
+	public static final String RVS_OVERDUE = "OVERDUE";
+	public static final String RVS_DUE = "DUE";
+	public static final String RVS_NORMAL = "NORMAL";
+	public static final List<String> REVIEW_STATES = List.of(RVS_ABNORMAL, RVS_OVERDUE, RVS_DUE, RVS_NORMAL);
 	/** 到期提醒範圍：到期日 ≤ 今天＋30（spec §4.11） */
 	public static final int EXPIRY_WARN_DAYS = 30;
 	/** J01 到期前 7 天信 */

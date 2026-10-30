@@ -6,6 +6,9 @@
 //           APPR_G2～G5、VERIFY_G7 在 DB 是 ACCT，畫面另拆成「簽核」組（與後端 AcctConst.PERM_STAGE_CODES 同一組碼）；
 //           組的順序固定為 帳號 → 簽核 → 巡檢 → 緊急存取 → 系統管理，組內沿用後端給的順序（SORT_SEQ）；
 //           不認得的 MODULE_CODE 排在最後、組名直接顯示代碼，避免日後新模組的碼在畫面上消失
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R2：加 REVIEW「定期審查」組（REVIEW_LIST、REVIEW_SIGN_INFRA、REVIEW_SIGN_GOV 進可見清單），排在緊急存取之後、系統管理之前
 // ============================================================
 import type { AdminPerm, AdminPermModule } from '../types/admin'
 
@@ -20,6 +23,7 @@ const GROUP_ORDER: readonly { code: string; name: string }[] = [
   { code: STAGE_GROUP, name: '簽核' },
   { code: 'INSP', name: '巡檢' },
   { code: 'EMG', name: '緊急存取' },
+  { code: 'REVIEW', name: '定期審查' },
   { code: 'SYS', name: '系統管理' }
 ]
 

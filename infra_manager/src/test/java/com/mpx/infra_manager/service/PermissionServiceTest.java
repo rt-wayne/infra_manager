@@ -10,6 +10,10 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R2：可看帳號第六條——有 REVIEW_LIST 的人可看審查範圍內（特權／審查觸發分類／門禁卡，且 APPROVED）
+//           或掛旗標且未刪除的帳號；停用分類視同不符；沒有 REVIEW_LIST 的人不因此可看
 // ============================================================
 
 import static com.mpx.infra_manager.support.TestFixture.ALEX;
@@ -22,6 +26,7 @@ import static com.mpx.infra_manager.support.TestFixture.SAGE;
 import static com.mpx.infra_manager.support.TestFixture.TERRY;
 import static com.mpx.infra_manager.support.TestFixture.TESTER;
 import static com.mpx.infra_manager.support.TestFixture.TODAY;
+import static com.mpx.infra_manager.support.TestFixture.WENSEN;
 import static com.mpx.infra_manager.support.TestFixture.id;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -112,6 +117,37 @@ class PermissionServiceTest {
 		Acct h = fx.acct("AR20261001-003", "HOST", AcctConst.AS_EXPIRED);
 		assertThat(perm.canViewAccount(id(MICHAEL), h, stages, TODAY)).isFalse();
 		assertThat(perm.canViewAccount(id(TERRY), h, stages, TODAY)).as("ACC_EXPIRY_ALL").isTrue();
+	}
+
+	/** 第 158 項 R2：WENSEN＝INFRA_MGR（有 REVIEW_LIST、ACC_EXPIRY_ALL），沒有 ACC_LIST_FULL、不是任何類別執行人 */
+	@Test
+	void 可看帳號_第六條_REVIEW_LIST看審查範圍內或掛旗標的帳號() {
+		// H02 非審查觸發、非特權、DB 類別、永久有效 → 不在審查範圍也不在到期範圍
+		Acct a = fx.acct("AR20261001-004", "DB", AcctConst.AS_APPROVED);
+		assertThat(perm.canViewAccount(id(WENSEN), a, stages, TODAY)).as("不在範圍").isFalse();
+		a.setIsPriv(1);
+		assertThat(perm.canViewAccount(id(WENSEN), a, stages, TODAY)).as("特權").isTrue();
+		a.setIsPriv(0);
+		a.setAssetClassId("H01");
+		assertThat(perm.canViewAccount(id(WENSEN), a, stages, TODAY)).as("審查觸發分類").isTrue();
+		a.setAssetClassId("ZZ");
+		assertThat(perm.canViewAccount(id(WENSEN), a, stages, TODAY)).as("分類查無（含停用）視同不符").isFalse();
+		Acct door = fx.acct("AR20261001-005", "DOOR", AcctConst.AS_APPROVED);
+		assertThat(perm.canViewAccount(id(WENSEN), door, stages, TODAY)).as("門禁卡").isTrue();
+
+		// 範圍只看 APPROVED；掛旗標的停用帳號仍可看（異常不分狀態）、已刪除不算
+		a.setAssetClassId("H01");
+		a.setAcctStateCode(AcctConst.AS_DISABLED);
+		assertThat(perm.canViewAccount(id(WENSEN), a, stages, TODAY)).as("已停用不在範圍").isFalse();
+		a.setIsReviewFlag(1);
+		assertThat(perm.canViewAccount(id(WENSEN), a, stages, TODAY)).as("掛旗標").isTrue();
+		a.setAcctStateCode(AcctConst.AS_DELETED);
+		assertThat(perm.canViewAccount(id(WENSEN), a, stages, TODAY)).as("已刪除不算").isFalse();
+
+		// 沒有 REVIEW_LIST 的人不因此可看
+		Acct p = fx.acct("AR20261001-006", "DB", AcctConst.AS_APPROVED);
+		p.setIsPriv(1);
+		assertThat(perm.canViewAccount(id(TESTER), p, stages, TODAY)).isFalse();
 	}
 
 	@Test

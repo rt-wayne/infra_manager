@@ -52,6 +52,9 @@ package com.mpx.infra_manager.support;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 6：Identity 建構子少一個 telNo 參數
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R2：PermissionService 建構子多傳 CodeService（可看帳號查資產分類）；加 ReviewDao（mock）與 ReviewService（真）
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -96,6 +99,7 @@ import com.mpx.infra_manager.dao.InspDao;
 import com.mpx.infra_manager.dao.JobRunDao;
 import com.mpx.infra_manager.dao.NotifyLogDao;
 import com.mpx.infra_manager.dao.PermDao;
+import com.mpx.infra_manager.dao.ReviewDao;
 import com.mpx.infra_manager.dao.RoleAdminDao;
 import com.mpx.infra_manager.dao.UserDao;
 import com.mpx.infra_manager.model.Acct;
@@ -117,6 +121,7 @@ import com.mpx.infra_manager.service.JobService;
 import com.mpx.infra_manager.service.NotificationService;
 import com.mpx.infra_manager.service.PermissionService;
 import com.mpx.infra_manager.service.RequestService;
+import com.mpx.infra_manager.service.ReviewService;
 import com.mpx.infra_manager.service.RoleAdminService;
 import com.mpx.infra_manager.service.RolePermAdminService;
 
@@ -265,6 +270,7 @@ public class TestFixture {
 	public final HomeDao homeDao = mock(HomeDao.class);
 	public final InspDao inspDao = mock(InspDao.class);
 	public final EmgDao emgDao = mock(EmgDao.class);
+	public final ReviewDao reviewDao = mock(ReviewDao.class);
 	public final NotifyLogDao notifyLogDao = mock(NotifyLogDao.class);
 	public final JobRunDao jobRunDao = mock(JobRunDao.class);
 	public final RoleAdminDao roleAdminDao = mock(RoleAdminDao.class);
@@ -276,7 +282,7 @@ public class TestFixture {
 	// Service（真）
 	public final CodeService codeService = new CodeService(codeDao);
 	public final DocSeqService docSeqService = new DocSeqService(docSeqDao, clock);
-	public final PermissionService permissionService = new PermissionService(permDao, acctReqDao, acctHistDao);
+	public final PermissionService permissionService = new PermissionService(permDao, acctReqDao, acctHistDao, codeService);
 	public final RequestService requestService = new RequestService(permissionService, codeService, docSeqService, acctReqDao,
 			acctDao, acctHistDao, attachDao, attachmentService, notificationService, tx, clock);
 	public final AccountService accountService = new AccountService(permissionService, codeService, acctDao, acctHistDao, clock);
@@ -285,6 +291,7 @@ public class TestFixture {
 			clock);
 	public final EmergencyService emergencyService = new EmergencyService(permissionService, codeService, docSeqService, emgDao,
 			acctDao, acctHistDao, notificationService, tx, clock);
+	public final ReviewService reviewService = new ReviewService(permissionService, reviewDao, clock);
 	public final HolderGuard holderGuard = new HolderGuard(roleAdminDao);
 	public final AdminLogWriter adminLogWriter = new AdminLogWriter(adminLogDao);
 	public final RoleAdminService roleAdminService = new RoleAdminService(permissionService, roleAdminDao, userDao, codeService,

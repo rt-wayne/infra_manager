@@ -99,6 +99,11 @@ package com.mpx.infra_manager.dao;
 //           他表沒有同名欄的 6 欄（USER_EN_NAME、TEL_NO、PWD_HASH、PWD_UPDATE_DATE、LOGIN_FAIL_CNT、LOCK_DATE）所有 DAO 常數與片段一律不得出現；
 //           USER_NAME、DEPT_NAME、EMAIL 同步表或輸出別名也會用到，改為：引用 IM_ACCT_USER 的常數，其別名只能取
 //           USER_ID、STATUS、LAST_LOGIN_DATE 與共用四欄，且不得不帶別名使用這三個欄名（AS 輸出別名除外）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R2：掃描清單加 ReviewDao、ReviewController；API 數 48 → 49（GET /reviews）；
+//           可見權限碼 20 → 23（REVIEW_* 三碼改為必須在內，隱藏碼剩 5）；新增定期審查 SQL 斷言——範圍三條件與 ReviewRule.matches 對齊、
+//           分類 JOIN 帶 STATUS = 1、範圍寫成正向 WHEN（不得 NOT (…)）、狀態順序異常 → 範圍 → 逾期 → 待複審 → 正常、清單篩選與排序
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -135,16 +140,17 @@ import com.mpx.infra_manager.controller.HomeController;
 import com.mpx.infra_manager.controller.InspectionController;
 import com.mpx.infra_manager.controller.JobController;
 import com.mpx.infra_manager.controller.RequestController;
+import com.mpx.infra_manager.controller.ReviewController;
 
 class SqlConstantScanTest {
 
 	static final List<Class<?>> DAOS = List.of(AcctDao.class, AcctHistDao.class, AcctReqDao.class, AdminLogDao.class,
 			AttachDao.class, CodeDao.class, DocSeqDao.class, EmgDao.class, HomeDao.class, InspDao.class, JobRunDao.class,
-			LoginTokenDao.class, NotifyLogDao.class, PermDao.class, RoleAdminDao.class, UserDao.class);
+			LoginTokenDao.class, NotifyLogDao.class, PermDao.class, ReviewDao.class, RoleAdminDao.class, UserDao.class);
 
 	static final List<Class<?>> CONTROLLERS = List.of(AccountController.class, AdminController.class, AttachmentController.class,
 			AuthController.class, EmergencyController.class, HomeController.class, InspectionController.class, JobController.class,
-			RequestController.class);
+			RequestController.class, ReviewController.class);
 
 	/** 既有模組使用者表（IM_ACCT_USER 不算） */
 	static final Pattern IM_USER = Pattern.compile("(?<![\\w])IM_USER\\b");
@@ -494,6 +500,41 @@ class SqlConstantScanTest {
 				.contains("E.CLOSE_DATE IS NULL").doesNotContain(":now");
 	}
 
+	/** 第 158 項 R2：審查範圍 SQL 與 ReviewRule.matches 同口徑；狀態順序 異常 → 不在範圍 → 逾期 → 待複審 → 正常（裁示 ⑨A／⑥A） */
+	@Test
+	void 定期審查SQL_範圍與Java同口徑_狀態順序_清單篩選() {
+		// 範圍三條件逐一對應 ReviewRule.matches 的三個判斷；只接生效中帳號
+		assertThat(ReviewDao.REVIEW_SCOPE_COND).contains("A.ACCT_STATE_CODE = 'APPROVED'").contains("AC.IS_REVIEW_TRIGGER = 1")
+				.contains("A.CATG_ID = '" + AcctConst.CATG_DOOR + "'").contains("A.IS_PRIV = 1").startsWith("(").endsWith(")");
+		// 分類 JOIN 一定要過濾 STATUS = 1（Java 端 CodeService.findAssetClass 只回啟用中分類；AcctDao.SELECT_BASE 的 JOIN 沒過濾，不能共用）
+		assertThat(ReviewDao.JOIN_ASSET_CLASS).contains("LEFT JOIN IM_ASSET_CLASS AC").contains("AC.STATUS = 1");
+		assertThat(ReviewDao.SELECT_BASE).contains(ReviewDao.JOIN_ASSET_CLASS).contains(ReviewDao.REVIEW_STATE_EXPR)
+				.contains("AS REVIEW_STATE_CODE").contains("R.REVIEW_STATE_CODE = 'OPEN' AND R.STATUS = 1");
+		// 範圍必須是正向 WHEN：分類查無時 IS_REVIEW_TRIGGER 為 NULL，NOT (範圍) 也是 NULL，會落到逾期那支
+		assertThat(ReviewDao.REVIEW_STATE_EXPR).contains("WHEN " + ReviewDao.REVIEW_SCOPE_COND + " THEN").doesNotContain("NOT (")
+				.contains("A.IS_REVIEW_FLAG = 1 AND A.ACCT_STATE_CODE <> 'DELETED'").contains(":today").doesNotContain("SYSDATE")
+				.contains("A.LAST_REVIEW_DATE IS NULL OR A.NEXT_REVIEW_DATE IS NULL OR A.NEXT_REVIEW_DATE < :today")
+				.contains("A.NEXT_REVIEW_DATE <= :today + " + AcctConst.REVIEW_DUE_DAYS);
+		int abnormal = ReviewDao.REVIEW_STATE_EXPR.indexOf("'" + AcctConst.RVS_ABNORMAL + "'");
+		int scope = ReviewDao.REVIEW_STATE_EXPR.indexOf(ReviewDao.REVIEW_SCOPE_COND);
+		int overdue = ReviewDao.REVIEW_STATE_EXPR.indexOf("'" + AcctConst.RVS_OVERDUE + "'");
+		int due = ReviewDao.REVIEW_STATE_EXPR.indexOf("'" + AcctConst.RVS_DUE + "'");
+		int normal = ReviewDao.REVIEW_STATE_EXPR.indexOf("'" + AcctConst.RVS_NORMAL + "'");
+		assertThat(abnormal).isGreaterThan(-1).isLessThan(scope);
+		assertThat(scope).isLessThan(overdue);
+		assertThat(overdue).isLessThan(due);
+		assertThat(due).isLessThan(normal);
+		// 清單：排除不在範圍、:stateCode 空＝異常＋逾期＋待複審、關鍵字四欄 LIKE 都有 ESCAPE、排序異常 → 逾期 → 待複審 → 正常
+		assertThat(ReviewDao.FIND_LIST).contains("X.REVIEW_STATE_CODE IS NOT NULL")
+				.contains("((:stateCode IS NULL AND X.REVIEW_STATE_CODE <> 'NORMAL') OR X.REVIEW_STATE_CODE = :stateCode)")
+				.contains("UPPER(X.ACCT_ID) LIKE").contains("UPPER(X.ACCT_NAME) LIKE").contains("UPPER(X.HOLDER_NAME) LIKE")
+				.contains("UPPER(X.SYS_NAME) LIKE")
+				.contains("ORDER BY CASE X.REVIEW_STATE_CODE WHEN 'ABNORMAL' THEN 1 WHEN 'OVERDUE' THEN 2 WHEN 'DUE' THEN 3 ELSE 4 END")
+				.contains("X.NEXT_REVIEW_DATE NULLS FIRST, X.ACCT_ID");
+		assertThat(ReviewDao.FIND_LIST.split("ESCAPE '\\\\'", -1)).hasSize(5);
+		assertThat(AcctConst.REVIEW_STATES).containsExactly("ABNORMAL", "OVERDUE", "DUE", "NORMAL");
+	}
+
 	@Test
 	void 樂觀鎖_狀態轉移都帶版本與預期狀態並遞增版本() {
 		for (String sql : List.of(AcctReqDao.UPDATE_APPROVE, AcctReqDao.UPDATE_REJECT, AcctReqDao.UPDATE_EXEC_DONE,
@@ -600,7 +641,7 @@ class SqlConstantScanTest {
 
 	/** 裁示 ⑮A：每個 PERM_* 常數都要在角色權限設定頁的可見清單內，否則新功能上線後管理員無法在畫面授予（計畫風險 9） */
 	@Test
-	void 可見權限碼清單_涵蓋每個PERM常數與關卡碼_恰20碼_隱藏碼不在內() throws Exception {
+	void 可見權限碼清單_涵蓋每個PERM常數與關卡碼_恰23碼_隱藏碼不在內() throws Exception {
 		List<String> permConsts = new ArrayList<>();
 		for (Field f : AcctConst.class.getDeclaredFields()) {
 			if (f.getName().startsWith("PERM_") && f.getType() == String.class) {
@@ -609,9 +650,9 @@ class SqlConstantScanTest {
 		}
 		assertThat(permConsts).hasSizeGreaterThan(10);
 		assertThat(AcctConst.ADMIN_VISIBLE_PERMS).containsAll(permConsts).containsAll(AcctConst.PERM_STAGE_CODES)
-				.doesNotHaveDuplicates().hasSize(20)
-				.doesNotContain("SYS_AUDIT_VIEW", "REVIEW_LIST", "REVIEW_SIGN_INFRA", "REVIEW_SIGN_GOV", "STATS_VIEW", "INSP_EXPORT",
-						"MAINT_ASSET_CODE", "MAINT_INSP_ITEM");
+				.doesNotHaveDuplicates().hasSize(23)
+				.contains("REVIEW_LIST", "REVIEW_SIGN_INFRA", "REVIEW_SIGN_GOV")
+				.doesNotContain("SYS_AUDIT_VIEW", "STATS_VIEW", "INSP_EXPORT", "MAINT_ASSET_CODE", "MAINT_INSP_ITEM");
 		assertThat(AcctConst.PERM_STAGE_CODES).containsExactly("APPR_G2", "APPR_G3", "APPR_G4", "APPR_G5", "VERIFY_G7");
 		assertThat(AcctConst.ADM_ROLE_PERM_SET).hasSizeLessThanOrEqualTo(30);
 	}
@@ -658,7 +699,8 @@ class SqlConstantScanTest {
 		// 第 89 項階段 1：/admin/roles、/admin/users、/admin/roles/{roleId}/members、…/{userId}/revoke（39 → 43）
 		// 第 89 項階段 2：/admin/executors、/admin/executors/{catgId}/members、…/{userId}/revoke（43 → 46）
 		// 第 89 項階段 3：/admin/role-perms、/admin/roles/{roleId}/perms（46 → 48）
-		assertThat(apis).isEqualTo(48);
+		// 第 158 項 R2：GET /reviews（48 → 49）
+		assertThat(apis).isEqualTo(49);
 		assertThat(missing).isEmpty();
 	}
 }

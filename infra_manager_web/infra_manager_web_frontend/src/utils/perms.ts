@@ -15,9 +15,12 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 4：加 SYS_ROLE（角色指派頁、角色權限設定頁）、SYS_EXECUTOR（執行人對照頁）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R2：加 REVIEW_LIST（定期審查頁，R5 接畫面）、REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV（兩半簽核鈕，R5）
 // ============================================================
 
-/** 畫面會用到的權限碼（第一階段＋緊急存取） */
+/** 畫面會用到的權限碼（第一階段＋緊急存取＋定期審查） */
 export type PermCode =
   | 'ACC_APPLY'
   | 'ACC_SELF_SERVICE'
@@ -39,6 +42,9 @@ export type PermCode =
   | 'EMG_APPLY'
   | 'EMG_VIEW_ALL'
   | 'EMG_DECIDE'
+  | 'REVIEW_LIST'
+  | 'REVIEW_SIGN_INFRA'
+  | 'REVIEW_SIGN_GOV'
 
 /** permissions[] 是否含指定權限碼 */
 export function hasPerm(permissions: readonly string[] | null | undefined, code: PermCode): boolean {
