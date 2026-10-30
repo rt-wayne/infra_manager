@@ -200,30 +200,32 @@ COMMENT ON COLUMN IM_EMG_AFFECT_ACCT.UPDATE_BY IS '最後更新人員工號。�
 -- ===== COMMENTS：既有欄位（第二階段啟用的代碼值；只改說明、不動結構）
 COMMENT ON COLUMN IM_DOC_SEQ.DOC_TYPE_ID IS '單據前綴：AR＝帳號申請單（新增申請的單號同時是帳號單號）、IN＝機房巡檢、EA＝緊急存取';
 COMMENT ON COLUMN IM_ACCT_HIST.EMG_ID IS '來源緊急存取單號；SOURCE_CODE＝EMG 時有值，參照 IM_EMG_ACCESS.EMG_ID';
-COMMENT ON COLUMN IM_ACCT_HIST.SOURCE_CODE IS '事件來源：REQ＝簽核流程、SYS＝系統排程、EMG＝緊急存取；REVIEW＝定期審查（預留）';
-COMMENT ON COLUMN IM_ACCT_HIST.ACTION_CODE IS '動作：SUBMIT＝送出申請、RESUB＝重新送出、APPROVE＝核准、REJECT＝退件、EXEC_DONE＝回報執行完畢（帳號生效）、VERIFY_OK＝複驗通過、VERIFY_REJECT＝複驗退回、EXPIRE＝到期轉為已逾期、EMG_MODIFY＝緊急存取異動（依申請人回報，主管處理時寫入）、EMG_CLOSE_MODIFY＝緊急存取結案登記異動、FLAG_CLEAR＝審查異常旗標清除；預留 REVIEW_DONE、REVIEW_REJECT';
+-- （2026-10-30 第 158 項起：下列與定期審查相關的既有欄位 COMMENT 改為定案文字，與 infra_manager_phase2_review.sql、建表檔三檔同句，
+--   避免重跑本檔把「預留」字樣蓋回去）
+COMMENT ON COLUMN IM_ACCT_HIST.SOURCE_CODE IS '事件來源：REQ＝簽核流程、SYS＝系統排程、EMG＝緊急存取、REVIEW＝定期審查';
+COMMENT ON COLUMN IM_ACCT_HIST.ACTION_CODE IS '動作：SUBMIT＝送出申請、RESUB＝重新送出、APPROVE＝核准、REJECT＝退件、EXEC_DONE＝回報執行完畢（帳號生效）、VERIFY_OK＝複驗通過、VERIFY_REJECT＝複驗退回、EXPIRE＝到期轉為已逾期、EMG_MODIFY＝緊急存取異動（依申請人回報，主管處理時寫入）、EMG_CLOSE_MODIFY＝緊急存取結案登記異動、FLAG_CLEAR＝審查異常旗標清除、REVIEW_DONE＝定期審查完成（雙簽，寫第二半簽核時）、REVIEW_REJECT＝定期審查駁回（單半簽核與取消不寫歷史，細節在 IM_ACCT_REVIEW）';
 COMMENT ON TABLE IM_ACCT_NOTIFY_LOG IS '通知紀錄。每位收件人每封信一筆；排程類通知以 EVENT_CODE＋REF_ID＋RCPT_USER_ID 判斷是否已寄過（EMG_OVERDUE 例外：只看 EVENT_CODE＋REF_ID，每案一次）。資料來源：通知寄送。主鍵：NOTIFY_ID（序列 SEQ_IM_ACCT_NOTIFY_LOG）。保留：永久';
-COMMENT ON COLUMN IM_ACCT_NOTIFY_LOG.EVENT_CODE IS '通知事件：SUBMIT＝申請送出、RESUB＝重新送出、NEXT_STAGE＝進入下一關（關卡 2～4 核准）、TO_EXEC＝待執行（關卡 5 核准）、REJECT＝退件、EXEC_DONE＝回報執行完畢、VERIFY_REJECT＝複驗退回、EXPIRY_7D＝到期前 7 天、EXPIRED＝轉為已逾期、WEEKLY_SUMMARY＝每週一彙總、JOB_FAIL＝排程失敗、EMG_SUBMIT＝緊急存取送出、EMG_OVERDUE＝緊急存取逾期未補核准、EMG_RETURN＝緊急存取退回';
-COMMENT ON COLUMN IM_ACCT_NOTIFY_LOG.REF_TYPE_CODE IS '參照類型：REQ＝申請單、ACCT＝帳號、WEEK＝週彙總、JOB＝排程、EMG＝緊急存取單';
-COMMENT ON COLUMN IM_ACCT_NOTIFY_LOG.REF_ID IS '參照鍵：REQ＝REQ_ID；ACCT＝ACCT_ID_到期日yyyymmdd（到期日改變即視為新的一輪）；WEEK＝該週一 yyyymmdd；JOB＝RUN_ID；EMG＝EMG_ID（EMG_OVERDUE 以 EVENT_CODE＋REF_ID 判斷是否已通知）';
-COMMENT ON COLUMN IM_ACCT_JOB_RUN.JOB_CODE IS '排程代碼：J01＝到期處理、J02＝每週彙總、J03＝緊急存取逾期通知；J04 第二階段預留';
+COMMENT ON COLUMN IM_ACCT_NOTIFY_LOG.EVENT_CODE IS '通知事件：SUBMIT＝申請送出、RESUB＝重新送出、NEXT_STAGE＝進入下一關（關卡 2～4 核准）、TO_EXEC＝待執行（關卡 5 核准）、REJECT＝退件、EXEC_DONE＝回報執行完畢、VERIFY_REJECT＝複驗退回、EXPIRY_7D＝到期前 7 天、EXPIRED＝轉為已逾期、WEEKLY_SUMMARY＝每週一彙總、JOB_FAIL＝排程失敗、EMG_SUBMIT＝緊急存取送出、EMG_OVERDUE＝緊急存取逾期未補核准、EMG_RETURN＝緊急存取退回、REVIEW_DUE＝進入待複審（排程 J04，每輪每收件人一次）、REVIEW_REJECT＝定期審查駁回';
+COMMENT ON COLUMN IM_ACCT_NOTIFY_LOG.REF_TYPE_CODE IS '參照類型：REQ＝申請單、ACCT＝帳號、WEEK＝週彙總、JOB＝排程、EMG＝緊急存取單、REVIEW＝定期審查';
+COMMENT ON COLUMN IM_ACCT_NOTIFY_LOG.REF_ID IS '參照鍵：REQ＝REQ_ID；ACCT＝ACCT_ID_到期日yyyymmdd（到期日改變即視為新的一輪）；WEEK＝該週一 yyyymmdd；JOB＝RUN_ID；EMG＝EMG_ID（EMG_OVERDUE 以 EVENT_CODE＋REF_ID 判斷是否已通知）；REVIEW＝REVIEW_DUE 為 ACCT_ID_下次應審查日yyyymmdd（本輪是否已寄的判斷鍵，雙簽完成後下次應審查日改變即為新的一輪）、REVIEW_REJECT 為 REVIEW_ID';
+COMMENT ON COLUMN IM_ACCT_JOB_RUN.JOB_CODE IS '排程代碼：J01＝到期處理、J02＝每週彙總、J03＝緊急存取逾期通知、J04＝定期審查待複審通知';
 COMMENT ON COLUMN IM_ACCT_JOB_RUN.BASE_DATE IS '本次執行採用的「今天」（手動指定基準日時記指定值）；J03 為採用的基準時間點（到秒）';
 COMMENT ON COLUMN IM_ACCT.IS_REVIEW_FLAG IS '審查異常標記：1＝有異常、0＝正常。default 0';
 COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_REASON IS '審查異常原因';
-COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_SOURCE_CODE IS '審查異常來源：EMG＝緊急存取（退回且申請人回報為異動、或異常結案登記有帳號異動）；REVIEW＝定期審查（預留，程式目前只寫 EMG）';
+COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_SOURCE_CODE IS '審查異常來源：EMG＝緊急存取（退回且申請人回報為異動、或異常結案登記有帳號異動）、REVIEW＝定期審查駁回。單一旗標，後標記者覆蓋前者（原始原因另見 IM_EMG_ACCESS、IM_ACCT_REVIEW）';
 COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_DATE IS '審查異常標記時間';
 COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_BY IS '審查異常標記人工號（有效身分）';
 
 -- ===== COMMENTS：S4b 主管處理（補核准／退回）上線後的補充（S4-⑮⑯）；S6 異常結案再補 EMG_CLOSE_MODIFY 的寫法
 -- （只改說明、不動結構；重覆執行無害）。與 db\infra_manager_create_table.sql 同句，兩檔同步維護
-COMMENT ON TABLE IM_ACCT IS '帳號主表。被管理的帳號／憑證／門禁卡清冊，存目前生效的內容；新增申請送出時建立（狀態 REVIEW），關卡 6 執行回報時依申請內容更新；審查異常旗標 5 欄（IS_REVIEW_FLAG、REVIEW_FLAG_REASON、REVIEW_FLAG_SOURCE_CODE、REVIEW_FLAG_DATE、REVIEW_FLAG_BY）由緊急存取寫入，修改／停用／重新啟用申請在關卡 7 複驗通過時清除（決策 D42）。帳號單號（ACCT_ID）＝建立它的新增申請 REQ_ID。資料來源：IM_ACCT_REQ 流程寫入、緊急存取旗標。主鍵：ACCT_ID。保留：永久（刪除為狀態 DELETED）';
+COMMENT ON TABLE IM_ACCT IS '帳號主表。被管理的帳號／憑證／門禁卡清冊，存目前生效的內容；新增申請送出時建立（狀態 REVIEW），關卡 6 執行回報時依申請內容更新；審查異常旗標 5 欄（IS_REVIEW_FLAG、REVIEW_FLAG_REASON、REVIEW_FLAG_SOURCE_CODE、REVIEW_FLAG_DATE、REVIEW_FLAG_BY）由緊急存取與定期審查駁回寫入（後標記者覆蓋），修改／停用／重新啟用申請在關卡 7 複驗通過時清除（決策 D42）；審查日期兩欄由關卡 6 生效與定期審查雙簽完成寫入。帳號單號（ACCT_ID）＝建立它的新增申請 REQ_ID。資料來源：IM_ACCT_REQ 流程寫入、緊急存取旗標、定期審查（旗標與審查日期）。主鍵：ACCT_ID。保留：永久（刪除為狀態 DELETED）';
 COMMENT ON COLUMN IM_ACCT_HIST.STAGE_ID IS '發生關卡，參照 IM_ACCT_APPR_STAGE.STAGE_ID；系統事件為空，緊急存取事件亦為空';
 COMMENT ON COLUMN IM_ACCT_HIST.RESULT_DESCR IS '結果文字（送出時含申請原因、退件時含原因；EMG_MODIFY 帶單號、處理結果（退回含原因）、申請人回報說明與該帳號異動說明；EMG_CLOSE_MODIFY 帶單號、結案人、結案說明與該帳號異動說明）';
 COMMENT ON COLUMN IM_ACCT_HIST.IS_SELF_ACTION IS '自行核准／同人兼任旗標：1＝是、0＝否；EMG_MODIFY＝處理人即申請人、EMG_CLOSE_MODIFY＝結案人即申請人（皆以有效身分比對）。default 0';
 
 -- ===== COMMENTS：S7 排程 J03 上線後的補充（S7-⑧：AFFECTED_CNT 補 J03 定義、ERR_MSG 補「單號」）
 -- （只改說明、不動結構；重覆執行無害）。與 db\infra_manager_create_table.sql 同句，兩檔同步維護
-COMMENT ON COLUMN IM_ACCT_JOB_RUN.AFFECTED_CNT IS '處理筆數（J01＝轉逾期筆數＋寄出轉逾期信的帳號數＋寄出到期前 7 天信的帳號數；J02＝彙總列出的帳號數，本週已寄過則為 0；J03＝本次寫入逾期通知紀錄的緊急存取單數，每張算 1 不論收件人幾位）。default 0';
+COMMENT ON COLUMN IM_ACCT_JOB_RUN.AFFECTED_CNT IS '處理筆數（J01＝轉逾期筆數＋寄出轉逾期信的帳號數＋寄出到期前 7 天信的帳號數；J02＝彙總列出的帳號數（已逾期帳號＋逾期未審帳號），本週已寄過則為 0；J03＝本次寫入逾期通知紀錄的緊急存取單數，每張算 1 不論收件人幾位；J04＝本次寄出待複審信的帳號數，每個帳號算 1 不論收件人幾位）。default 0';
 COMMENT ON COLUMN IM_ACCT_JOB_RUN.ERR_MSG IS '錯誤摘要（失敗筆的帳號或單號與例外類別）';
 
 -- ===== PUBLIC SYNONYM 與授權給 AP_USER（synonym 已存在就略過；GRANT 重覆執行無害）

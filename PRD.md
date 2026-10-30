@@ -659,7 +659,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | 後端 API | `infra_manager\` | Spring Boot 4.1.1、Java 25、Maven Wrapper（Maven 3.9.16）、Jackson 3（`tools.jackson`）；context `/infra_manager`，API 根 `/infra_manager/api/v1` | 登入與 token、權限、資料範圍、業務規則、SQL、交易、附件存檔、排程、通知紀錄 | 畫面 |
 | 殼 jar | `infra_manager_web\infra_manager_web\` | Spring Boot；context `/infra_manager_web` | 提供前端靜態頁；把 `/infra_manager_web/api/v1/...` 原樣轉送到後端（Authorization、查詢字串、JSON、multipart 原始位元組、二進位下載；後端狀態碼與本文原樣回） | 不連 DB、不驗 token、不解析 payload、不開 CORS；本文超過 11 MB 直接回 413 E15 |
 | 前端 | `infra_manager_web\infra_manager_web_frontend\` | Vue 3.5＋TypeScript、Vite 8、Vitest、axios、write-excel-file 4.1.1（帳號匯出 xlsx，按匯出時才載入）；Node 24 以上 | 畫面、送出前驗證、依權限碼顯示導覽與按鈕 | 最終權限判斷 |
-| DB | — | Oracle 19c，schema RD_USER | 本模組 23 張表 | — |
+| DB | — | Oracle 19c，schema RD_USER | 本模組 24 張表 | — |
 
 ```
 瀏覽器（token 存 localStorage、各分頁共用，每個請求帶 Authorization: Bearer）
@@ -720,7 +720,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 ### 資料結構
 
-23 張表、47 個索引（PK 23＋一般 24）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。建表 SQL 明定表空間（DBA 指定）：表放 `FLOW_DATA`、索引（含主鍵索引）放 `FLOW_INDX`；測試 DB 的表空間未比對（已建好、不會重建）。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（23 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對）；第一階段 21 張表與 5 個序列的 PUBLIC synonym 與授權給 AP_USER 在 `db/infra_manager_grant.sql`（可重跑；21 張表各授 SELECT／INSERT／UPDATE／DELETE，照抄測試 DB 現況，程式本身沒有任何 DELETE；序列各授 SELECT；新環境依建表、初始資料、緊急存取腳本、本檔的順序執行）；系統管理相關四張表（IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM，說明由畫面維護與軌跡內容）的 COMMENT 另有既有環境升級腳本 `db/infra_manager_89_role_admin.sql`（改 COMMENT、不動結構、不需 GRANT——AP_USER 對相關表已有四種權限；資料只改 SYS_ADMIN 角色說明一個值，仍是初始舊字時才改；可重跑；建表檔與初始資料檔同步，新環境不必跑）；第 124 項（登入改用 WPX、人員資料讀同步表）有三支既有環境升級腳本：`db/infra_manager_124_1_prep.sql`（腳本 S1，英文名欄改可空，測試 DB 已執行）、`db/infra_manager_124_2_name_snapshot.sql`（腳本 R，8 處「英文名 (中文名)」人名快照改中文名）、`db/infra_manager_124_3_drop_cols.sql`（腳本 D，刪 `IM_ACCT_USER` 9 個舊欄並重寫 COMMENT），測試 DB 已於 2026-10-27 依序執行 R、D 並核對，建表檔與初始資料檔已是最終結構、新環境三支都不必跑；正式環境的初始人員匯入 `db/infra_manager_prod_users.sql`（使用者帳號列、角色指派含第一位系統管理員、開放新增類別 HOST／DB／DOOR 的關卡 6 執行人，名單取自測試 DB 2026-10-28 的啟用中指派、依使用者裁示調整；含實際工號，**不進版控**、只存在專案負責人本機，取代初始資料檔檔尾的初始管理者範本；可重跑、不留系統管理軌跡），命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
+24 張表、50 個索引（PK 24＋一般 26）、6 個 SEQUENCE；不建實體 FK，參照由程式維護。建表 SQL 明定表空間（DBA 指定）：表放 `FLOW_DATA`、索引（含主鍵索引）放 `FLOW_INDX`；測試 DB 的表空間未比對（已建好、不會重建）。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（24 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04、IND_IM_ACCT_REVIEW_02 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對）；定期審查簽核紀錄表（IM_ACCT_REVIEW）、序列 SEQ_IM_ACCT_REVIEW 與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_review.sql`（可重跑；含表與序列的 PUBLIC synonym 與授權給 AP_USER：表授 SELECT／INSERT／UPDATE、序列授 SELECT；新環境建完表仍須跑；同一批既有欄位 COMMENT 在緊急存取腳本、建表檔、本腳本三檔同句，重跑任一檔結果相同；第 158 項 R1 寫好，三個環境尚未執行——執行狀態見 `BACKLOG.md` 第 158 項）；第一階段 21 張表與 5 個序列的 PUBLIC synonym 與授權給 AP_USER 在 `db/infra_manager_grant.sql`（可重跑；21 張表各授 SELECT／INSERT／UPDATE／DELETE，照抄測試 DB 現況，程式本身沒有任何 DELETE；序列各授 SELECT；新環境依建表、初始資料、緊急存取腳本、本檔的順序執行）；系統管理相關四張表（IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM，說明由畫面維護與軌跡內容）的 COMMENT 另有既有環境升級腳本 `db/infra_manager_89_role_admin.sql`（改 COMMENT、不動結構、不需 GRANT——AP_USER 對相關表已有四種權限；資料只改 SYS_ADMIN 角色說明一個值，仍是初始舊字時才改；可重跑；建表檔與初始資料檔同步，新環境不必跑）；第 124 項（登入改用 WPX、人員資料讀同步表）有三支既有環境升級腳本：`db/infra_manager_124_1_prep.sql`（腳本 S1，英文名欄改可空，測試 DB 已執行）、`db/infra_manager_124_2_name_snapshot.sql`（腳本 R，8 處「英文名 (中文名)」人名快照改中文名）、`db/infra_manager_124_3_drop_cols.sql`（腳本 D，刪 `IM_ACCT_USER` 9 個舊欄並重寫 COMMENT），測試 DB 已於 2026-10-27 依序執行 R、D 並核對，建表檔與初始資料檔已是最終結構、新環境三支都不必跑；正式環境的初始人員匯入 `db/infra_manager_prod_users.sql`（使用者帳號列、角色指派含第一位系統管理員、開放新增類別 HOST／DB／DOOR 的關卡 6 執行人，名單取自測試 DB 2026-10-28 的啟用中指派、依使用者裁示調整；含實際工號，**不進版控**、只存在專案負責人本機，取代初始資料檔檔尾的初始管理者範本；可重跑、不留系統管理軌跡），命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
 
 **慣例**
 
@@ -790,7 +790,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 **IM_INSP_ITEM 巡檢項目**（STATUS 即是否啟用）：INSP_ITEM_ID（PK）VARCHAR2(10)；SECT_CODE VARCHAR2(1) 必（A、B）；SECT_NAME VARCHAR2(50 CHAR) 必；ITEM_NAME VARCHAR2(100 CHAR) 必；ITEM_DESCR VARCHAR2(200 CHAR)；SORT_SEQ NUMBER(3) 必。
 
-**IM_ACCT 帳號主表**（存目前生效的內容；新增送出時建立，關卡 6 依申請內容更新；審查異常旗標 5 欄由緊急存取退回（回報為異動）與異常結案（有帳號異動）寫入，修改／停用／重新啟用申請在關卡 7 複驗通過時清除（決策 D42，見「6. 7 關簽核」審查異常旗標清除）；刪除為狀態 DELETED）
+**IM_ACCT 帳號主表**（存目前生效的內容；新增送出時建立，關卡 6 依申請內容更新；審查異常旗標 5 欄由緊急存取退回（回報為異動）與異常結案（有帳號異動）寫入——DB COMMENT 已寫明定期審查駁回也會寫入、後標記者覆蓋，程式面於第 158 項 R3b 上線——修改／停用／重新啟用申請在關卡 7 複驗通過時清除（決策 D42，見「6. 7 關簽核」審查異常旗標清除）；刪除為狀態 DELETED）
 
 | 欄 | 型別 | 必 | 說明 |
 |---|---|---|---|
@@ -813,11 +813,11 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | ACCT_STATE_CODE | VARCHAR2(10) | ✓ | REVIEW、APPROVED、EXPIRED、DISABLED、REJECTED、DELETED |
 | SOURCE_CODE | VARCHAR2(10) | ✓ | APPLY；MIGRATE 為預留值；預設 'APPLY' |
 | APPLY_BY | VARCHAR2(30) | | 原新增申請人（之後異動不覆蓋） |
-| LAST_REVIEW_DATE | DATE | | 上次審查日 |
-| NEXT_REVIEW_DATE | DATE | | 下次應審查日 |
+| LAST_REVIEW_DATE | DATE | | 上次審查日（寫入規則見「7. 關卡 6 生效與主表同步」審查日期；DB COMMENT 另寫明定期審查雙簽完成時改為完成日、重新啟用一律重寫，程式面於第 158 項 R3a、R4 上線） |
+| NEXT_REVIEW_DATE | DATE | | 下次應審查日＝上次＋180 天（DB COMMENT 寫明審查狀態的即時計算規則，程式面於第 158 項 R2 上線） |
 | IS_REVIEW_FLAG | NUMBER(1) | ✓ | 審查異常標記（1＝有異常），預設 0 |
 | REVIEW_FLAG_REASON | VARCHAR2(500 CHAR) | | 審查異常原因 |
-| REVIEW_FLAG_SOURCE_CODE | VARCHAR2(10) | | 異常來源：EMG＝緊急存取；REVIEW＝定期審查（預留） |
+| REVIEW_FLAG_SOURCE_CODE | VARCHAR2(10) | | 異常來源：EMG＝緊急存取、REVIEW＝定期審查駁回（單一旗標，後標記者覆蓋；程式目前只寫 EMG，REVIEW 於第 158 項 R3b 上線） |
 | REVIEW_FLAG_DATE | DATE | | 標記時間 |
 | REVIEW_FLAG_BY | VARCHAR2(30) | | 標記人（有效身分） |
 
@@ -887,9 +887,9 @@ CREATE UNIQUE INDEX IND_IM_ACCT_REQ_04 ON RD_USER.IM_ACCT_REQ
 | ACCT_ID | VARCHAR2(20) | ✓ | 帳號 |
 | REQ_ID | VARCHAR2(20) | | 來源申請單（SOURCE_CODE＝REQ） |
 | EMG_ID | VARCHAR2(20) | | 來源緊急存取單（SOURCE_CODE＝EMG） |
-| REVIEW_ID | NUMBER(12) | | 預留，目前為空 |
-| SOURCE_CODE | VARCHAR2(10) | ✓ | REQ、SYS、EMG（REVIEW 為預留值） |
-| ACTION_CODE | VARCHAR2(20) | ✓ | SUBMIT、RESUB、APPROVE、REJECT、EXEC_DONE、VERIFY_OK、VERIFY_REJECT、EXPIRE、EMG_MODIFY（緊急存取異動）、EMG_CLOSE_MODIFY（結案登記異動）、FLAG_CLEAR（審查異常旗標清除）；REVIEW_DONE、REVIEW_REJECT 為預留值 |
+| REVIEW_ID | NUMBER(12) | | 來源定期審查流水號（SOURCE_CODE＝REVIEW；→ IM_ACCT_REVIEW）；程式目前尚未寫入（第 158 項 R3 上線） |
+| SOURCE_CODE | VARCHAR2(10) | ✓ | REQ、SYS、EMG、REVIEW（REVIEW 程式目前尚未寫入） |
+| ACTION_CODE | VARCHAR2(20) | ✓ | SUBMIT、RESUB、APPROVE、REJECT、EXEC_DONE、VERIFY_OK、VERIFY_REJECT、EXPIRE、EMG_MODIFY（緊急存取異動）、EMG_CLOSE_MODIFY（結案登記異動）、FLAG_CLEAR（審查異常旗標清除）、REVIEW_DONE（定期審查完成）、REVIEW_REJECT（定期審查駁回；兩者程式目前尚未寫入，第 158 項 R3 上線） |
 | STAGE_ID | NUMBER(2) | | 發生關卡；系統事件為空，緊急存取事件亦為空 |
 | ACT_BY | VARCHAR2(30) | | 實際操作人；排程為空 |
 | ACT_BY_NAME | VARCHAR2(100 CHAR) | ✓ | 顯示名快照；排程為「系統排程」 |
@@ -937,9 +937,9 @@ END
 | 欄 | 型別 | 必 | 說明 |
 |---|---|---|---|
 | NOTIFY_ID（PK） | NUMBER(12) | ✓ | 流水號 |
-| EVENT_CODE | VARCHAR2(20) | ✓ | 11 種事件（見「通知」）；緊急存取另有 EMG_SUBMIT、EMG_OVERDUE、EMG_RETURN（EMG_OVERDUE 防重寄只看 EVENT_CODE＋REF_ID，每案一次） |
-| REF_TYPE_CODE | VARCHAR2(10) | ✓ | REQ、ACCT、WEEK、JOB、EMG |
-| REF_ID | VARCHAR2(40) | ✓ | REQ＝單號；ACCT＝`ACCT_ID_到期日yyyymmdd`；WEEK＝週一 yyyymmdd；JOB＝RUN_ID；EMG＝EMG_ID |
+| EVENT_CODE | VARCHAR2(20) | ✓ | 11 種事件（見「通知」）；緊急存取另有 EMG_SUBMIT、EMG_OVERDUE、EMG_RETURN（EMG_OVERDUE 防重寄只看 EVENT_CODE＋REF_ID，每案一次）；DB COMMENT 已列定期審查的 REVIEW_DUE（進入待複審）、REVIEW_REJECT（駁回），程式於第 158 項 R3b、R7 上線 |
+| REF_TYPE_CODE | VARCHAR2(10) | ✓ | REQ、ACCT、WEEK、JOB、EMG、REVIEW（REVIEW 程式目前尚未寫入） |
+| REF_ID | VARCHAR2(40) | ✓ | REQ＝單號；ACCT＝`ACCT_ID_到期日yyyymmdd`；WEEK＝週一 yyyymmdd；JOB＝RUN_ID；EMG＝EMG_ID；REVIEW＝REVIEW_DUE 為 `ACCT_ID_下次應審查日yyyymmdd`（本輪防重寄鍵）、REVIEW_REJECT 為 REVIEW_ID |
 | RCPT_USER_ID | VARCHAR2(30) | ✓ | 收件人 |
 | RCPT_EMAIL | VARCHAR2(100) | | 寄出當下的 Email；SKIP 時為空 |
 | SEND_DATE | DATE | ✓ | 嘗試寄送時間 |
@@ -948,7 +948,7 @@ END
 
 索引 IND_IM_ACCT_NOTIFY_LOG_01（EVENT_CODE, REF_ID, RCPT_USER_ID）。
 
-**IM_ACCT_JOB_RUN 排程執行紀錄**（SEQ_IM_ACCT_JOB_RUN；STATUS 固定 1）：RUN_ID（PK）NUMBER(12)；JOB_CODE VARCHAR2(10) 必（J01＝到期處理、J02＝每週彙總、J03＝緊急存取逾期通知；J04 預留）；RUN_BY VARCHAR2(30)（手動觸發者；排程為空）；BASE_DATE DATE 必（採用的今天；J03 為基準時間點，到秒）；START_DATE DATE 必；END_DATE DATE；RESULT_CODE VARCHAR2(10) 必（RUNNING、SUCCESS、PARTIAL、FAIL）；AFFECTED_CNT NUMBER(6) 必（預設 0；J01＝轉逾期筆數＋寄出轉逾期信的帳號數＋寄出到期前 7 天信的帳號數、J02＝彙總列出的帳號數（本週已寄過則為 0）、J03＝本次寫入逾期通知紀錄的單數，每張算 1 不論收件人幾位）；ERR_MSG VARCHAR2(1000 CHAR)（失敗筆的帳號或單號與例外類別）。索引 IND_IM_ACCT_JOB_RUN_01（JOB_CODE, START_DATE）。
+**IM_ACCT_JOB_RUN 排程執行紀錄**（SEQ_IM_ACCT_JOB_RUN；STATUS 固定 1）：RUN_ID（PK）NUMBER(12)；JOB_CODE VARCHAR2(10) 必（J01＝到期處理、J02＝每週彙總、J03＝緊急存取逾期通知；DB COMMENT 已列 J04＝定期審查待複審通知，程式於第 158 項 R7 上線）；RUN_BY VARCHAR2(30)（手動觸發者；排程為空）；BASE_DATE DATE 必（採用的今天；J03 為基準時間點，到秒）；START_DATE DATE 必；END_DATE DATE；RESULT_CODE VARCHAR2(10) 必（RUNNING、SUCCESS、PARTIAL、FAIL）；AFFECTED_CNT NUMBER(6) 必（預設 0；J01＝轉逾期筆數＋寄出轉逾期信的帳號數＋寄出到期前 7 天信的帳號數、J02＝彙總列出的帳號數（本週已寄過則為 0；DB COMMENT 已寫明 R7 起含逾期未審帳號）、J03＝本次寫入逾期通知紀錄的單數，每張算 1 不論收件人幾位；DB COMMENT 已列 J04＝本次寄出待複審信的帳號數）；ERR_MSG VARCHAR2(1000 CHAR)（失敗筆的帳號或單號與例外類別）。索引 IND_IM_ACCT_JOB_RUN_01（JOB_CODE, START_DATE）。
 
 **IM_EMG_ACCESS 緊急存取單**（送出即生效、補核准期限＝送出＋24 小時；狀態不存欄位，由 DECIDE_CODE、CLOSE_DATE、DUE_DATE 計算）
 
@@ -984,9 +984,29 @@ END
 
 **IM_EMG_AFFECT_ACCT 緊急存取受影響帳號**（只增不改；STATUS 固定 1；回報與結案登記各自成列、互不覆蓋）：EMG_ID（PK）VARCHAR2(20)；AFFECT_TYPE_CODE（PK）VARCHAR2(10)（REPORT＝申請人回報、CLOSE＝異常結案登記）；ACCT_ID（PK）VARCHAR2(20)；AFFECT_DESCR VARCHAR2(500 CHAR)（該帳號的異動說明；REPORT 與 CLOSE 皆選填）；RECORD_BY VARCHAR2(30) 必（有效身分）；RECORD_DATE DATE 必。索引 IND_IM_EMG_AFFECT_ACCT_01（ACCT_ID）。
 
-**SEQUENCE**：SEQ_IM_ACCT_ATTACH、SEQ_IM_ACCT_ADMIN_LOG、SEQ_IM_ACCT_NOTIFY_LOG、SEQ_IM_ACCT_JOB_RUN（NOCACHE）；SEQ_IM_ACCT_HIST（CACHE 20）；皆 START WITH 1。緊急存取兩表不用序列。
+**IM_ACCT_REVIEW 定期審查簽核紀錄**（每帳號每輪一筆；SEQ_IM_ACCT_REVIEW；STATUS 固定 1。**本表只有結構、尚無程式讀寫**：定期審查功能分批施工中，簽核與駁回（R3）、帳號異動取消（R4）、畫面（R5）等進度見 `BACKLOG.md` 第 158 項）
 
-**邏輯參照**（重點；其餘同名欄即參照同名主鍵）：IM_ACCT.ACCT_ID 與建立它的 IM_ACCT_REQ.REQ_ID 值相同；IM_ACCT_REQ.ACCT_ID → IM_ACCT；IM_ACCT_HIST.REQ_ID 僅 SOURCE_CODE＝REQ 時有值、EMG_ID 僅 SOURCE_CODE＝EMG 時有值（→ IM_EMG_ACCESS）；IM_EMG_AFFECT_ACCT.EMG_ID → IM_EMG_ACCESS、ACCT_ID → IM_ACCT；IM_ACCT_NOTIFY_LOG.REF_ID 依 REF_TYPE_CODE 指向不同對象（組合鍵）；所有人員欄 → IM_ACCT_USER.USER_ID（排程與初始資料為 SYSTEM）；IM_DOC_SEQ 不與其他表關聯。
+| 欄 | 型別 | 必 | 說明 |
+|---|---|---|---|
+| REVIEW_ID（PK） | NUMBER(12) | ✓ | 流水號（SEQ_IM_ACCT_REVIEW）；IM_ACCT_HIST.REVIEW_ID 參照 |
+| ACCT_ID | VARCHAR2(20) | ✓ | 受審查的帳號 |
+| DUE_DATE | DATE | ✓ | 本輪應審查日＝建立本輪時的 IM_ACCT.NEXT_REVIEW_DATE；主表為空時為建立當天 |
+| REVIEW_STATE_CODE | VARCHAR2(10) | ✓ | OPEN＝進行中（至少一半已簽）、DONE＝完成、REJECTED＝駁回（已簽的另一半留存不帶到下一輪）、CANCELED＝取消（審查中帳號被申請單關卡 6 覆蓋） |
+| INFRA_SIGN_BY／INFRA_SIGN_ACT_BY／INFRA_SIGN_DATE | VARCHAR2(30)×2、DATE | | Infra 主管半：簽核人（有效身分，需 REVIEW_SIGN_INFRA）、實際操作人、時間 |
+| GOV_SIGN_BY／GOV_SIGN_ACT_BY／GOV_SIGN_DATE | 同上 | | 資訊治理主管半（需 REVIEW_SIGN_GOV）；與 Infra 半不得為同一有效身分或同一實際操作人 |
+| REJECT_HALF_CODE | VARCHAR2(10) | | INFRA、GOV（駁回時必填） |
+| REJECT_BY／REJECT_ACT_BY／REJECT_DATE | VARCHAR2(30)×2、DATE | | 駁回人（有效身分）、實際操作人、時間 |
+| REJECT_REASON | VARCHAR2(500 CHAR) | | 駁回原因（駁回時必填）；同時寫入 IM_ACCT.REVIEW_FLAG_REASON，主表那份可能被之後的緊急存取覆蓋 |
+| DONE_DATE | DATE | | 雙簽完成時間；其日期＝主表新的 LAST_REVIEW_DATE |
+| NEXT_DUE_DATE | DATE | | 完成時寫進主表的新下次應審查日＝完成日＋180 天 |
+| CANCEL_DATE／CANCEL_REQ_ID／CANCEL_DESCR | DATE、VARCHAR2(20)、VARCHAR2(200 CHAR) | | 取消時間（＝申請單關卡 6 回報時間）、造成取消的申請單、說明（申請類型） |
+| VERSION_NO | NUMBER(9) | ✓ | 樂觀鎖版本號，預設 0 |
+
+索引：IND_IM_ACCT_REVIEW_01（ACCT_ID, DUE_DATE）；IND_IM_ACCT_REVIEW_02 唯一函數式索引 `CASE REVIEW_STATE_CODE WHEN 'OPEN' THEN ACCT_ID END`（同一帳號最多一筆進行中；程式靠索引名稱辨識撞鍵，**不得改名**，同 IND_IM_ACCT_REQ_04）。
+
+**SEQUENCE**：SEQ_IM_ACCT_ATTACH、SEQ_IM_ACCT_ADMIN_LOG、SEQ_IM_ACCT_NOTIFY_LOG、SEQ_IM_ACCT_JOB_RUN、SEQ_IM_ACCT_REVIEW（NOCACHE）；SEQ_IM_ACCT_HIST（CACHE 20）；皆 START WITH 1。緊急存取兩表不用序列。
+
+**邏輯參照**（重點；其餘同名欄即參照同名主鍵）：IM_ACCT.ACCT_ID 與建立它的 IM_ACCT_REQ.REQ_ID 值相同；IM_ACCT_REQ.ACCT_ID → IM_ACCT；IM_ACCT_HIST.REQ_ID 僅 SOURCE_CODE＝REQ 時有值、EMG_ID 僅 SOURCE_CODE＝EMG 時有值（→ IM_EMG_ACCESS）、REVIEW_ID 僅 SOURCE_CODE＝REVIEW 時有值（→ IM_ACCT_REVIEW）；IM_ACCT_REVIEW.ACCT_ID → IM_ACCT、CANCEL_REQ_ID → IM_ACCT_REQ；IM_EMG_AFFECT_ACCT.EMG_ID → IM_EMG_ACCESS、ACCT_ID → IM_ACCT；IM_ACCT_NOTIFY_LOG.REF_ID 依 REF_TYPE_CODE 指向不同對象（組合鍵）；所有人員欄 → IM_ACCT_USER.USER_ID（排程與初始資料為 SYSTEM）；IM_DOC_SEQ 不與其他表關聯。
 
 **顯示名的來源**：一律是同步表 `PX_SYNC_EMP` 的中文姓名去頭尾空白，空白或查無時顯示工號（「顯示名」名詞定義）。寫入當下存進快照欄（*_NAME）的由 Java `Texts.displayName` 產生；畫面即時顯示的——申請單明細與待辦的 applyByName／execByName／verifyByName、附件上傳人、緊急存取的七個人名與影響帳號記錄人、角色與執行人名單、切換身分與指派下拉——由 SQL LEFT JOIN 同步表計算（`EmpSql.nameExpr`；該欄工號本身為空則為空）。兩條路徑結果相同；快照欄寫入後不隨同步表變動。
 
@@ -1250,7 +1270,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | `config\host.properties` | `rt-api.domain`、`db.connect.api.port`、`db.connect.api.path` | DB 連線資訊 API 的協定＋主機、port、路徑 |
 | | `db.connect.api.domain.path` | 由上面三個 key 組合，程式只讀這個；四個 key 都要保留（值可空） |
 | | `wpx.domain`、`wpx.api.port`、`wpx.api.path`、`wpx.api.domain.path` | WPX 登入 API 的協定＋主機、port、路徑與組合結果（程式只讀 `wpx.api.domain.path`；測試、正式環境都與同主機上 PX Track 同一組值）。登入用，必填：未設定時後端啟動失敗 |
-| `config\database.properties` | `itflow.db.alias` | 本模組 23 張表所在 DB 的別名（連線資訊 API 認得的名稱）；所有 DAO 讀這個 key |
+| `config\database.properties` | `itflow.db.alias` | 本模組 24 張表所在 DB 的別名（連線資訊 API 認得的名稱）；所有 DAO 讀這個 key |
 | `config\environment.properties` | `infra.manager.attach.dir` | 附件根目錄絕對路徑（必填）；未設定或非絕對路徑時後端啟動失敗 |
 | | `infra.manager.job.enabled` | 是否啟用排程（關閉時手動 API 仍可用） |
 | | `infra.manager.job.j01.cron`、`infra.manager.job.j02.cron`、`infra.manager.job.j03.cron` | J01、J02、J03 觸發時間（Spring 六欄 cron，Asia/Taipei；設 `-` 可單獨停用該支） |

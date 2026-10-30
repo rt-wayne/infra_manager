@@ -10,7 +10,7 @@
 | JDK | 25 | 後端與殼 jar（`JAVA_HOME` 指向 JDK 25） |
 | Maven | 不需安裝 | 兩個 jar 都附 Maven Wrapper（`mvnw`／`mvnw.cmd`，固定 Maven 3.9.16） |
 | Node.js | 24 以上 | 前端（`infra_manager_web\infra_manager_web_frontend\.nvmrc`） |
-| Oracle | 19c | schema RD_USER，須已有本模組 23 張表、初始資料與 AP_USER 的 synonym／授權（SQL 在 `db\`，用法見第 6 節；只有第一階段 21 張表的環境先跑第 6 節的升級腳本） |
+| Oracle | 19c | schema RD_USER，須已有本模組 24 張表、初始資料與 AP_USER 的 synonym／授權（SQL 在 `db\`，用法見第 6 節；表不足的環境先跑第 6 節對應的升級腳本） |
 | DB 連線資訊 API | — | 後端執行期向它取得 DB 連線資訊，須能連到 |
 
 ## 2. 設定檔
@@ -108,18 +108,21 @@ DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓�
 - 替換 `【】` 後的實際值不要存回本檔、不要 commit 進版控。
 - **SQL 歷史**：SQL Developer 預設會保留執行過的語句（「SQL 歷史記錄」，F8），第 1 段與建新環境的初始管理者 INSERT 含工號；正式環境操作後，在 SQL 歷史記錄視窗清除歷史，或刪 `%APPDATA%\SQL Developer\SqlHistory\` 下對應的檔案。
 
-### 建新環境：依序執行 `db\` 四個 SQL 檔
+### 建新環境：依序執行 `db\` 五個 SQL 檔
 
-正式環境一律用 `db\` 下列四個檔案在空 schema 建，**不要從測試 DB 匯出或複製**（測試 DB 有真實員工的測試帳號與測試單據）。四個檔都**以表的擁有者 RD_USER 登入**執行，不要由 DBA 用自己的帳號、或 `ALTER SESSION SET CURRENT_SCHEMA` 代跑（表會建錯 schema、公用別名會指錯帳號；第 3、4 步檔首會檢查並報錯結束，第 1 步不檢查）。依序：
+正式環境一律用 `db\` 下列五個檔案在空 schema 建，**不要從測試 DB 匯出或複製**（測試 DB 有真實員工的測試帳號與測試單據）。五個檔都**以表的擁有者 RD_USER 登入**執行，不要由 DBA 用自己的帳號、或 `ALTER SESSION SET CURRENT_SCHEMA` 代跑（表會建錯 schema、公用別名會指錯帳號；第 3～5 步檔首會檢查並報錯結束，第 1 步不檢查）。依序：
 
-1. `db\infra_manager_create_table.sql`：在空 schema 建 23 張表、索引、5 個序列與欄位 COMMENT。表放表空間 `FLOW_DATA`、索引（含主鍵索引）放 `FLOW_INDX`（DBA 指定）。需 CREATE TABLE、CREATE SEQUENCE 權限，且兩個表空間已存在、RD_USER 在兩者都有配額（表空間不存在報 ORA-00959、沒配額報 ORA-01950）。本檔沒有遇錯即停，且 DDL 每句自動提交：中途失敗時，先 DROP 已建立的表與序列（或請 DBA 清空 schema）再從頭重跑，否則已存在的表會報 ORA-00955。
+1. `db\infra_manager_create_table.sql`：在空 schema 建 24 張表、索引、6 個序列與欄位 COMMENT。表放表空間 `FLOW_DATA`、索引（含主鍵索引）放 `FLOW_INDX`（DBA 指定）。需 CREATE TABLE、CREATE SEQUENCE 權限，且兩個表空間已存在、RD_USER 在兩者都有配額（表空間不存在報 ORA-00959、沒配額報 ORA-01950）。本檔沒有遇錯即停，且 DDL 每句自動提交：中途失敗時，先 DROP 已建立的表與序列（或請 DBA 清空 schema）再從頭重跑，否則已存在的表會報 ORA-00955。
 2. `db\infra_manager_init_data.sql`：代碼表 116 筆初始資料（檔首 `WHENEVER SQLERROR EXIT ROLLBACK`，遇錯即停並回滾）。
 3. `db\infra_manager_phase2_emg.sql`：補緊急存取兩張表的 PUBLIC synonym 與授權給 AP_USER（表與索引會印「已存在，略過」，詳見下方「既有環境升級到第二階段緊急存取」）。
-4. `db\infra_manager_grant.sql`：第一階段 21 張表與 5 個序列的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER（21 張表各 SELECT／INSERT／UPDATE／DELETE，照抄測試 DB；序列各 SELECT）。建表檔沒有 synonym 與授權，少了這步殼 jar 讀表會 ORA-00942。需 RD_USER 有 CREATE PUBLIC SYNONYM 權限、AP_USER 已存在（正式 DB 未查，沒有的話會以 ORA-01031、ORA-01917 停下：請 DBA 授 CREATE PUBLIC SYNONYM 給 RD_USER、建好 AP_USER 後，由 RD_USER 從頭重跑）。檔首預檢：登入帳號不是目前 schema、或該帳號底下 21 張表＋5 個序列不足 26 個，就報錯結束、什麼都不建。可重跑，檔尾兩句查詢期望各 26 列，期望值寫在該段註解。
+4. `db\infra_manager_phase2_review.sql`：補定期審查簽核紀錄表與其序列的 PUBLIC synonym 與授權給 AP_USER（表、序列、索引會印「已存在，略過」，詳見下方「既有環境升級到定期權限審查」）。
+5. `db\infra_manager_grant.sql`：第一階段 21 張表與 5 個序列的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER（21 張表各 SELECT／INSERT／UPDATE／DELETE，照抄測試 DB；序列各 SELECT）。建表檔沒有 synonym 與授權，少了這步殼 jar 讀表會 ORA-00942。需 RD_USER 有 CREATE PUBLIC SYNONYM 權限、AP_USER 已存在（正式 DB 未查，沒有的話會以 ORA-01031、ORA-01917 停下：請 DBA 授 CREATE PUBLIC SYNONYM 給 RD_USER、建好 AP_USER 後，由 RD_USER 從頭重跑）。檔首預檢：登入帳號不是目前 schema、或該帳號底下 21 張表＋5 個序列不足 26 個，就報錯結束、什麼都不建。可重跑，檔尾兩句查詢期望各 26 列，期望值寫在該段註解。
 
-第 3、4 步不需另外的連線設定：兩檔檔頭都設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑。
+第 3～5 步不需另外的連線設定：三檔檔頭都設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑該檔。
 
-**既有環境升級到第二階段緊急存取**（已照上面建好 21 張表的測試、正式環境）：以 RD_USER 執行 `db\infra_manager_phase2_emg.sql`（SQL Developer 用「執行指令碼」F5；SQL*Plus 同樣先 `set NLS_LANG=.AL32UTF8`）。本檔可重跑：表與索引已存在就印「已存在，略過」，COMMENT 重覆執行無害；本檔也會建兩張新表的 PUBLIC synonym 並授權給殼 jar 連線帳號 AP_USER（`IM_EMG_ACCESS` 授 SELECT／INSERT／UPDATE、`IM_EMG_AFFECT_ACCT` 授 SELECT／INSERT；比照第一階段的 PUBLIC synonym 建法，RD_USER 自己有 CREATE PUBLIC SYNONYM 權限）。檔尾五句查詢會列出兩張表、三個 IND_ 索引（主鍵索引已排除）、兩表欄數（30、11）及無 COMMENT 欄位數（期望 0）、兩個 PUBLIC synonym、AP_USER 的 5 筆授權供核對，期望值寫在該段註解。檔頭設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑；檔首預檢登入帳號必須等於目前 schema、且已有 IM_ACCT 表，否則報錯結束、什麼都不建。表放 `FLOW_DATA`、索引放 `FLOW_INDX`（與建表檔一致）。全新環境用建表檔建完表後**仍須跑本檔**：建表檔沒有 synonym 與授權，本檔重跑時表與索引會印「已存在，略過」，只補上這兩張表的 synonym 與 GRANT；第一階段 21 張表與 5 個序列的 synonym 與授權在 `db\infra_manager_grant.sql`（上方第 4 步）。
+**既有環境升級到第二階段緊急存取**（已照上面建好 21 張表的測試、正式環境）：以 RD_USER 執行 `db\infra_manager_phase2_emg.sql`（SQL Developer 用「執行指令碼」F5；SQL*Plus 同樣先 `set NLS_LANG=.AL32UTF8`）。本檔可重跑：表與索引已存在就印「已存在，略過」，COMMENT 重覆執行無害；本檔也會建兩張新表的 PUBLIC synonym 並授權給殼 jar 連線帳號 AP_USER（`IM_EMG_ACCESS` 授 SELECT／INSERT／UPDATE、`IM_EMG_AFFECT_ACCT` 授 SELECT／INSERT；比照第一階段的 PUBLIC synonym 建法，RD_USER 自己有 CREATE PUBLIC SYNONYM 權限）。檔尾五句查詢會列出兩張表、三個 IND_ 索引（主鍵索引已排除）、兩表欄數（30、11）及無 COMMENT 欄位數（期望 0）、兩個 PUBLIC synonym、AP_USER 的 5 筆授權供核對，期望值寫在該段註解。檔頭設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑；檔首預檢登入帳號必須等於目前 schema、且已有 IM_ACCT 表，否則報錯結束、什麼都不建。表放 `FLOW_DATA`、索引放 `FLOW_INDX`（與建表檔一致）。全新環境用建表檔建完表後**仍須跑本檔**：建表檔沒有 synonym 與授權，本檔重跑時表與索引會印「已存在，略過」，只補上這兩張表的 synonym 與 GRANT；第一階段 21 張表與 5 個序列的 synonym 與授權在 `db\infra_manager_grant.sql`（上方第 5 步）。
+
+**既有環境升級到定期權限審查**（第 158 項；已建好 23 張表的測試、UAT、正式環境。執行時機：測試 DB 於腳本寫好後立即執行；UAT 與正式在第 158 項 R5 部署前執行，詳見 `BACKLOG.md` 第 158 項）：以 RD_USER 執行 `db\infra_manager_phase2_review.sql`（執行方式同上：SQL Developer「執行指令碼」F5；SQL*Plus 先 `set NLS_LANG=.AL32UTF8`）。本檔建 1 張表 `IM_ACCT_REVIEW`（定期審查簽核紀錄）、1 個序列 `SEQ_IM_ACCT_REVIEW`、2 個索引（`IND_IM_ACCT_REVIEW_02` 是唯一函數式索引，保證同一帳號最多一筆進行中的審查輪，**不得改名**），寫新表全部 COMMENT，並把定期審查相關的既有欄位 COMMENT（帳號歷史的 REVIEW_ID／SOURCE_CODE／ACTION_CODE、通知紀錄的事件與參照鍵、排程 J04 與 J02 新筆數定義、IM_ACCT 的審查日期與旗標說明）改為定案文字——不動結構、不寫資料列；建表與序列的 PUBLIC synonym 並授權給 AP_USER（表授 SELECT／INSERT／UPDATE、序列授 SELECT）。可重跑：表、序列、索引、synonym 已存在就印「已存在，略過」，COMMENT 與 GRANT 重覆執行無害；檔首預檢同緊急存取腳本（登入帳號＝目前 schema、已有 IM_ACCT 表）。檔尾七句查詢的期望值寫在該段註解：表 1 列（FLOW_DATA）、索引 3 列（PK 與 IND_02 為 UNIQUE、IND_01 為 NONUNIQUE，皆 FLOW_INDX）、IND_02 運算式、序列 1 列、欄數 26 且無 COMMENT 欄 0、PUBLIC synonym 2 列（TABLE_OWNER 皆 RD_USER）、AP_USER 授權 4 列。全新環境用建表檔建完表後**仍須跑本檔**（補 synonym 與 GRANT）。同一批既有欄位 COMMENT 在本檔、緊急存取腳本、建表檔三檔同句，之後重跑緊急存取腳本不會把文字蓋回舊的。
 
 **既有環境升級到角色權限維護介面**（角色指派、執行人對照、角色權限設定三個畫面）：以 RD_USER 執行 `db\infra_manager_89_role_admin.sql`（執行方式同上）。本檔只更新 IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM 四張表的 COMMENT、不動結構、不需 GRANT（AP_USER 對相關表本來就有四種權限，2026-10-19 於測試 DB 實查；正式環境執行後用檔尾第三句再核對一次，少了 INSERT 或 UPDATE 就要補 GRANT）；資料只改一個值：SYS_ADMIN 的角色說明拿掉「角色指派與執行人對照第一階段以 DB 維護」，且只在說明仍是初始舊字時才改。可重跑；全新環境用建表檔與初始資料檔建完不必跑（兩檔已同步）。檔尾四句查詢的期望值寫在該段註解。
 
