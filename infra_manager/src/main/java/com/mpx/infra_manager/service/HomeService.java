@@ -21,6 +21,12 @@ package com.mpx.infra_manager.service;
 // 變更說明: BACKLOG 第 148 項：卡片依個人——帳號四張有 ACC_EXPIRY_ALL 看全部、否則只算我（有效身分）原新增申請的帳號；
 //           緊急存取兩張有 EMG_VIEW_ALL 看全部、否則只算我申請的單；巡檢兩張看全部，但只給有 INSP_VIEW 或上述任一「看全部」者
 //           （沒有的人兩個數字回 null、inspVisible＝false，前端整區不顯示）。程式不判斷角色名稱（使用者 2026-10-29 裁示 ②A）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R6（待辦整合；裁示 ①A ②A ③A）：待辦加第二種來源 REVIEW——有 REVIEW_SIGN_INFRA／GOV 的人，
+//           待複審與逾期未審、該身分還沒簽、另一位主管的簽核人（有效身分）不是我的帳號各成一列（一個帳號＋身分一列），
+//           內嵌整筆 ReviewItem 給前端開簽核彈窗；申請單列照舊排前面，審查列接在後面（逾期最久的先）。
+//           過濾條件與 ReviewService.checkSameSigner、前端 reviewActableHalves 同口徑
 // ============================================================
 
 import java.time.Clock;
@@ -37,9 +43,11 @@ import com.mpx.infra_manager.common.AcctConst;
 import com.mpx.infra_manager.common.Identity;
 import com.mpx.infra_manager.dao.AcctReqDao;
 import com.mpx.infra_manager.dao.HomeDao;
+import com.mpx.infra_manager.dao.ReviewDao;
 import com.mpx.infra_manager.model.ApprStage;
 import com.mpx.infra_manager.model.ExpiringAcct;
 import com.mpx.infra_manager.model.HomeStats;
+import com.mpx.infra_manager.model.ReviewItem;
 import com.mpx.infra_manager.model.TodoItem;
 
 @Service
@@ -48,18 +56,25 @@ public class HomeService {
 	public static final String KIND_APPROVE = "APPROVE";
 	public static final String KIND_EXEC = "EXEC";
 	public static final String KIND_VERIFY = "VERIFY";
+	public static final String KIND_REVIEW = "REVIEW";
+
+	public static final String SOURCE_ACCT_REQ = "ACCT_REQ";
+	public static final String SOURCE_REVIEW = "REVIEW";
 
 	private final PermissionService perm;
 	private final CodeService codeService;
 	private final HomeDao homeDao;
 	private final AcctReqDao acctReqDao;
+	private final ReviewDao reviewDao;
 	private final Clock clock;
 
-	public HomeService(PermissionService perm, CodeService codeService, HomeDao homeDao, AcctReqDao acctReqDao, Clock clock) {
+	public HomeService(PermissionService perm, CodeService codeService, HomeDao homeDao, AcctReqDao acctReqDao,
+			ReviewDao reviewDao, Clock clock) {
 		this.perm = perm;
 		this.codeService = codeService;
 		this.homeDao = homeDao;
 		this.acctReqDao = acctReqDao;
+		this.reviewDao = reviewDao;
 		this.clock = clock;
 	}
 
@@ -111,7 +126,56 @@ public class HomeService {
 		}
 		result.sort(Comparator.comparing(TodoItem::getSubmitDate, Comparator.nullsLast(Comparator.naturalOrder()))
 				.thenComparing(TodoItem::getReqId, Comparator.nullsLast(Comparator.naturalOrder())));
+		// 定期審查（R6；裁示 ③A）：接在申請單後面，DAO 已依逾期最久的先排好
+		result.addAll(reviewTodos(id));
 		return result;
+	}
+
+	/**
+	 * 定期審查待辦（裁示 ②A 一個帳號＋身分一列）：有 REVIEW_SIGN_INFRA／GOV 任一才查；每個待複審／逾期未審的帳號，
+	 * 我有權限的身分還沒簽、且另一位主管的簽核人（有效身分）不是我 → 一列（與 ReviewService.checkSameSigner、
+	 * 前端 reviewActableHalves 同口徑：不比實際操作人，切換身分代簽放行）
+	 */
+	private List<TodoItem> reviewTodos(Identity id) {
+		boolean infra = perm.can(id, AcctConst.PERM_REVIEW_SIGN_INFRA);
+		boolean gov = perm.can(id, AcctConst.PERM_REVIEW_SIGN_GOV);
+		List<TodoItem> result = new ArrayList<>();
+		if (!infra && !gov) {
+			return result;
+		}
+		String me = id.getUserId();
+		for (ReviewItem r : reviewDao.findTodo(LocalDate.now(clock))) {
+			if (infra && r.getInfraSignBy() == null && !me.equals(r.getGovSignBy())) {
+				result.add(reviewTodo(r, AcctConst.HALF_INFRA));
+			}
+			if (gov && r.getGovSignBy() == null && !me.equals(r.getInfraSignBy())) {
+				result.add(reviewTodo(r, AcctConst.HALF_GOV));
+			}
+		}
+		return result;
+	}
+
+	/** 審查列：reqId 填帳號單號、關卡名「{身分}待簽」、versionNo＝進行中那一輪的版本（沒有一輪＝0）、review 內嵌整筆 */
+	static TodoItem reviewTodo(ReviewItem r, String half) {
+		TodoItem t = new TodoItem();
+		t.setSource(SOURCE_REVIEW);
+		t.setActionKind(KIND_REVIEW);
+		t.setReqId(r.getAcctId());
+		t.setAcctId(r.getAcctId());
+		t.setReviewId(r.getReviewId());
+		t.setHalf(half);
+		t.setReview(r);
+		t.setCatgId(r.getCatgId());
+		t.setCatgName(r.getCatgName());
+		t.setAcctName(r.getAcctName());
+		t.setIsPriv(r.getIsPriv());
+		t.setApplyBy(r.getApplyBy());
+		t.setApplyByName(r.getApplyByName());
+		t.setStageName(AcctConst.reviewHalfName(half) + "待簽");
+		t.setVersionNo(r.getReviewVersionNo() == null ? 0 : r.getReviewVersionNo());
+		String name = NotificationService.acctNameText(r.getCatgId(), r.getAcctName());
+		t.setTitle("定期審查 " + (r.getCatgName() == null ? r.getCatgId() : r.getCatgName()) + (name.isEmpty() ? "" : "：" + name));
+		return t;
 	}
 
 	private static void addAll(List<TodoItem> target, List<TodoItem> rows, String kind) {

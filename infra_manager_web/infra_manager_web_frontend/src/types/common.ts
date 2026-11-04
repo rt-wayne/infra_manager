@@ -19,7 +19,12 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-22
 // 變更說明: BACKLOG 第 124 項階段 6（裁示 ⑫A）：Me 拿掉 telNo（/me 不再回分機，申請人分機改自填）；deptName 註解改為同步表主要部門
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R6（待辦整合；裁示 ①A）：ActionKind 加 REVIEW；Todo 加 acctId、reviewId、half、review（審查列內嵌整筆 ReviewItem）；
+//           申請單欄位（reqTypeCode、stageId、submitDate 等）在審查列為 null，型別跟著放寬
 // ============================================================
+import type { ReviewHalf, ReviewItem } from './review'
 
 /** 後端錯誤回應本文：{ message } */
 export interface ApiErrorBody {
@@ -129,30 +134,42 @@ export interface ExpiringItem {
   daysLeft: number
 }
 
-/** 待辦可做的動作 */
-export type ActionKind = 'APPROVE' | 'EXEC' | 'VERIFY'
+/** 待辦可做的動作；REVIEW＝定期審查簽核（第 158 項 R6） */
+export type ActionKind = 'APPROVE' | 'EXEC' | 'VERIFY' | 'REVIEW'
 
-/** GET /todos 一列 */
+/** GET /todos 一列（申請單列或定期審查列） */
 export interface Todo {
-  /** 來源（第一階段固定 ACCT_REQ） */
+  /** 來源：ACCT_REQ 申請單／REVIEW 定期審查 */
   source: string
+  /** 編號：申請單號；審查列是帳號單號（與該帳號的新增單號相同，列鍵要加來源與身分） */
   reqId: string
+  /** 以下四欄只有審查列有值 */
+  acctId: string | null
+  reviewId: number | null
+  /** 這一列要以哪個身分簽 */
+  half: ReviewHalf | null
+  /** 進行中那一輪的完整資料，直接給 ReviewSignModal */
+  review: ReviewItem | null
   title: string
-  reqTypeCode: string
+  /** 申請類型；審查列為 null */
+  reqTypeCode: string | null
   /** 帳號類別代碼；DOOR＝機房門禁卡（決定回報執行時卡號是否必填） */
   catgId: string
   catgName: string
   acctName: string | null
   /** 是否特權帳號（NUMBER(1)） */
   isPriv: number
-  applyBy: string
-  applyByName: string
-  stageId: number
+  /** 申請人（審查列：該帳號的原新增申請人，舊資料可能為 null） */
+  applyBy: string | null
+  applyByName: string | null
+  /** 關卡；審查列 stageId 為 null、stageName 為「Infra 主管待簽」／「資訊治理主管待簽」 */
+  stageId: number | null
   stageName: string
-  submitDate: string
+  /** 送出時間；審查列為 null（畫面改顯示下次應審查日） */
+  submitDate: string | null
   actionKind: ActionKind
-  /** 樂觀鎖版本號，動作時帶回 */
+  /** 樂觀鎖版本號，動作時帶回（審查列＝進行中那一輪的版本，沒有一輪＝0） */
   versionNo: number
-  verifyRejectCnt: number
+  verifyRejectCnt: number | null
   verifyRejectReason: string | null
 }

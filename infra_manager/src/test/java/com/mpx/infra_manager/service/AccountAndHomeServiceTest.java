@@ -20,6 +20,10 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R5 第 3 單位：帳號明細走 acctDao.findDetail（綁今天）、原樣帶出 DAO 算的 reviewStateCode；lookup／歷史以外不呼叫 findDetail
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R6：待辦的定期審查列——有 REVIEW_SIGN_INFRA 的看到 Infra 未簽的、簽過的不列、另一位簽核人是我的不列、
+//           切換身分代簽（實際操作人是我）放行、沒權限的人不查 findTodo；審查列接在申請單後面；欄位與標題
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -57,6 +61,7 @@ import com.mpx.infra_manager.model.AcctLookupBrief;
 import com.mpx.infra_manager.model.AssetClass;
 import com.mpx.infra_manager.model.CodeCountRow;
 import com.mpx.infra_manager.model.ExpiringAcct;
+import com.mpx.infra_manager.model.ReviewItem;
 import com.mpx.infra_manager.model.TodoItem;
 import com.mpx.infra_manager.support.TestFixture;
 
@@ -270,6 +275,75 @@ class AccountAndHomeServiceTest {
 		verify(fx.acctReqDao).findTodoApprove(List.of(3));
 		verify(fx.acctReqDao).findTodoExec(List.of("DB"));
 		verify(fx.acctReqDao, never()).findTodoExec(List.of());
+	}
+
+	@Test
+	void 待辦_定期審查列_依簽核權限與同人規則_接在申請單後面() {
+		// 三筆待審帳號：A 沒人簽；B Infra 已由 TERRY 簽；C 資訊治理已由 TERRY（有效身分）簽、實際操作人 TESTER
+		ReviewItem a = reviewTodoItem("AR20261001-001", "DOOR", "機房門禁卡", null, LocalDateTime.of(2026, 9, 1, 0, 0), "OVERDUE");
+		ReviewItem b = reviewTodoItem("AR20261001-002", "DB", "資料庫帳號", "sa", LocalDateTime.of(2026, 10, 20, 0, 0), "DUE");
+		b.setReviewId(7L);
+		b.setReviewVersionNo(1);
+		b.setInfraSignBy(TERRY);
+		b.setInfraSignActBy(TERRY);
+		ReviewItem c = reviewTodoItem("AR20261001-003", "HOST", "主機帳號", "root", LocalDateTime.of(2026, 10, 25, 0, 0), "DUE");
+		c.setReviewId(8L);
+		c.setReviewVersionNo(1);
+		c.setGovSignBy(TERRY);
+		c.setGovSignActBy(TESTER);
+		when(fx.reviewDao.findTodo(TODAY)).thenReturn(List.of(a, b, c));
+		TodoItem req = new TodoItem();
+		req.setReqId("AR20261007-009");
+		req.setReqTypeCode("ADD");
+		req.setCatgId("DB");
+		req.setCatgName("資料庫帳號");
+		req.setSubmitDate(LocalDateTime.of(2026, 10, 7, 9, 0));
+		when(fx.acctReqDao.findTodoApprove(List.of(3))).thenReturn(List.of(req));
+
+		// TERRY（INFRA_MGR）：A 可簽 Infra；B 自己簽過不列；C 另一位主管的有效身分是我 → 不列（實際操作人是誰都一樣）
+		List<TodoItem> terry = fx.homeService.todos(id(TERRY));
+		assertThat(terry).extracting(TodoItem::getReqId).containsExactly("AR20261007-009", "AR20261001-001");
+		TodoItem t = terry.get(1);
+		assertThat(t.getSource()).isEqualTo("REVIEW");
+		assertThat(t.getActionKind()).isEqualTo("REVIEW");
+		assertThat(t.getAcctId()).isEqualTo("AR20261001-001");
+		assertThat(t.getReviewId()).isNull();
+		assertThat(t.getHalf()).isEqualTo("INFRA");
+		assertThat(t.getStageName()).isEqualTo("Infra 主管待簽");
+		assertThat(t.getTitle()).isEqualTo("定期審查 機房門禁卡：（門禁卡，待發卡）");
+		assertThat(t.getVersionNo()).isZero();
+		assertThat(t.getCatgId()).isEqualTo("DOOR");
+		assertThat(t.getApplyBy()).isEqualTo(KEVIN);
+		assertThat(t.getReview()).isSameAs(a);
+		assertThat(t.getSubmitDate()).isNull();
+
+		// MOLLY（GOV_MGR）：A、B 可簽資訊治理（B 的 Infra 是 TERRY 不是我）；C 自己這個身分已有人簽 → 不列
+		List<TodoItem> molly = fx.homeService.todos(id(MOLLY));
+		assertThat(molly).extracting(TodoItem::getReqId).containsExactly("AR20261001-001", "AR20261001-002");
+		assertThat(molly).extracting(TodoItem::getHalf).containsOnly("GOV");
+		assertThat(molly.get(1).getStageName()).isEqualTo("資訊治理主管待簽");
+		assertThat(molly.get(1).getTitle()).isEqualTo("定期審查 資料庫帳號：sa");
+		assertThat(molly.get(1).getVersionNo()).isEqualTo(1);
+		assertThat(molly.get(1).getReviewId()).isEqualTo(7L);
+
+		// TESTER 切換成 TERRY 簽 C 的資訊治理後，TESTER 本人（沒有簽核權限）不查；GARY（IT_HEAD，只有 REVIEW_LIST）也不查
+		fx.homeService.todos(id(TESTER));
+		fx.homeService.todos(id(GARY));
+		verify(fx.reviewDao, org.mockito.Mockito.times(2)).findTodo(TODAY);
+	}
+
+	private static ReviewItem reviewTodoItem(String acctId, String catgId, String catgName, String acctName, LocalDateTime next, String state) {
+		ReviewItem r = new ReviewItem();
+		r.setAcctId(acctId);
+		r.setCatgId(catgId);
+		r.setCatgName(catgName);
+		r.setAcctName(acctName);
+		r.setIsPriv(0);
+		r.setApplyBy(KEVIN);
+		r.setApplyByName("李凱鈞");
+		r.setNextReviewDate(next);
+		r.setReviewStateCode(state);
+		return r;
 	}
 
 	@Test

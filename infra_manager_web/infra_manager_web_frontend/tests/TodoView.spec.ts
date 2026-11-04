@@ -9,6 +9,10 @@
 // 變更說明: v2.0（開發文件 spec_im_acct_insp_v2.0.md 第 4.4、4.5、4.10、8.3 節）：
 //           核准／複驗通過先確認、帶 versionNo；退件原因必填（E10）；回報執行：佐證必選（E12）、門禁卡新增卡號必填（E13）、
 //           佐證讀取失敗 U08、multipart 送出；verifyRejectCnt＞0 時回報與複驗彈窗顯示 U02
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R6：夾具加審查列四欄；定期審查列的顯示（標籤、標題、關卡、狀態與應審查日、沒有查看明細）、
+//           與同編號申請單列並存不撞鍵、「審查」開 ReviewSignModal 並以內嵌 review 簽核、簽完重載待辦與徽章
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -16,9 +20,11 @@ import type { VueWrapper } from '@vue/test-utils'
 import TodoView from '../src/views/TodoView.vue'
 import { getCodes, listExpiring, listTodos } from '../src/api/common'
 import { approveRequest, execDone, rejectRequest, verifyOk, verifyReject } from '../src/api/request'
-import { resetSession } from '../src/composables/useSession'
+import { signReview } from '../src/api/review'
+import { resetSession, useSession } from '../src/composables/useSession'
 import type { Todo } from '../src/types/common'
-import { CODES, chooseFile, httpError, lastToast, makeFile, makeRouter } from './helpers'
+import type { ReviewItem } from '../src/types/review'
+import { CODES, GENERAL_PERMS, chooseFile, httpError, lastToast, makeFile, makeMe, makeRouter } from './helpers'
 
 vi.mock('../src/api/common', () => ({
   getCodes: vi.fn(),
@@ -26,6 +32,11 @@ vi.mock('../src/api/common', () => ({
   listExpiring: vi.fn(),
   listTodos: vi.fn(),
   listEmgReturned: vi.fn().mockResolvedValue([])
+}))
+vi.mock('../src/api/review', () => ({
+  listReviews: vi.fn(),
+  signReview: vi.fn(),
+  rejectReview: vi.fn()
 }))
 vi.mock('../src/api/request', () => ({
   submitRequest: vi.fn(),
@@ -48,7 +59,8 @@ const verifyRejectMock = vi.mocked(verifyReject)
 
 function todo(over: Partial<Todo>): Todo {
   return {
-    source: 'ACCT_REQ', reqId: 'AR1', title: '', reqTypeCode: 'ADD', catgId: 'HOST', catgName: '主機帳號', acctName: 'root',
+    source: 'ACCT_REQ', reqId: 'AR1', acctId: null, reviewId: null, half: null, review: null,
+    title: '', reqTypeCode: 'ADD', catgId: 'HOST', catgName: '主機帳號', acctName: 'root',
     isPriv: 0, applyBy: '0000001', applyByName: 'Kevin (李凱鈞)', stageId: 2, stageName: '機房管理員',
     submitDate: '2026-10-07 09:00:00', actionKind: 'APPROVE', versionNo: 0, verifyRejectCnt: 0, verifyRejectReason: null,
     ...over
@@ -246,5 +258,76 @@ describe('TodoView', () => {
     const w = await mountTodo()
     expect(w.find('.empty').text()).toBe('目前沒有待辦簽核')
     w.unmount()
+  })
+
+  describe('定期審查列（第 158 項 R6）', () => {
+    /** 後端內嵌的進行中那一輪（沒人簽過）；不從 ReviewViews.spec 匯入，避免把那邊的測試也收進本檔 */
+    const item: ReviewItem = {
+      acctId: 'AR1', catgId: 'DB', catgName: '資料庫帳號', acctName: 'sa', sysName: 'ERP 正式機',
+      assetClassId: 'H01', assetClassName: '伺服器－與營運直接相關', isPriv: 1,
+      holderName: '王小明', holderDept: '資訊處', accessLevelCode: 'RW', acctStateCode: 'APPROVED',
+      applyBy: '0000001', applyByName: 'Kevin (李凱鈞)',
+      lastReviewDate: '2026-03-01 00:00:00', nextReviewDate: '2026-09-01 00:00:00',
+      isReviewFlag: 0, reviewFlagReason: null, reviewFlagSourceCode: null, reviewFlagDate: null,
+      reviewStateCode: 'OVERDUE', reviewId: null, reviewVersionNo: null,
+      infraSignBy: null, infraSignByName: null, infraSignActBy: null, infraSignActByName: null, infraSignDate: null,
+      govSignBy: null, govSignByName: null, govSignActBy: null, govSignActByName: null, govSignDate: null
+    }
+    /** 後端組好的審查列：編號＝帳號單號 AR1（與上面申請單 AR1 同編號） */
+    const reviewTodo: Todo = todo({
+      source: 'REVIEW', reqId: 'AR1', acctId: 'AR1', reviewId: null, half: 'INFRA', review: item,
+      title: '定期審查 資料庫帳號：sa', reqTypeCode: null, catgId: 'DB', catgName: '資料庫帳號', acctName: 'sa', isPriv: 1,
+      applyBy: '0000001', applyByName: 'Kevin (李凱鈞)', stageId: null, stageName: 'Infra 主管待簽', submitDate: null,
+      actionKind: 'REVIEW', versionNo: 0, verifyRejectCnt: null, verifyRejectReason: null
+    })
+
+    beforeEach(() => {
+      useSession().me.value = makeMe({ userId: '0000004', permissions: [...GENERAL_PERMS, 'REVIEW_SIGN_INFRA'] })
+      vi.mocked(signReview).mockReset().mockResolvedValue({ acctId: 'AR1', reviewId: 9, reviewStateCode: 'OPEN', versionNo: 1 })
+      todosMock.mockResolvedValue([TODOS[0], reviewTodo])
+    })
+
+    it('顯示：標籤「待審查」、類型「定期審查」、標題、原申請人、關卡、狀態標籤與應審查日；只有「審查」沒有查看明細；與同編號申請單並存', async () => {
+      const w = await mountTodo()
+      const rows = w.findAll('tbody tr')
+      expect(rows).toHaveLength(2)
+      const r = w.find('tr[data-key="REVIEW:AR1:INFRA"]')
+      expect(r.exists()).toBe(true)
+      const cells = r.findAll('td')
+      expect(cells[0].text()).toBe('AR1')
+      expect(cells[1].find('.tag').text()).toBe('待審查')
+      expect(cells[1].text()).toContain('定期審查')
+      expect(cells[1].find('.tag-priv').exists()).toBe(true)
+      expect(cells[2].text()).toBe('定期審查 資料庫帳號：sa')
+      expect(cells[3].text()).toBe('Kevin (李凱鈞)')
+      expect(cells[4].text()).toBe('Infra 主管待簽')
+      expect(cells[5].find('.tag').text()).toBe('逾期未審')
+      expect(cells[5].find('.tag').classes()).toContain('tag-warn')
+      expect(cells[5].text()).toContain('應審查日 2026-09-01')
+      expect(r.find('.act-review').exists()).toBe(true)
+      expect(r.text()).not.toContain('查看明細')
+      expect(r.find('.act-approve').exists()).toBe(false)
+      // 同編號的申請單列仍在、仍有查看明細與核准
+      const req = w.find('tr[data-key="ACCT_REQ:AR1:"]')
+      expect(req.text()).toContain('查看明細')
+      expect(req.find('.act-approve').exists()).toBe(true)
+      w.unmount()
+    })
+
+    it('「審查」開簽核彈窗（用內嵌的 review）；以 Infra 主管簽核成功後重載待辦', async () => {
+      const w = await mountTodo()
+      await w.find('tr[data-key="REVIEW:AR1:INFRA"] .act-review').trigger('click')
+      await flushPromises()
+      expect(w.text()).toContain('ERP 正式機')
+      expect(w.find('.act-sign-infra').exists()).toBe(true)
+      expect(w.find('.act-sign-gov').exists()).toBe(false)
+      await w.find('.act-sign-infra').trigger('click')
+      await flushPromises()
+      await w.find('.confirm-sign').trigger('click')
+      await flushPromises()
+      expect(signReview).toHaveBeenCalledWith('AR1', 'INFRA', 0)
+      expect(todosMock).toHaveBeenCalledTimes(2)
+      w.unmount()
+    })
   })
 })

@@ -17,10 +17,16 @@
   AI版本  : Claude Opus 5.5 (claude-opus-5-5)
   修改日期: 2026-10-16
   變更說明: 必填欄位醒目提醒：退件／退回原因、門禁卡號、執行佐證附件標籤的「（必填）」改為紅色 *
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: BACKLOG 第 158 項 R6（待辦整合；裁示 ①A ②A ③A）：第二種來源「定期審查」列——類型標籤「待審查」、標題「定期審查 {類別}：{帳號名稱}」、
+            申請人欄顯示原新增申請人、關卡欄「Infra 主管待簽」／「資訊治理主管待簽」、時間欄改顯示審查狀態標籤與下次應審查日；
+            操作「審查」直接開 ReviewSignModal（資料用後端內嵌的 review），簽核／駁回後重載待辦與側欄數字；
+            列鍵改「來源＋編號＋身分」（審查列的編號＝帳號單號，與新增單號相同會撞）
 -->
 <template>
   <main>
-    <div class="section-note">ⓘ 這裡只列出目前身分此刻可以處理的申請。</div>
+    <div class="section-note">ⓘ 這裡只列出目前身分此刻可以處理的申請與定期審查。</div>
 
     <template v-if="loaded">
       <div v-if="rows.length > 0">
@@ -36,22 +42,29 @@
             <col style="width: 18%" />
           </colgroup>
           <thead>
-            <tr><th>單號</th><th>類型</th><th>標題</th><th>申請人</th><th>目前關卡</th><th>送出時間</th><th>操作</th></tr>
+            <tr><th>單號</th><th>類型</th><th>標題</th><th>申請人</th><th>目前關卡</th><th>送出時間 / 應審查日</th><th>操作</th></tr>
           </thead>
           <tbody>
-            <tr v-for="t in pageRows" :key="t.reqId" :class="{ 'priv-row': isOn(t.isPriv) }" :data-req="t.reqId">
+            <tr v-for="t in pageRows" :key="rowKey(t)" :class="{ 'priv-row': isOn(t.isPriv) }" :data-req="t.reqId" :data-key="rowKey(t)">
               <td>{{ t.reqId }}</td>
               <td>
                 <span class="tag" :class="kindTag[t.actionKind]">{{ kindLabel[t.actionKind] }}</span>
-                <div class="type-text">{{ label(REQ_TYPE_LABEL, t.reqTypeCode) }}<span v-if="isOn(t.isPriv)" class="tag tag-priv">特權</span></div>
+                <div class="type-text">{{ isReview(t) ? '定期審查' : label(REQ_TYPE_LABEL, t.reqTypeCode) }}<span v-if="isOn(t.isPriv)" class="tag tag-priv">特權</span></div>
               </td>
               <td>{{ titleOf(t) }}</td>
-              <td>{{ t.applyByName }}</td>
+              <td>{{ t.applyByName || '—' }}</td>
               <td>{{ t.stageName }}</td>
-              <td>{{ t.submitDate }}</td>
+              <td>
+                <template v-if="isReview(t)">
+                  <span class="tag" :class="reviewStateTagClass(t.review?.reviewStateCode)">{{ label(REVIEW_STATE_LABEL, t.review?.reviewStateCode) }}</span>
+                  <div class="sub review-due">應審查日 {{ dateOnly(t.review?.nextReviewDate) || '—' }}</div>
+                </template>
+                <template v-else>{{ t.submitDate }}</template>
+              </td>
               <td>
                 <span class="ops">
-                  <button type="button" class="btn-link" @click="detailId = t.reqId">查看明細</button>
+                  <button v-if="isReview(t)" type="button" class="btn-link act-review" :disabled="busy" @click="reviewing = t.review">審查</button>
+                  <button v-else type="button" class="btn-link" @click="detailId = t.reqId">查看明細</button>
                   <template v-if="t.actionKind === 'APPROVE'">
                     <button type="button" class="btn-link act-approve" :disabled="busy" @click="openConfirm('approve', t)">核准</button>
                     <button type="button" class="btn-link warn act-reject" :disabled="busy" @click="openReason('reject', t)">退件</button>
@@ -83,6 +96,8 @@
       </template>
     </RequestDetailModal>
 
+    <ReviewSignModal v-if="reviewing" :item="reviewing" @close="reviewing = null" @changed="onReviewChanged" />
+
     <BaseModal
       v-if="confirm"
       :title="confirm.kind === 'approve' ? `核准 — ${confirm.todo.reqId}` : `複驗通過 — ${confirm.todo.reqId}`"
@@ -90,7 +105,7 @@
       close-text="取消"
       @close="confirm = null"
     >
-      <div v-if="confirm.kind === 'verifyOk' && confirm.todo.verifyRejectCnt > 0" class="note-box warn verify-hint">⚠️ {{ verifyRejectHint(confirm.todo.verifyRejectReason) }}</div>
+      <div v-if="confirm.kind === 'verifyOk' && (confirm.todo.verifyRejectCnt ?? 0) > 0" class="note-box warn verify-hint">⚠️ {{ verifyRejectHint(confirm.todo.verifyRejectReason) }}</div>
       <p class="confirm-text">{{ confirm.kind === 'approve' ? `確認以「${confirm.todo.stageName}」核准此申請？` : '確認已核對執行佐證，複驗通過並結案？' }}</p>
       <template #actions>
         <button type="button" class="btn btn-primary confirm-ok" :disabled="busy" @click="confirmOk">
@@ -106,7 +121,7 @@
       close-text="取消"
       @close="reason = null"
     >
-      <div v-if="reason.kind === 'verifyReject' && reason.todo.verifyRejectCnt > 0" class="note-box warn verify-hint">⚠️ {{ verifyRejectHint(reason.todo.verifyRejectReason) }}</div>
+      <div v-if="reason.kind === 'verifyReject' && (reason.todo.verifyRejectCnt ?? 0) > 0" class="note-box warn verify-hint">⚠️ {{ verifyRejectHint(reason.todo.verifyRejectReason) }}</div>
       <div class="field">
         <label for="reason-text">{{ reason.kind === 'reject' ? '退件原因' : '退回原因' }}<span class="req-mark" title="必填">*</span></label>
         <textarea id="reason-text" v-model="reasonText" rows="3" :placeholder="reason.kind === 'reject' ? '請填寫退件原因' : '請填寫退回原因'"></textarea>
@@ -119,7 +134,7 @@
     </BaseModal>
 
     <BaseModal v-if="exec" title="回報執行完畢" :sub="`單號：${exec.reqId}　·　${titleOf(exec)}`" close-text="取消" @close="exec = null">
-      <div v-if="exec.verifyRejectCnt > 0" class="note-box warn verify-hint">⚠️ {{ verifyRejectHint(exec.verifyRejectReason) }}</div>
+      <div v-if="(exec.verifyRejectCnt ?? 0) > 0" class="note-box warn verify-hint">⚠️ {{ verifyRejectHint(exec.verifyRejectReason) }}</div>
       <template v-if="execNeedsCard">
         <div class="note-box">ⓘ 請實際持使用人識別證刷過卡鐘讀卡機，讀出卡鐘顯示的卡號後填入下方，卡號將成為此帳號的正式識別。</div>
         <div class="field exec-card">
@@ -151,6 +166,7 @@ import { computed, onMounted, ref } from 'vue'
 import BaseModal from '../components/BaseModal.vue'
 import PagerBar from '../components/PagerBar.vue'
 import RequestDetailModal from '../components/RequestDetailModal.vue'
+import ReviewSignModal from '../components/ReviewSignModal.vue'
 import ToastHost from '../components/ToastHost.vue'
 import { listTodos } from '../api/common'
 import { errorMessage, errorStatus } from '../api/errors'
@@ -159,8 +175,10 @@ import { usePaging } from '../composables/usePaging'
 import { useSession } from '../composables/useSession'
 import { useToast } from '../composables/useToast'
 import type { ActionKind, Todo } from '../types/common'
+import type { ReviewItem } from '../types/review'
 import { ATTACH_ACCEPT, MSG_PROOF_READ_FAIL, checkAttachFile, fileSizeText, readAttachFile } from '../utils/attach'
-import { DOOR_CATG_ID, REQ_TYPE_LABEL, isOn, label, verifyRejectHint } from '../utils/labels'
+import { dateOnly } from '../utils/date'
+import { DOOR_CATG_ID, REQ_TYPE_LABEL, REVIEW_STATE_LABEL, isOn, label, reviewStateTagClass, verifyRejectHint } from '../utils/labels'
 
 const MSG_REASON = '請填寫原因'
 const MSG_PROOF = '請上傳執行佐證附件'
@@ -169,8 +187,8 @@ const MSG_CARD = '請填寫門禁卡號'
 const { toast } = useToast()
 const { refreshBadges } = useSession()
 
-const kindLabel: Record<ActionKind, string> = { APPROVE: '待簽核', EXEC: '待執行', VERIFY: '待複驗' }
-const kindTag: Record<ActionKind, string> = { APPROVE: 'tag-pending', EXEC: 'tag-warn', VERIFY: 'tag-info' }
+const kindLabel: Record<ActionKind, string> = { APPROVE: '待簽核', EXEC: '待執行', VERIFY: '待複驗', REVIEW: '待審查' }
+const kindTag: Record<ActionKind, string> = { APPROVE: 'tag-pending', EXEC: 'tag-warn', VERIFY: 'tag-info', REVIEW: 'tag-pending' }
 
 const rows = ref<Todo[]>([])
 const loaded = ref(false)
@@ -178,7 +196,26 @@ const busy = ref(false)
 const { page, totalPages, pageRows } = usePaging(rows)
 
 const detailId = ref('')
-const detailTodo = computed(() => rows.value.find(t => t.reqId === detailId.value) ?? null)
+/** 申請單明細只找申請單列（審查列的編號是帳號單號，與該帳號的新增單號相同） */
+const detailTodo = computed(() => rows.value.find(t => !isReview(t) && t.reqId === detailId.value) ?? null)
+
+/** 正在審查的那一列（開簽核／駁回彈窗；資料用後端內嵌的 review） */
+const reviewing = ref<ReviewItem | null>(null)
+
+function isReview(t: Todo): boolean {
+  return t.actionKind === 'REVIEW'
+}
+
+/** 列鍵：來源＋編號＋身分（同一帳號的新增單號與帳號單號相同；雙簽核權限者同一帳號會有兩列） */
+function rowKey(t: Todo): string {
+  return `${t.source}:${t.reqId}:${t.half ?? ''}`
+}
+
+/** 審查彈窗簽核或駁回成功：重載待辦與側欄數字（彈窗自己會關） */
+async function onReviewChanged(): Promise<void> {
+  await load()
+  void refreshBadges()
+}
 
 const confirm = ref<{ kind: 'approve' | 'verifyOk'; todo: Todo } | null>(null)
 const reason = ref<{ kind: 'reject' | 'verifyReject'; todo: Todo } | null>(null)

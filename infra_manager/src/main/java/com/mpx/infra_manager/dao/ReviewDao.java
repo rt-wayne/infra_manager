@@ -30,6 +30,10 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R5b（代簽可見標記，裁示 ①B）：SELECT_COLS 多回兩位實際操作人的姓名 INFRA_SIGN_ACT_BY_NAME／GOV_SIGN_ACT_BY_NAME
 //           （再接兩個同步表別名 UIA／UGA），前端在實際操作人≠有效身分時顯示「（實際操作人：姓名）」
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R6（待辦整合）：FIND_TODO／findTodo——待複審與逾期未審的帳號（含進行中那一輪），逾期最久的先；
+//           誰能簽哪個身分由 HomeService 依 REVIEW_SIGN_* 權限與同人規則過濾
 // ============================================================
 
 import java.time.LocalDate;
@@ -143,6 +147,15 @@ public class ReviewDao {
 			          X.NEXT_REVIEW_DATE NULLS FIRST, X.ACCT_ID
 			""";
 
+	/** 待辦（R6）：可簽核的兩種狀態（待複審、逾期未審）全部帳號，逾期最久的先（下次應審查日舊到新、空值最前）；誰能簽由 Service 過濾 */
+	public static final String FIND_TODO = """
+			SELECT X.*
+			  FROM (""" + SELECT_BASE + """
+			       ) X
+			 WHERE X.REVIEW_STATE_CODE IN ('DUE', 'OVERDUE')
+			 ORDER BY X.NEXT_REVIEW_DATE NULLS FIRST, X.ACCT_ID
+			""";
+
 	/** 單筆（簽核交易內重讀狀態用）：不過濾狀態，不在範圍時 REVIEW_STATE_CODE 為 NULL，由 Service 判斷 */
 	public static final String FIND_BY_ACCT = SELECT_BASE + """
 			 WHERE A.ACCT_ID = :acctId
@@ -253,6 +266,13 @@ public class ReviewDao {
 		params.put("stateCode", stateCode);
 		params.put("today", DaoSupport.ts(today));
 		return dbClient.query(itflowDb, FIND_LIST, params, ReviewItem.class);
+	}
+
+	/** 待辦用：待複審與逾期未審的帳號；today＝今天（綁 00:00） */
+	public List<ReviewItem> findTodo(LocalDate today) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("today", DaoSupport.ts(today));
+		return dbClient.query(itflowDb, FIND_TODO, params, ReviewItem.class);
 	}
 
 	/** 查無回 null；reviewStateCode 為 null＝不在審查範圍 */

@@ -11,6 +11,10 @@ package com.mpx.infra_manager.model;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R6（待辦整合）：第二種來源 REVIEW（定期審查）——source＝REVIEW、actionKind＝REVIEW、reqId 填帳號單號（前端列鍵用來源＋編號＋身分），
+//           加 acctId、reviewId、half（我可簽的身分 INFRA／GOV）、review（整筆 ReviewItem，前端直接開簽核彈窗；裁示 ①A）；申請單列這四欄為 null
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -19,8 +23,16 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 
 public class TodoItem {
 
+	/** 來源：ACCT_REQ 申請單／REVIEW 定期審查 */
 	private String source;
+	/** 編號：申請單號；審查列填帳號單號（與該帳號的新增單號相同，所以前端列鍵要加來源） */
 	private String reqId;
+	private String acctId;
+	private Long reviewId;
+	/** 審查列：這一列要以哪個身分簽（INFRA／GOV） */
+	private String half;
+	/** 審查列：進行中那一輪的完整資料，前端直接開 ReviewSignModal */
+	private ReviewItem review;
 	private String title;
 	private String reqTypeCode;
 	private String catgId;
@@ -52,6 +64,38 @@ public class TodoItem {
 
 	public void setReqId(String reqId) {
 		this.reqId = reqId;
+	}
+
+	public String getAcctId() {
+		return acctId;
+	}
+
+	public void setAcctId(String acctId) {
+		this.acctId = acctId;
+	}
+
+	public Long getReviewId() {
+		return reviewId;
+	}
+
+	public void setReviewId(Long reviewId) {
+		this.reviewId = reviewId;
+	}
+
+	public String getHalf() {
+		return half;
+	}
+
+	public void setHalf(String half) {
+		this.half = half;
+	}
+
+	public ReviewItem getReview() {
+		return review;
+	}
+
+	public void setReview(ReviewItem review) {
+		this.review = review;
 	}
 
 	public String getTitle() {

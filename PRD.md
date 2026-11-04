@@ -484,7 +484,7 @@
 - 類別「30 天內到期或已逾期」（到期帳號）：到期提醒範圍內，逐筆判斷與我相關才列：我有 ACC_EXPIRY_ALL；或我是原新增申請人；或我是該類別執行人。有 ACC_LIST_FULL 且有項目時顯示「查看全部到期清單」。點單筆：有 ACC_LIST_FULL → 帳號列表到期篩選；否則開唯讀帳號明細彈窗（不顯示異動按鈕）。
 - 類別「緊急存取已退回未結案」：已退回且尚未結案的緊急存取單，範圍與緊急存取清單同口徑（有 EMG_VIEW_ALL 看全部，否則只列本人送出的單＝原申請人）。點單筆：有 EMG_VIEW_ALL → 緊急存取清單套「已退回」篩選；否則開該單明細彈窗（申請人對已退回單無可做動作，等同唯讀）。
 
-**待辦簽核**：只列我此刻能處理的申請單，送出時間由舊到新；每次依當下名單計算。標題格式「{申請類型} {帳號類別}：{帳號名稱}」。
+**待辦簽核**：只列我此刻能處理的事，兩種來源；每次依當下名單計算。申請單列送出時間由舊到新排前面，標題格式「{申請類型} {帳號類別}：{帳號名稱}」；定期審查列接在後面、逾期最久的先（下次應審查日舊到新、空值最前），標題格式「定期審查 {帳號類別}：{帳號名稱}」（2026-11-04 裁示 ③A，兩種日期意義不同不混排）。側欄「待辦簽核」數字＝兩種來源合計。
 
 | 狀態／關卡 | 出現在誰的待辦 | 可做 |
 |---|---|---|
@@ -492,8 +492,10 @@
 | 待執行／6 | 該類別執行人 | 回報執行（彈窗：佐證必選、門禁卡新增時卡號必填、執行說明選填） |
 | 待複驗／7 | 有 VERIFY_G7 | 複驗通過、複驗退回（填原因） |
 | 已退件 | 不出現（原申請人在「我的申請單」重送） | — |
+| 定期審查：待複審／逾期未審，Infra 主管尚未簽核 | 有 REVIEW_SIGN_INFRA，且資訊治理主管的簽核人（有效身分）不是我 | 審查（開簽核／駁回彈窗，同 `/reviews`；不需 REVIEW_LIST） |
+| 定期審查：待複審／逾期未審，資訊治理主管尚未簽核 | 有 REVIEW_SIGN_GOV，且 Infra 主管的簽核人（有效身分）不是我 | 同上 |
 
-複驗退回過的單，在回報與複驗彈窗顯示 U02。
+定期審查列一個「帳號＋簽核身分」一列（裁示 ②A；同時有兩個簽核權限的人同一帳號會有兩列，開同一個彈窗），條件與清單「審查」鈕同口徑（不比實際操作人，切換身分代簽放行）；審查異常（已駁回）的帳號不進待辦（它要走修改／停用申請複驗清除）。複驗退回過的單，在回報與複驗彈窗顯示 U02。
 
 #### 12. 機房巡檢
 
@@ -559,7 +561,7 @@
 
 #### 15. 定期審查（SA §5.10）
 
-**本功能分批施工中，進度見 `BACKLOG.md` 第 158 項**；本節只寫已上線的部分：審查狀態定義、清單 API、兩位主管簽核與完成、駁回與駁回信、名單維護守門、帳號異動時取消進行中一輪、清單頁與簽核／駁回彈窗（含駁回後停用捷徑；見「畫面說明」`/reviews`）、帳號明細的審查狀態（`GET /accounts/{id}` 多回 reviewStateCode，同一句狀態片段計算；帳號明細彈窗「定期審查」列顯示）。待複審通知（J04）、待辦、首頁第四區、鈴鐺尚未上線。
+**本功能分批施工中，進度見 `BACKLOG.md` 第 158 項**；本節只寫已上線的部分：審查狀態定義、清單 API、兩位主管簽核與完成、駁回與駁回信、名單維護守門、帳號異動時取消進行中一輪、清單頁與簽核／駁回彈窗（含駁回後停用捷徑；見「畫面說明」`/reviews`）、帳號明細的審查狀態（`GET /accounts/{id}` 多回 reviewStateCode，同一句狀態片段計算；帳號明細彈窗「定期審查」列顯示）、待辦整合（有簽核權限的人在待辦簽核頁看到自己那個身分的待簽帳號，見「11. 首頁、鈴鐺、待辦」待辦簽核段）。待複審通知（J04）、首頁第四區、鈴鐺尚未上線。
 
 - **審查範圍**：帳號狀態為 APPROVED（生效中），且符合任一——資產分類的 IS_REVIEW_TRIGGER＝1（只看啟用中的分類，分類停用或查無視同不符）、類別為門禁卡（DOOR）、IS_PRIV＝1。與「6. 7 關簽核」的審查日期寫入條件、關卡 5 免簽判斷是同一個判斷（程式共用 `ReviewRule.matches`；SQL 片段 `ReviewDao.REVIEW_SCOPE_COND` 對齊，有測試鎖住）。已逾期（EXPIRED）、停用、刪除、審核中的帳號都不在範圍。
 - **審查狀態**（不存欄位，每次查詢以當天日期即時計算，SQL 片段 `ReviewDao.REVIEW_STATE_EXPR`；清單、之後的首頁卡、排程、鈴鐺、簽核都用同一句），依序判斷：
@@ -644,7 +646,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 |---|---|---|---|
 | `/login` | 登入 | 無 | 工號、密碼；錯誤顯示後端訊息；已登入導向首頁 |
 | `/` | 首頁 | 登入 | 最多 8 卡片，分帳號權限管理、緊急存取、機房巡檢三區；範圍與巡檢區是否顯示照後端旗標（見「首頁八張卡片」），不是看全部時卡片標題加「我的」 |
-| `/todo` | 待辦簽核 | 登入 | 核准／退件／回報／複驗彈窗 |
+| `/todo` | 待辦簽核 | 登入 | 上方說明「這裡只列出目前身分此刻可以處理的申請與定期審查」；申請單列：單號、類型標籤（待簽核／待執行／待複驗）與申請類型、標題、申請人、目前關卡、送出時間、查看明細＋核准／退件／回報／複驗彈窗；定期審查列：帳號單號、標籤「待審查」與「定期審查」（特權加紅標）、標題、原新增申請人（沒有「—」）、關卡「Infra 主管待簽」／「資訊治理主管待簽」、審查狀態標籤＋「應審查日 yyyy-MM-dd」、「審查」開簽核／駁回彈窗（同 `/reviews` 的 ReviewSignModal，資料用後端內嵌的 review；簽核或駁回成功重載待辦與側欄數字；沒有查看明細）；列鍵＝來源＋編號＋身分（帳號單號與新增單號相同） |
 | `/accounts` | 帳號列表 | ACC_LIST_FULL | 橫幅 U14（點擊套用到期篩選）；關鍵字（帳號單號、帳號名稱、使用人）、類別頁籤（含數量，8 類都顯示）、狀態（含數量，預設全部不含已刪除）、資產分類可同時套用；列顯示特權標籤與 U11；帳號掛審查異常旗標時狀態欄旁顯示紅色「審查異常」標籤，滑鼠移上顯示原因；操作按鈕依可做的申請類型。有 ACC_EXPORT 時工具列有「匯出 Excel」：匯出目前篩選結果（所有分頁，含「未分類」篩選），一律排除已刪除（SA v0.5 第 8.2 節）；狀態篩選選「已刪除」時停用並顯示「已刪除的帳號不提供匯出，請改選其他狀態」，沒有資料時停用並顯示「目前沒有可匯出的帳號」；檔名 `帳號權限清單_YYYYMMDD.xlsx`（本機日期）、工作表「帳號權限清單」，標題列粗體並凍結；欄位只有畫面 8 欄（單號、類別、帳號名稱、所屬系統、使用人、資產分類、到期日、狀態；SA 寫「欄位依規格 6.2」但原始規格書缺件，見 BACKLOG 第 16 項，由使用者 2026-10-16 裁示），儲存格文字同畫面（`utils\accountExport.ts` 與畫面共用），類別格加「、特權」，狀態格加「、審查異常」與「、待複驗」或「、申請處理中」；匯出失敗 toast「匯出失敗，請稍後再試」 |
 | `/requests` | 帳號申請單列表 | ACC_SELF_SERVICE | 三區塊：① 對既有帳號提出異動（完整名稱輸入＋U05；查無 U06；在途不顯示操作）② 我的申請單（狀態篩選；已退件顯示原因與「重新送出」；標題列收合鈕，預設展開）③ 我曾申請新增的帳號（在途只有查看、歷史；標題列收合鈕，預設收合）。收合只藏內容不卸載（資料照常載入、篩選與頁碼保留），狀態不記住、每次進頁回預設 |
 | `/requests/new` | 帳號權限申請 | ACC_APPLY | 新增；異動（帶 reqType、acctId、acctName）；重送（帶 resubmit＝單號）；刪除顯示 U03 |
@@ -1154,7 +1156,7 @@ END
 | GET | `/codes` | 登入 | categories[catgId、catgName、catgDescr、enabled、suggestExpiry、sortSeq]、assetClasses[assetClassId、assetTypeCode、assetClassName、reviewTrigger、selectable、ctrlDescr、sortSeq]、stages[stageId、stageName、stageTypeCode、permId] |
 | GET | `/home/stats` | 登入 | acctTotal、acctReviewing、acctExpiring、acctPriv、inspThisMonth、inspExcptThisMonth、emgUndecided（緊急存取尚未處理，含逾期）、emgReturned（緊急存取已退回未結案）、acctAll、emgAll、inspVisible；帳號四張無 ACC_EXPIRY_ALL 只算 APPLY_BY＝有效身分、緊急存取兩張無 EMG_VIEW_ALL 只算 APPLY_BY＝有效身分、巡檢兩張 inspVisible 為 false 時 null |
 | GET | `/home/expiring` | 登入 | [acctId、acctName、catgId、catgName、acctStateCode、expiryDate、daysLeft]（不含 applyBy） |
-| GET | `/todos` | 登入 | [source（ACCT_REQ）、reqId、title、reqTypeCode、catgId、catgName、acctName、isPriv、applyBy、applyByName、stageId、stageName、submitDate、actionKind（APPROVE、EXEC、VERIFY）、versionNo、verifyRejectCnt、verifyRejectReason] |
+| GET | `/todos` | 登入 | [source（ACCT_REQ／REVIEW）、reqId（申請單號；審查列＝帳號單號）、acctId、reviewId、half（INFRA／GOV）、review（審查列：整筆同 `GET /reviews` 一列；申請單列這四欄 null）、title、reqTypeCode、catgId、catgName、acctName、isPriv、applyBy、applyByName、stageId、stageName（審查列「Infra 主管待簽」／「資訊治理主管待簽」）、submitDate（審查列 null）、actionKind（APPROVE、EXEC、VERIFY、REVIEW）、versionNo（審查列＝進行中那一輪版本，沒有＝0）、verifyRejectCnt、verifyRejectReason]；申請單列在前，審查列接在後面、依下次應審查日 |
 
 **帳號**
 

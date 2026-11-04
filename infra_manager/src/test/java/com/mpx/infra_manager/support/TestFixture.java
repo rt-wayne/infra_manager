@@ -71,6 +71,9 @@ package com.mpx.infra_manager.support;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R5 第 3 單位：acctDao.findDetail 樁同 findById（回 accts 內那筆；reviewStateCode 由各測試自行 set）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R6：HomeService 建構子多傳 ReviewDao（待辦的定期審查列）；reviewDao.findTodo 預設回空
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -302,7 +305,7 @@ public class TestFixture {
 	public final RequestService requestService = new RequestService(permissionService, codeService, docSeqService, acctReqDao,
 			acctDao, acctHistDao, attachDao, reviewDao, attachmentService, notificationService, tx, clock);
 	public final AccountService accountService = new AccountService(permissionService, codeService, acctDao, acctHistDao, clock);
-	public final HomeService homeService = new HomeService(permissionService, codeService, homeDao, acctReqDao, clock);
+	public final HomeService homeService = new HomeService(permissionService, codeService, homeDao, acctReqDao, reviewDao, clock);
 	public final InspectionService inspectionService = new InspectionService(permissionService, docSeqService, inspDao, tx,
 			clock);
 	public final EmergencyService emergencyService = new EmergencyService(permissionService, codeService, docSeqService, emgDao,
@@ -353,6 +356,7 @@ public class TestFixture {
 		when(reviewDao.insertRejected(anyLong(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
 		when(reviewDao.rejectRound(anyLong(), anyInt(), any(), any(), any(), any(), any())).thenReturn(1);
 		when(reviewDao.cancelOpen(any(), any(), any(), any(), any())).thenReturn(0);
+		when(reviewDao.findTodo(any())).thenReturn(List.of());
 
 		when(acctHistDao.insert(any())).thenAnswer(inv -> {
 			AcctHist h = new AcctHist();

@@ -554,6 +554,10 @@ class SqlConstantScanTest {
 				.contains("X.NEXT_REVIEW_DATE NULLS FIRST, X.ACCT_ID");
 		assertThat(ReviewDao.FIND_LIST.split("ESCAPE '\\\\'", -1)).hasSize(5);
 		assertThat(AcctConst.REVIEW_STATES).containsExactly("ABNORMAL", "OVERDUE", "DUE", "NORMAL");
+		// R6 待辦：只取可簽核的兩種狀態、逾期最久的先；沿用 SELECT_BASE（含進行中那一輪與姓名），不帶關鍵字與狀態參數
+		assertThat(ReviewDao.FIND_TODO).contains(ReviewDao.SELECT_BASE).contains("X.REVIEW_STATE_CODE IN ('DUE', 'OVERDUE')")
+				.contains("ORDER BY X.NEXT_REVIEW_DATE NULLS FIRST, X.ACCT_ID").doesNotContain(":stateCode").doesNotContain(":keyword")
+				.contains(":today");
 	}
 
 	/** 第 158 項 R3a：簽核 SQL——首簽建輪、簽半樂觀鎖、雙簽完成；歷史帶 REVIEW_ID */
