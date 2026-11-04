@@ -23,6 +23,10 @@ package com.mpx.infra_manager.service;
 //           不可簽狀態 409；沒有一輪：鎖 → 直接 INSERT REJECTED、旗標來源 REVIEW 原因帶前綴、歷史 REVIEW_REJECT、提交後寄 REVIEW_REJECT；
 //           帶版本 409；已有一輪：UPDATE 成 REJECTED 版本＋1、另一半簽核人是我 409（②A）、被駁回那一半已簽 UPDATE 0 筆 409（①A）；
 //           旗標 0 筆 500 回滾不寄信；IS_SELF_ACTION 判準同完成
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 實測裁示：②A 同人判斷只比有效身分——「實際操作人相同」兩例改為放行（切換身分代簽可簽、可駁回）；
+//           ①A 歷史說明斷言改「Infra 主管」「資訊治理主管」「下輪兩位主管重簽」
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -181,7 +185,7 @@ class ReviewServiceTest {
 		assertThat(h.getActBy()).isEqualTo(TESTER);
 		assertThat(h.getActAsId()).isEqualTo(TERRY);
 		assertThat(h.getIsSelfAction()).isZero();
-		assertThat(h.getResultDescr()).isEqualTo("定期審查駁回（Infra 主管半）；駁回人 " + NAMES.get(TERRY) + "；原因：使用人已調單位；資訊治理主管半尚未簽核");
+		assertThat(h.getResultDescr()).isEqualTo("定期審查駁回（Infra 主管）；駁回人 " + NAMES.get(TERRY) + "；原因：使用人已調單位；資訊治理主管尚未簽核");
 		assertThat(fx.txm.commits).isEqualTo(1);
 		assertThat(fx.txm.rollbacks).isZero();
 	}
@@ -205,25 +209,31 @@ class ReviewServiceTest {
 		verify(fx.notificationService).reviewEvent(AcctConst.EV_REVIEW_REJECT, 55L, MOLLY);
 		assertThat(r.getReviewStateCode()).isEqualTo("REJECTED");
 		assertThat(r.getVersionNo()).isEqualTo(4);
-		assertThat(fx.hists.get(0).getResultDescr()).isEqualTo("定期審查駁回（資訊治理主管半）；駁回人 " + NAMES.get(MOLLY)
-				+ "；原因：權限過大；Infra 主管半已由 " + NAMES.get(TERRY) + " 於 2026-10-07 09:30:00 簽核（本輪結束，下輪兩半重簽）");
+		assertThat(fx.hists.get(0).getResultDescr()).isEqualTo("定期審查駁回（資訊治理主管）；駁回人 " + NAMES.get(MOLLY)
+				+ "；原因：權限過大；Infra 主管已由 " + NAMES.get(TERRY) + " 於 2026-10-07 09:30:00 簽核（本輪結束，下輪兩位主管重簽）");
 	}
 
 	@Test
-	void 駁回_已有一輪_版本不符409_另一半是我簽的409_被駁回那一半已簽UPDATE0筆409() {
+	void 駁回_已有一輪_版本不符409_另一位主管是我簽的409_切換身分代駁放行_被駁回身分已簽UPDATE0筆409() {
 		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(infraSigned(3));
 		assertStatus(() -> svc.reject(id(MOLLY), ACCT, rejectForm("GOV", "x", 2)), HttpStatus.CONFLICT, AcctMsg.E08);
-		// ②A：Infra 半是 TERRY 簽的，TERRY 切成 MOLLY 以治理半駁回 → 實際操作人相同 → 409
-		assertStatus(() -> svc.reject(impersonate(TERRY, MOLLY), ACCT, rejectForm("GOV", "x", 3)), HttpStatus.CONFLICT,
-				AcctMsg.REVIEW_SAME_SIGNER);
+		// ②A：Infra 主管是 TERRY（有效身分）簽的，TERRY 本人若有治理權限再以資訊治理主管駁回 → 409
+		assertStatus(() -> svc.reject(TestFixture.idWith(TERRY, java.util.Set.of(AcctConst.PERM_REVIEW_SIGN_GOV), List.of()), ACCT,
+				rejectForm("GOV", "x", 3)), HttpStatus.CONFLICT, AcctMsg.REVIEW_SAME_SIGNER);
 		verify(fx.reviewDao, never()).rejectRound(anyLong(), anyInt(), any(), any(), any(), any(), any());
-		// ①A：WENSEN 想以 Infra 半駁回，但 Infra 半已由 TERRY 簽 → UPDATE 條件不成立 0 筆 → 409
+		// ①A：WENSEN 想以 Infra 主管駁回，但 Infra 主管已由 TERRY 簽 → UPDATE 條件不成立 0 筆 → 409
 		when(fx.reviewDao.rejectRound(anyLong(), anyInt(), any(), any(), any(), any(), any())).thenReturn(0);
 		assertStatus(() -> svc.reject(id(WENSEN), ACCT, rejectForm("INFRA", "x", 3)), HttpStatus.CONFLICT, AcctMsg.E08);
 		verify(fx.reviewDao).rejectRound(55L, 3, "INFRA", WENSEN, WENSEN, "x", NOW);
 		verify(fx.acctDao, never()).flagReview(any(), any(), any(), any(), any(), any());
 		verify(fx.notificationService, never()).reviewEvent(any(), anyLong(), any());
 		assertThat(fx.hists).isEmpty();
+		// 2026-11-04 ②A：TERRY 切成 MOLLY 以資訊治理主管駁回 → 實際操作人相同但有效身分不同 → 放行（標旗標、寄信照走）
+		when(fx.reviewDao.rejectRound(anyLong(), anyInt(), any(), any(), any(), any(), any())).thenReturn(1);
+		svc.reject(impersonate(TERRY, MOLLY), ACCT, rejectForm("GOV", "x", 3));
+		verify(fx.reviewDao).rejectRound(55L, 3, "GOV", MOLLY, TERRY, "x", NOW);
+		verify(fx.acctDao).flagReview(ACCT, "定期審查駁回：x", "REVIEW", MOLLY, NOW, TERRY);
+		verify(fx.notificationService).reviewEvent(AcctConst.EV_REVIEW_REJECT, 55L, TERRY);
 	}
 
 	@Test
@@ -360,19 +370,21 @@ class ReviewServiceTest {
 	}
 
 	@Test
-	void 同人兩半_有效身分相同或實際操作人相同都409() {
-		// Infra 半由 TERRY 簽；TERRY 若也有治理半權限（這裡用自訂權限）不得再簽治理半
+	void 同人簽兩個身分_有效身分相同409_只有實際操作人相同放行() {
+		// Infra 主管由 TERRY 簽；TERRY 若也有治理權限（這裡用自訂權限）不得再以資訊治理主管簽
 		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(infraSigned(0));
 		assertStatus(() -> svc.sign(TestFixture.idWith(TERRY, java.util.Set.of(AcctConst.PERM_REVIEW_SIGN_GOV), List.of()), ACCT,
 				form("GOV", 0)), HttpStatus.CONFLICT, AcctMsg.REVIEW_SAME_SIGNER);
-		// 實際操作人 TERRY 切換成 MOLLY 代簽治理半：有效身分不同，但實際操作人相同 → 409
-		assertStatus(() -> svc.sign(impersonate(TERRY, MOLLY), ACCT, form("GOV", 0)), HttpStatus.CONFLICT, AcctMsg.REVIEW_SAME_SIGNER);
-		// 反過來：Infra 半是 TESTER 切成 TERRY 代簽的，TESTER 本人（有效身分 MOLLY）再簽治理半也擋
+		verify(fx.reviewDao, never()).signHalf(anyLong(), anyInt(), any(), any(), any(), any());
+		// 2026-11-04 ②A：實際操作人 TERRY 切換成 MOLLY 代簽資訊治理主管：有效身分不同 → 放行（原 ⑪A「切換身分代簽也擋」取消）
+		svc.sign(impersonate(TERRY, MOLLY), ACCT, form("GOV", 0));
+		verify(fx.reviewDao).signHalf(55L, 0, "GOV", MOLLY, TERRY, NOW);
+		// 反過來：Infra 主管是 TESTER 切成 TERRY 代簽的，TESTER 本人切成 MOLLY 再簽資訊治理主管也放行
 		ReviewItem byProxy = infraSigned(0);
 		byProxy.setInfraSignActBy(TESTER);
 		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(byProxy);
-		assertStatus(() -> svc.sign(impersonate(TESTER, MOLLY), ACCT, form("GOV", 0)), HttpStatus.CONFLICT, AcctMsg.REVIEW_SAME_SIGNER);
-		verify(fx.reviewDao, never()).signHalf(anyLong(), anyInt(), any(), any(), any(), any());
+		svc.sign(impersonate(TESTER, MOLLY), ACCT, form("GOV", 0));
+		verify(fx.reviewDao).signHalf(55L, 0, "GOV", MOLLY, TESTER, NOW);
 	}
 
 	@Test
@@ -399,8 +411,8 @@ class ReviewServiceTest {
 		assertThat(h.getActAsId()).isEqualTo(MOLLY);
 		assertThat(h.getActDate()).isEqualTo(NOW);
 		assertThat(h.getIsSelfAction()).isZero();
-		assertThat(h.getResultDescr()).startsWith("定期審查完成（雙簽）；Infra 半 " + NAMES.get(TERRY) + " 於 2026-10-07 09:30:00")
-				.contains("；治理半 " + NAMES.get(MOLLY) + " 於 2026-10-07 10:30:00")
+		assertThat(h.getResultDescr()).startsWith("定期審查完成（雙簽）；Infra 主管 " + NAMES.get(TERRY) + " 於 2026-10-07 09:30:00")
+				.contains("；資訊治理主管 " + NAMES.get(MOLLY) + " 於 2026-10-07 10:30:00")
 				.contains("；上次審查日改為 2026-10-07、下次應審查日 2027-04-05");
 	}
 

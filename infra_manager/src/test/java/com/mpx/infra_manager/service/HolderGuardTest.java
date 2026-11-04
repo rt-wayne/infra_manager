@@ -141,14 +141,14 @@ class HolderGuardTest {
 		holders("REVIEW_SIGN_INFRA", 1, 0);
 		holders("REVIEW_SIGN_GOV", 1, 0);
 		holders("APPR_G4", 1, 0);
-		when(dao.findInFlightReview("INFRA")).thenReturn(List.of(new InFlightRow("AR20261001-001", "定期審查 Infra 半待簽")));
-		when(dao.findInFlightReview("GOV")).thenReturn(List.of(new InFlightRow("AR20261001-002", "定期審查治理半待簽"),
-				new InFlightRow("AR20261001-003", "定期審查治理半待簽")));
+		when(dao.findInFlightReview("INFRA")).thenReturn(List.of(new InFlightRow("AR20261001-001", "定期審查 Infra 主管待簽")));
+		when(dao.findInFlightReview("GOV")).thenReturn(List.of(new InFlightRow("AR20261001-002", "定期審查資訊治理主管待簽"),
+				new InFlightRow("AR20261001-003", "定期審查資訊治理主管待簽")));
 		Result r = guard.check(List.of("APPR_G4", "REVIEW_SIGN_INFRA", "REVIEW_SIGN_GOV"), Exclusion.member("R", "U1"));
 		assertThat(r.blockedPermIds()).containsExactly("REVIEW_SIGN_INFRA", "REVIEW_SIGN_GOV");
 		assertThat(r.blockedTotal()).isEqualTo(3);
 		assertThat(HolderGuard.describe(r)).isEqualTo(
-				"AR20261001-001（定期審查 Infra 半待簽）、AR20261001-002（定期審查治理半待簽）、AR20261001-003（定期審查治理半待簽）");
+				"AR20261001-001（定期審查 Infra 主管待簽）、AR20261001-002（定期審查資訊治理主管待簽）、AR20261001-003（定期審查資訊治理主管待簽）");
 		verify(dao).findInFlightReview("INFRA");
 		verify(dao).findInFlightReview("GOV");
 		verify(dao, never()).findInFlightEmg();

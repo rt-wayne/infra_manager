@@ -26,6 +26,10 @@ package com.mpx.infra_manager.service;
 //           有一輪：版本相符、②A 另一半簽核人不是我（沿用 ⑪A）→ UPDATE 成 REJECTED（①A 被駁回那一半已有人簽＝0 筆＝409）→
 //           主表標旗標來源 REVIEW（原因「定期審查駁回：…」截 500；0 筆 500 回滾）→ 歷史 REVIEW_REJECT（㉑A）；
 //           提交後寄 REVIEW_REJECT（原申請人＋REVIEW_SIGN_GOV 持有人）。駁回不動審查日（④B），狀態自然變成審查異常
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 實測裁示：②A checkSameSigner 只比有效身分、不再比實際操作人（切換身分代簽放行；⑪A 範圍縮小）；
+//           ①A 歷史說明文字拿掉「半」（「Infra 主管 X 於…；資訊治理主管 Y 於…」、「下輪兩位主管重簽」）
 // ============================================================
 
 import java.time.Clock;
@@ -212,7 +216,7 @@ public class ReviewService {
 					throw AcctMsg.concurrent();
 				}
 				reviewId = item.getReviewId();
-				// ②A：另一半是我簽的就不能再由我駁回（⑪A 延伸）
+				// ②A：另一位主管的簽核是我（有效身分）簽的就不能再由我駁回（⑪A 延伸）
 				checkSameSigner(id, item, infra);
 				// ①A：被駁回的那一半已有人簽 → 0 筆 → 409
 				if (reviewDao.rejectRound(reviewId, v, half, id.getUserId(), id.getRealUserId(), reason, now) != 1) {
@@ -257,11 +261,13 @@ public class ReviewService {
 		return item;
 	}
 
-	/** ⑪A：另一半的簽核人（有效身分）＝我的有效身分、或另一半的實際操作人＝我的實際操作人 → 409 */
+	/**
+	 * ⑪A：另一位主管的簽核人（有效身分）＝我的有效身分 → 409。
+	 * 2026-11-04 裁示 ②A：不比實際操作人——切換身分代簽（實際操作人相同、有效身分不同）放行；前端 reviewActableHalves 同口徑
+	 */
 	private static void checkSameSigner(Identity id, ReviewItem item, boolean infra) {
 		String otherBy = infra ? item.getGovSignBy() : item.getInfraSignBy();
-		String otherActBy = infra ? item.getGovSignActBy() : item.getInfraSignActBy();
-		if (id.getUserId().equals(otherBy) || id.getRealUserId().equals(otherActBy)) {
+		if (id.getUserId().equals(otherBy)) {
 			throw ApiException.conflict(AcctMsg.REVIEW_SAME_SIGNER);
 		}
 	}
@@ -279,8 +285,10 @@ public class ReviewService {
 		String govName = infra ? item.getGovSignByName() : id.getUserName();
 		LocalDateTime govDate = infra ? item.getGovSignDate() : now;
 		StringBuilder sb = new StringBuilder();
-		sb.append("定期審查完成（雙簽）；Infra 半 ").append(infraName).append(" 於 ").append(DATE_TIME_FMT.format(infraDate));
-		sb.append("；治理半 ").append(govName).append(" 於 ").append(DATE_TIME_FMT.format(govDate));
+		sb.append("定期審查完成（雙簽）；").append(AcctConst.reviewHalfName(AcctConst.HALF_INFRA)).append(' ').append(infraName)
+				.append(" 於 ").append(DATE_TIME_FMT.format(infraDate));
+		sb.append("；").append(AcctConst.reviewHalfName(AcctConst.HALF_GOV)).append(' ').append(govName)
+				.append(" 於 ").append(DATE_TIME_FMT.format(govDate));
 		sb.append("；上次審查日改為 ").append(DATE_FMT.format(today)).append("、下次應審查日 ").append(DATE_FMT.format(next));
 		return reviewHist(id, item, reviewId, AcctConst.ACT_REVIEW_DONE, infra, sb.toString(), now);
 	}
@@ -301,7 +309,7 @@ public class ReviewService {
 			sb.append("；").append(otherHalf).append("尚未簽核");
 		} else {
 			sb.append("；").append(otherHalf).append("已由 ").append(otherName).append(" 於 ").append(DATE_TIME_FMT.format(otherDate))
-					.append(" 簽核（本輪結束，下輪兩半重簽）");
+					.append(" 簽核（本輪結束，下輪兩位主管重簽）");
 		}
 		return reviewHist(id, item, reviewId, AcctConst.ACT_REVIEW_REJECT, infra, sb.toString(), now);
 	}

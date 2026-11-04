@@ -1038,9 +1038,9 @@ class JobAndNotifyTest {
 		assertThat(body.getValue()).startsWith("<!DOCTYPE html>")
 				.contains("帳號單號", "AR20261001-001").contains("帳號類別", "資料庫").contains("帳號名稱", "prod &lt;root&gt;")
 				.contains("所屬系統", "ERP").contains("使用人", "王小明").contains("原申請人", "凱文 &amp; 測試")
-				.contains("駁回半邊", "資訊治理主管半").contains("駁回人", "莫莉 &lt;治理&gt;").doesNotContain("0000030")
+				.contains("駁回身分", "資訊治理主管").contains("駁回人", "莫莉 &lt;治理&gt;").doesNotContain("0000030")
 				.contains("駁回時間", "2026-10-07 10:30").contains("駁回原因", "權限過大<br>&lt;請縮減&gt;")
-				.contains("另一半簽核", "Infra 主管半已由 泰瑞 於 2026-10-07 09:30 簽核")
+				.contains("另一位主管簽核", "Infra 主管已由 泰瑞 於 2026-10-07 09:30 簽核").doesNotContain("半")
 				.contains("<p>" + NotificationService.REVIEW_REJECT_FOOTER + "</p>")
 				.contains("<a href=\"http://h/ctx/#/reviews\"", "前往「定期審查」", FOOTER);
 		// 紀錄事件 REVIEW_REJECT、參照 REVIEW、REF_ID＝REVIEW_ID、CREATE_BY 為實際操作人；兩位收件人各一筆
@@ -1060,8 +1060,8 @@ class JobAndNotifyTest {
 		r.setGovSignDate(null);
 		r.setRejectByName(null);
 		r.setRejectReason(null);
-		assertThat(NotificationService.otherHalfText(r)).isEqualTo("資訊治理主管半尚未簽核");
-		assertThat(NotificationService.reviewRejectBody(r)).contains("Infra 主管半", "0000030").doesNotContain("null");
+		assertThat(NotificationService.otherHalfText(r)).isEqualTo("資訊治理主管尚未簽核");
+		assertThat(NotificationService.reviewRejectBody(r)).contains("Infra 主管", "0000030").doesNotContain("null");
 
 		MailSender sender = mock(MailSender.class);
 		NotificationService n = notifier(sender, SEND_ALL);

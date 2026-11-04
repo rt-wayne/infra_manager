@@ -203,7 +203,7 @@ COMMENT ON COLUMN IM_ACCT_HIST.EMG_ID IS '來源緊急存取單號；SOURCE_CODE
 -- （2026-10-30 第 158 項起：下列與定期審查相關的既有欄位 COMMENT 改為定案文字，與 infra_manager_phase2_review.sql、建表檔三檔同句，
 --   避免重跑本檔把「預留」字樣蓋回去）
 COMMENT ON COLUMN IM_ACCT_HIST.SOURCE_CODE IS '事件來源：REQ＝簽核流程、SYS＝系統排程、EMG＝緊急存取、REVIEW＝定期審查';
-COMMENT ON COLUMN IM_ACCT_HIST.ACTION_CODE IS '動作：SUBMIT＝送出申請、RESUB＝重新送出、APPROVE＝核准、REJECT＝退件、EXEC_DONE＝回報執行完畢（帳號生效）、VERIFY_OK＝複驗通過、VERIFY_REJECT＝複驗退回、EXPIRE＝到期轉為已逾期、EMG_MODIFY＝緊急存取異動（依申請人回報，主管處理時寫入）、EMG_CLOSE_MODIFY＝緊急存取結案登記異動、FLAG_CLEAR＝審查異常旗標清除、REVIEW_DONE＝定期審查完成（雙簽，寫第二半簽核時）、REVIEW_REJECT＝定期審查駁回（單半簽核與取消不寫歷史，細節在 IM_ACCT_REVIEW）';
+COMMENT ON COLUMN IM_ACCT_HIST.ACTION_CODE IS '動作：SUBMIT＝送出申請、RESUB＝重新送出、APPROVE＝核准、REJECT＝退件、EXEC_DONE＝回報執行完畢（帳號生效）、VERIFY_OK＝複驗通過、VERIFY_REJECT＝複驗退回、EXPIRE＝到期轉為已逾期、EMG_MODIFY＝緊急存取異動（依申請人回報，主管處理時寫入）、EMG_CLOSE_MODIFY＝緊急存取結案登記異動、FLAG_CLEAR＝審查異常旗標清除、REVIEW_DONE＝定期審查完成（雙簽，寫第二位主管簽核時）、REVIEW_REJECT＝定期審查駁回（只有一位主管簽核時與取消不寫歷史，細節在 IM_ACCT_REVIEW）';
 COMMENT ON TABLE IM_ACCT_NOTIFY_LOG IS '通知紀錄。每位收件人每封信一筆；排程類通知以 EVENT_CODE＋REF_ID＋RCPT_USER_ID 判斷是否已寄過（EMG_OVERDUE 例外：只看 EVENT_CODE＋REF_ID，每案一次）。資料來源：通知寄送。主鍵：NOTIFY_ID（序列 SEQ_IM_ACCT_NOTIFY_LOG）。保留：永久';
 COMMENT ON COLUMN IM_ACCT_NOTIFY_LOG.EVENT_CODE IS '通知事件：SUBMIT＝申請送出、RESUB＝重新送出、NEXT_STAGE＝進入下一關（關卡 2～4 核准）、TO_EXEC＝待執行（關卡 5 核准）、REJECT＝退件、EXEC_DONE＝回報執行完畢、VERIFY_REJECT＝複驗退回、EXPIRY_7D＝到期前 7 天、EXPIRED＝轉為已逾期、WEEKLY_SUMMARY＝每週一彙總、JOB_FAIL＝排程失敗、EMG_SUBMIT＝緊急存取送出、EMG_OVERDUE＝緊急存取逾期未補核准、EMG_RETURN＝緊急存取退回、REVIEW_DUE＝進入待複審（排程 J04，每輪每收件人一次）、REVIEW_REJECT＝定期審查駁回';
 COMMENT ON COLUMN IM_ACCT_NOTIFY_LOG.REF_TYPE_CODE IS '參照類型：REQ＝申請單、ACCT＝帳號、WEEK＝週彙總、JOB＝排程、EMG＝緊急存取單、REVIEW＝定期審查';

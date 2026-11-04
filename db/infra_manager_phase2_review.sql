@@ -131,19 +131,19 @@ END;
 /
 
 -- ===== COMMENTS：新表（與 db\infra_manager_create_table.sql 同句，兩檔同步維護）
-COMMENT ON TABLE IM_ACCT_REVIEW IS '定期審查簽核紀錄。每個帳號每一輪審查一筆：Infra 主管半與資訊治理主管半各簽一半、順序不限，兩半都簽完為 DONE（同一交易把 IM_ACCT 的上次審查日改為完成日、下次應審查日＝完成日＋180 天）；任一半駁回為 REJECTED（帳號標審查異常旗標，來源 REVIEW）；審查中帳號被申請單關卡 6 覆蓋（修改、停用、重新啟用、刪除生效）為 CANCELED。本輪紀錄在第一次簽核或駁回時才建立，待複審通知不建紀錄（防重寄看 IM_ACCT_NOTIFY_LOG）。審查狀態（正常／待複審／逾期未審／審查異常）不存欄位，由 IM_ACCT 的審查日期與旗標即時計算。資料來源：定期審查畫面、申請單關卡 6。主鍵：REVIEW_ID（序列 SEQ_IM_ACCT_REVIEW）。保留：永久';
+COMMENT ON TABLE IM_ACCT_REVIEW IS '定期審查簽核紀錄。每個帳號每一輪審查一筆：Infra 主管與資訊治理主管各簽核一次、順序不限，兩位都簽完為 DONE（同一交易把 IM_ACCT 的上次審查日改為完成日、下次應審查日＝完成日＋180 天）；任一位駁回為 REJECTED（帳號標審查異常旗標，來源 REVIEW）；審查中帳號被申請單關卡 6 覆蓋（修改、停用、重新啟用、刪除生效）為 CANCELED。本輪紀錄在第一次簽核或駁回時才建立，待複審通知不建紀錄（防重寄看 IM_ACCT_NOTIFY_LOG）。審查狀態（正常／待複審／逾期未審／審查異常）不存欄位，由 IM_ACCT 的審查日期與旗標即時計算。資料來源：定期審查畫面、申請單關卡 6。主鍵：REVIEW_ID（序列 SEQ_IM_ACCT_REVIEW）。保留：永久';
 
 COMMENT ON COLUMN IM_ACCT_REVIEW.REVIEW_ID IS '定期審查流水號；序列 SEQ_IM_ACCT_REVIEW 取號。IM_ACCT_HIST.REVIEW_ID 參照這欄';
 COMMENT ON COLUMN IM_ACCT_REVIEW.ACCT_ID IS '受審查的帳號，參照 IM_ACCT.ACCT_ID';
 COMMENT ON COLUMN IM_ACCT_REVIEW.DUE_DATE IS '本輪的應審查日：建立本輪時 IM_ACCT.NEXT_REVIEW_DATE 的值；主表為空（從未起算）時寫建立當天';
-COMMENT ON COLUMN IM_ACCT_REVIEW.REVIEW_STATE_CODE IS '本輪結果：OPEN＝進行中（至少一半已簽）、DONE＝完成（兩半都簽）、REJECTED＝駁回（任一半駁回，已簽的另一半留存不帶到下一輪）、CANCELED＝取消（審查中帳號被申請單關卡 6 覆蓋）';
-COMMENT ON COLUMN IM_ACCT_REVIEW.INFRA_SIGN_BY IS 'Infra 主管半簽核人工號（有效身分；需 REVIEW_SIGN_INFRA）';
-COMMENT ON COLUMN IM_ACCT_REVIEW.INFRA_SIGN_ACT_BY IS 'Infra 主管半簽核的實際操作人工號；切換身分時與 INFRA_SIGN_BY 不同';
-COMMENT ON COLUMN IM_ACCT_REVIEW.INFRA_SIGN_DATE IS 'Infra 主管半簽核時間';
-COMMENT ON COLUMN IM_ACCT_REVIEW.GOV_SIGN_BY IS '資訊治理主管半簽核人工號（有效身分；需 REVIEW_SIGN_GOV）。與 Infra 半不得為同一有效身分或同一實際操作人';
-COMMENT ON COLUMN IM_ACCT_REVIEW.GOV_SIGN_ACT_BY IS '資訊治理主管半簽核的實際操作人工號；切換身分時與 GOV_SIGN_BY 不同';
-COMMENT ON COLUMN IM_ACCT_REVIEW.GOV_SIGN_DATE IS '資訊治理主管半簽核時間';
-COMMENT ON COLUMN IM_ACCT_REVIEW.REJECT_HALF_CODE IS '駁回的那一半：INFRA＝Infra 主管半、GOV＝資訊治理主管半；REVIEW_STATE_CODE＝REJECTED 時必填';
+COMMENT ON COLUMN IM_ACCT_REVIEW.REVIEW_STATE_CODE IS '本輪結果：OPEN＝進行中（至少一位主管已簽）、DONE＝完成（兩位主管都簽）、REJECTED＝駁回（任一位主管駁回，另一位已完成的簽核留存不帶到下一輪）、CANCELED＝取消（審查中帳號被申請單關卡 6 覆蓋）';
+COMMENT ON COLUMN IM_ACCT_REVIEW.INFRA_SIGN_BY IS 'Infra 主管簽核人工號（有效身分；需 REVIEW_SIGN_INFRA）';
+COMMENT ON COLUMN IM_ACCT_REVIEW.INFRA_SIGN_ACT_BY IS 'Infra 主管簽核的實際操作人工號；切換身分時與 INFRA_SIGN_BY 不同';
+COMMENT ON COLUMN IM_ACCT_REVIEW.INFRA_SIGN_DATE IS 'Infra 主管簽核時間';
+COMMENT ON COLUMN IM_ACCT_REVIEW.GOV_SIGN_BY IS '資訊治理主管簽核人工號（有效身分；需 REVIEW_SIGN_GOV）。不得與 INFRA_SIGN_BY 為同一有效身分；實際操作人可相同（切換身分代簽放行）';
+COMMENT ON COLUMN IM_ACCT_REVIEW.GOV_SIGN_ACT_BY IS '資訊治理主管簽核的實際操作人工號；切換身分時與 GOV_SIGN_BY 不同';
+COMMENT ON COLUMN IM_ACCT_REVIEW.GOV_SIGN_DATE IS '資訊治理主管簽核時間';
+COMMENT ON COLUMN IM_ACCT_REVIEW.REJECT_HALF_CODE IS '駁回身分：INFRA＝Infra 主管、GOV＝資訊治理主管；REVIEW_STATE_CODE＝REJECTED 時必填';
 COMMENT ON COLUMN IM_ACCT_REVIEW.REJECT_BY IS '駁回人工號（有效身分）';
 COMMENT ON COLUMN IM_ACCT_REVIEW.REJECT_ACT_BY IS '駁回的實際操作人工號；切換身分時與 REJECT_BY 不同';
 COMMENT ON COLUMN IM_ACCT_REVIEW.REJECT_DATE IS '駁回時間';
@@ -169,7 +169,7 @@ COMMENT ON COLUMN IM_ACCT.NEXT_REVIEW_DATE IS '下次應審查日＝LAST_REVIEW_
 COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_SOURCE_CODE IS '審查異常來源：EMG＝緊急存取（退回且申請人回報為異動、或異常結案登記有帳號異動）、REVIEW＝定期審查駁回。單一旗標，後標記者覆蓋前者（原始原因另見 IM_EMG_ACCESS、IM_ACCT_REVIEW）';
 COMMENT ON COLUMN IM_ACCT_HIST.REVIEW_ID IS '來源定期審查流水號；SOURCE_CODE＝REVIEW 時有值，參照 IM_ACCT_REVIEW.REVIEW_ID';
 COMMENT ON COLUMN IM_ACCT_HIST.SOURCE_CODE IS '事件來源：REQ＝簽核流程、SYS＝系統排程、EMG＝緊急存取、REVIEW＝定期審查';
-COMMENT ON COLUMN IM_ACCT_HIST.ACTION_CODE IS '動作：SUBMIT＝送出申請、RESUB＝重新送出、APPROVE＝核准、REJECT＝退件、EXEC_DONE＝回報執行完畢（帳號生效）、VERIFY_OK＝複驗通過、VERIFY_REJECT＝複驗退回、EXPIRE＝到期轉為已逾期、EMG_MODIFY＝緊急存取異動（依申請人回報，主管處理時寫入）、EMG_CLOSE_MODIFY＝緊急存取結案登記異動、FLAG_CLEAR＝審查異常旗標清除、REVIEW_DONE＝定期審查完成（雙簽，寫第二半簽核時）、REVIEW_REJECT＝定期審查駁回（單半簽核與取消不寫歷史，細節在 IM_ACCT_REVIEW）';
+COMMENT ON COLUMN IM_ACCT_HIST.ACTION_CODE IS '動作：SUBMIT＝送出申請、RESUB＝重新送出、APPROVE＝核准、REJECT＝退件、EXEC_DONE＝回報執行完畢（帳號生效）、VERIFY_OK＝複驗通過、VERIFY_REJECT＝複驗退回、EXPIRE＝到期轉為已逾期、EMG_MODIFY＝緊急存取異動（依申請人回報，主管處理時寫入）、EMG_CLOSE_MODIFY＝緊急存取結案登記異動、FLAG_CLEAR＝審查異常旗標清除、REVIEW_DONE＝定期審查完成（雙簽，寫第二位主管簽核時）、REVIEW_REJECT＝定期審查駁回（只有一位主管簽核時與取消不寫歷史，細節在 IM_ACCT_REVIEW）';
 COMMENT ON COLUMN IM_ACCT_NOTIFY_LOG.EVENT_CODE IS '通知事件：SUBMIT＝申請送出、RESUB＝重新送出、NEXT_STAGE＝進入下一關（關卡 2～4 核准）、TO_EXEC＝待執行（關卡 5 核准）、REJECT＝退件、EXEC_DONE＝回報執行完畢、VERIFY_REJECT＝複驗退回、EXPIRY_7D＝到期前 7 天、EXPIRED＝轉為已逾期、WEEKLY_SUMMARY＝每週一彙總、JOB_FAIL＝排程失敗、EMG_SUBMIT＝緊急存取送出、EMG_OVERDUE＝緊急存取逾期未補核准、EMG_RETURN＝緊急存取退回、REVIEW_DUE＝進入待複審（排程 J04，每輪每收件人一次）、REVIEW_REJECT＝定期審查駁回';
 COMMENT ON COLUMN IM_ACCT_NOTIFY_LOG.REF_TYPE_CODE IS '參照類型：REQ＝申請單、ACCT＝帳號、WEEK＝週彙總、JOB＝排程、EMG＝緊急存取單、REVIEW＝定期審查';
 COMMENT ON COLUMN IM_ACCT_NOTIFY_LOG.REF_ID IS '參照鍵：REQ＝REQ_ID；ACCT＝ACCT_ID_到期日yyyymmdd（到期日改變即視為新的一輪）；WEEK＝該週一 yyyymmdd；JOB＝RUN_ID；EMG＝EMG_ID（EMG_OVERDUE 以 EVENT_CODE＋REF_ID 判斷是否已通知）；REVIEW＝REVIEW_DUE 為 ACCT_ID_下次應審查日yyyymmdd（本輪是否已寄的判斷鍵，雙簽完成後下次應審查日改變即為新的一輪）、REVIEW_REJECT 為 REVIEW_ID';

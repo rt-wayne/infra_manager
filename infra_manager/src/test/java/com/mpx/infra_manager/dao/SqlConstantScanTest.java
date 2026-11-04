@@ -699,7 +699,9 @@ class SqlConstantScanTest {
 		// 第 158 項 R3b：在途定期審查＝進行中且 :half 那一半尚未簽；單號欄放帳號單號
 		assertThat(RoleAdminDao.FIND_IN_FLIGHT_REVIEW).contains("R.ACCT_ID AS DOC_ID").contains("AS STAGE_NAME")
 				.contains("R.REVIEW_STATE_CODE = 'OPEN'").contains("R.STATUS = 1")
-				.contains("((:half = 'INFRA' AND R.INFRA_SIGN_BY IS NULL) OR (:half = 'GOV' AND R.GOV_SIGN_BY IS NULL))");
+				.contains("((:half = 'INFRA' AND R.INFRA_SIGN_BY IS NULL) OR (:half = 'GOV' AND R.GOV_SIGN_BY IS NULL))")
+				// 2026-11-04 ①A：關卡名不再出現「半」
+				.contains("'定期審查 Infra 主管待簽'").contains("'定期審查資訊治理主管待簽'").doesNotContain("半");
 		assertThat(RoleAdminDao.UPDATE_ROLE_MEMBER_STATUS).contains("STATUS = :newStatus").contains("AND STATUS = :oldStatus")
 				.contains("UPDATE_DATE = :now, UPDATE_BY = :userId").doesNotContain("CREATE_");
 		assertThat(RoleAdminDao.INSERT_ROLE_MEMBER).contains("STATUS, CREATE_DATE, CREATE_BY").doesNotContain("UPDATE_");

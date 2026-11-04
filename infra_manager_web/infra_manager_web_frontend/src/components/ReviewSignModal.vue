@@ -16,6 +16,10 @@
   變更說明: R5 審查 M1／S1：簽核鈕與可駁回半邊改用共用 reviewActableHalves（與清單「審查」鈕同一判斷；另一半是我簽的也在前端先擋，
             避免按了必 409 又關窗丟掉原因）；沒有任何可動作半邊時顯示一行說明。S5 駁回後副標改「審查異常（已駁回）」；
             S6 駁回原因字數改算去頭尾空白後（與後端、其他彈窗一致）
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: R5 實測裁示（2026-11-04 ①A／②A）：文案拿掉「半」——兩個簽核身分改稱「Infra 主管」「資訊治理主管」（按鈕「以 Infra 主管簽核」、
+            駁回單選「駁回身分」、說明與 toast 改「另一位主管」）；同人判斷只比有效身分，切換身分代簽不再擋（判斷在 reviewActableHalves）
 -->
 <template>
   <BaseModal :title="`定期審查 — ${item.acctId}`" :sub="subText" wide @close="closeMain">
@@ -47,7 +51,7 @@
       <div class="v">{{ halfText(item.govSignByName, item.govSignBy, item.govSignDate) }}</div>
     </div>
     <p v-if="!item.reviewId && signable" class="hint">還沒有人簽核；第一次簽核時建立本輪紀錄。</p>
-    <p v-if="signable && !rejected && actable.length === 0" class="hint no-action">目前沒有您可以簽核或駁回的半邊：您能簽的那一半已簽核，或另一半是您簽的；請等待另一位主管簽核。</p>
+    <p v-if="signable && !rejected && actable.length === 0" class="hint no-action">目前沒有您可以執行的簽核或駁回：您負責的簽核已完成，或另一位主管的簽核是您本人簽的；請等待另一位主管簽核。</p>
 
     <div v-if="rejected" class="note-box warn rejected-box">
       <b>已駁回（{{ REVIEW_HALF_LABEL[rejected.half] }}）</b>：{{ rejected.reason }}<br />
@@ -56,8 +60,8 @@
 
     <template #actions>
       <template v-if="!rejected">
-        <button v-if="canSign('INFRA')" type="button" class="btn btn-primary act-sign-infra" :disabled="busy" @click="openSign('INFRA')">簽核 Infra 主管半</button>
-        <button v-if="canSign('GOV')" type="button" class="btn btn-primary act-sign-gov" :disabled="busy" @click="openSign('GOV')">簽核資訊治理主管半</button>
+        <button v-if="canSign('INFRA')" type="button" class="btn btn-primary act-sign-infra" :disabled="busy" @click="openSign('INFRA')">以 {{ REVIEW_HALF_LABEL.INFRA }}簽核</button>
+        <button v-if="canSign('GOV')" type="button" class="btn btn-primary act-sign-gov" :disabled="busy" @click="openSign('GOV')">以{{ REVIEW_HALF_LABEL.GOV }}簽核</button>
         <button v-if="rejectableHalves.length > 0" type="button" class="btn btn-warn act-reject" :disabled="busy" @click="openReject">駁回</button>
       </template>
       <button v-else-if="canDisable" type="button" class="btn btn-primary act-disable" @click="goDisable">發起停用申請</button>
@@ -65,7 +69,7 @@
   </BaseModal>
 
   <BaseModal v-if="signing" :title="`簽核 — ${item.acctId}`" :sub="`${REVIEW_HALF_LABEL[signing]}`" close-text="取消" @close="closeSub">
-    <p class="confirm-text">確認以「{{ REVIEW_HALF_LABEL[signing] }}」簽核此帳號的定期審查？{{ otherSigned(signing) ? '另一半已簽核，送出後本輪即完成，下次應審查日往後推 180 天。' : '另一半尚未簽核，兩半都簽核後本輪才完成。' }}</p>
+    <p class="confirm-text">確認以「{{ REVIEW_HALF_LABEL[signing] }}」身分簽核此帳號的定期審查？{{ otherSigned(signing) ? '另一位主管已簽核，送出後本輪即完成，下次應審查日往後推 180 天。' : '另一位主管尚未簽核，兩位主管都簽核後本輪才完成。' }}</p>
     <template #actions>
       <button type="button" class="btn btn-primary confirm-sign" :disabled="busy" @click="doSign">{{ busy ? '送出中…' : '確認簽核' }}</button>
     </template>
@@ -73,14 +77,14 @@
 
   <BaseModal v-if="rejecting" :title="`駁回 — ${item.acctId}`" :sub="MSG_REJECT_SUB" close-text="取消" @close="closeSub">
     <div v-if="rejectableHalves.length > 1" class="field">
-      <label>駁回半邊<span class="req-mark" title="必填">*</span></label>
+      <label>駁回身分<span class="req-mark" title="必填">*</span></label>
       <div class="radio-row">
         <label v-for="h in rejectableHalves" :key="h">
           <input v-model="rejectHalf" type="radio" name="review-reject-half" :value="h" :class="`half-${h.toLowerCase()}`" /> {{ REVIEW_HALF_LABEL[h] }}
         </label>
       </div>
     </div>
-    <p v-else class="hint reject-half-hint">以「{{ REVIEW_HALF_LABEL[rejectHalf] }}」駁回</p>
+    <p v-else class="hint reject-half-hint">以「{{ REVIEW_HALF_LABEL[rejectHalf] }}」身分駁回</p>
     <ReasonField id="review-reject-reason" v-model="rejectReason" label="駁回原因" :max="REASON_MAX" placeholder="請說明駁回原因，例如權限過大、使用人已調職" :disabled="busy" />
     <template #actions>
       <button type="button" class="btn btn-warn confirm-reject" :disabled="busy" @click="doReject">{{ busy ? '送出中…' : '確認駁回' }}</button>
@@ -103,7 +107,7 @@ import { REVIEW_HALF_LABEL, REVIEW_SIGNABLE_STATES, REVIEW_STATE_LABEL, accountO
 import { charLen } from '../utils/text'
 
 const REASON_MAX = 500
-const MSG_REJECT_SUB = '駁回後整輪結束、帳號標記審查異常，並通知原申請人與資訊治理主管；已簽的另一半不帶到下一輪。'
+const MSG_REJECT_SUB = '駁回後整輪結束、帳號標記審查異常，並通知原申請人與資訊治理主管；另一位主管已完成的簽核不帶到下一輪。'
 const MSG_REASON = '請填寫駁回原因'
 const MSG_REASON_LEN = `駁回原因不可超過 ${REASON_MAX} 字`
 
@@ -115,7 +119,7 @@ const { can, me } = useSession()
 const router = useRouter()
 
 const busy = ref(false)
-/** 正在確認簽核的半邊；空代表確認框沒開 */
+/** 正在確認簽核的身分（INFRA／GOV）；空代表確認框沒開 */
 const signing = ref<ReviewHalf | ''>('')
 const rejecting = ref(false)
 const rejectHalf = ref<ReviewHalf>('INFRA')
@@ -134,7 +138,7 @@ const holderText = computed(() => {
 const signable = computed(() => REVIEW_SIGNABLE_STATES.includes(props.item.reviewStateCode ?? ''))
 /** versionNo 一律帶，沒有進行中一輪帶 0（R3a 補充裁示①B） */
 const versionNo = computed(() => props.item.reviewVersionNo ?? 0)
-/** 我可簽核或駁回的半邊（與清單「審查」鈕同一函式；權限、該半未簽、同人兩半都在裡面） */
+/** 我可以簽核或駁回的身分（與清單「審查」鈕同一函式；權限、該身分未簽、同一有效身分不得簽兩個都在裡面） */
 const actable = computed(() => reviewActableHalves(props.item, can, me.value))
 
 function signedBy(half: ReviewHalf): string | null {
@@ -146,12 +150,12 @@ function canSign(half: ReviewHalf): boolean {
 function otherSigned(half: ReviewHalf): boolean {
   return !!signedBy(half === 'INFRA' ? 'GOV' : 'INFRA')
 }
-/** 可由我駁回的半邊＝可簽核的半邊（被駁回的那一半已有人簽就不能駁回，R3b 裁示①A） */
+/** 可由我駁回的身分＝可簽核的身分（被駁回的那個身分已有人簽就不能駁回，R3b 裁示①A） */
 const rejectableHalves = actable
 /** 駁回後的停用捷徑：需 ACC_APPLY，且帳號目前狀態可發起停用（有在途申請與否由後端檢查） */
 const canDisable = computed(() => can('ACC_APPLY') && accountOps({ acctStateCode: props.item.acctStateCode }).includes('DISABLE'))
 
-/** 一半的簽核狀況：「姓名 2026-10-30 10:30」，還沒簽顯示「尚未簽核」 */
+/** 一位主管的簽核狀況：「姓名 2026-10-30 10:30」，還沒簽顯示「尚未簽核」 */
 function halfText(name: string | null, by: string | null, date: string | null): string {
   if (!by && !name) return '尚未簽核'
   return `${name || by} ${toMinute(date)}`.trim()
@@ -179,7 +183,7 @@ function openReject(): void {
 
 /**
  * 執行簽核或駁回：成功回 true 給呼叫端收尾；失敗 toast 後端訊息，
- * 409（版本不符、同半已簽、同人兩半、狀態已變）代表畫面上的資料已過時，關閉並讓清單重查
+ * 409（版本不符、該身分已簽、同人簽兩個身分、狀態已變）代表畫面上的資料已過時，關閉並讓清單重查
  */
 async function run(action: () => Promise<unknown>): Promise<boolean> {
   if (busy.value) return false
@@ -207,7 +211,8 @@ async function doSign(): Promise<void> {
   const done = otherSigned(half)
   const ok = await run(() => signReview(props.item.acctId, half, versionNo.value))
   if (!ok) return
-  toast(done ? `${props.item.acctId} 雙簽完成，下次應審查日已往後推 180 天` : `${props.item.acctId} 已簽核${REVIEW_HALF_LABEL[half]}，待另一半簽核`, 'teal')
+  const other = half === 'INFRA' ? 'GOV' : 'INFRA'
+  toast(done ? `${props.item.acctId} 雙簽完成，下次應審查日已往後推 180 天` : `${props.item.acctId} ${REVIEW_HALF_LABEL[half]}已簽核，待${REVIEW_HALF_LABEL[other]}簽核`, 'teal')
   signing.value = ''
   emit('changed')
   emit('close')

@@ -14,6 +14,9 @@
   修改日期: 2026-11-04
   變更說明: R5 審查 M1：「審查」鈕改用共用 reviewActableHalves（有我可簽核或駁回的半邊才顯示；原本只看狀態與權限，
             先簽完自己那一半的主管每筆都會點到沒有按鈕的彈窗）
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: R5 實測裁示（2026-11-04 ①A）：表頭「Infra 半」「治理半」改「Infra 主管」「資訊治理主管」（拿掉「半」）
 -->
 
 <template>
@@ -47,7 +50,7 @@
           </colgroup>
           <thead>
             <tr>
-              <th>帳號單號</th><th>類別</th><th>帳號名稱 / 系統</th><th>使用人</th><th>上次審查</th><th>下次應審查</th><th>狀態</th><th>Infra 半</th><th>治理半</th><th>操作</th>
+              <th>帳號單號</th><th>類別</th><th>帳號名稱 / 系統</th><th>使用人</th><th>上次審查</th><th>下次應審查</th><th>狀態</th><th>Infra 主管</th><th>資訊治理主管</th><th>操作</th>
             </tr>
           </thead>
           <tbody>

@@ -9,10 +9,10 @@
 /** 帳號審查狀態（計算值）：審查異常／逾期未審／待複審／正常 */
 export type ReviewStateCode = 'ABNORMAL' | 'OVERDUE' | 'DUE' | 'NORMAL'
 
-/** 簽核半邊：Infra 主管半（需 REVIEW_SIGN_INFRA）／資訊治理主管半（需 REVIEW_SIGN_GOV） */
+/** 簽核身分：Infra 主管（需 REVIEW_SIGN_INFRA）／資訊治理主管（需 REVIEW_SIGN_GOV）；值沿用後端的 INFRA／GOV */
 export type ReviewHalf = 'INFRA' | 'GOV'
 
-/** 進行中那一輪的結果（動作回傳用）：OPEN＝還差另一半、DONE＝雙簽完成、REJECTED＝已駁回 */
+/** 進行中那一輪的結果（動作回傳用）：OPEN＝還差另一位主管、DONE＝雙簽完成、REJECTED＝已駁回 */
 export type ReviewRoundState = 'OPEN' | 'DONE' | 'REJECTED'
 
 /** GET /reviews 一列（帳號主表欄＋計算狀態＋進行中那一輪） */

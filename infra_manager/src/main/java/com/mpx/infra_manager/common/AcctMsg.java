@@ -39,6 +39,9 @@ package com.mpx.infra_manager.common;
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a（定期審查簽核）：badCode 受詞「簽核角色」；409 文案 REVIEW_NOT_SIGNABLE（不在待複審／逾期未審）、
 //           REVIEW_SAME_SIGNER（同一人不得簽核兩半，裁示 ⑪A）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 實測裁示 ①A／②A：REVIEW_SAME_SIGNER 文案拿掉「半」，且只擋同一有效身分（切換身分代簽不擋）
 // ============================================================
 
 import java.util.List;
@@ -121,8 +124,8 @@ public final class AcctMsg {
 	public static final String WHAT_REVIEW_HALF = "簽核角色";
 	/** 409：帳號目前的審查狀態不是待複審或逾期未審（含審查異常、正常、不在審查範圍；裁示 ②A、⑨A） */
 	public static final String REVIEW_NOT_SIGNABLE = "此帳號目前不在待複審或逾期未審狀態，不能簽核";
-	/** 409：另一半已由同一有效身分或同一實際操作人簽過（裁示 ⑪A；駁回也適用，R3b 裁示 ②A） */
-	public static final String REVIEW_SAME_SIGNER = "同一人不得簽核兩半";
+	/** 409：另一位主管的簽核已由同一有效身分簽過（裁示 ⑪A；駁回也適用，R3b 裁示 ②A；2026-11-04 ②A 不再比實際操作人） */
+	public static final String REVIEW_SAME_SIGNER = "同一人不得同時以 Infra 主管與資訊治理主管身分簽核";
 	/** 定期審查駁回（R3b）：E02／E11 的受詞 */
 	public static final String WHAT_REVIEW_REASON = "駁回原因";
 

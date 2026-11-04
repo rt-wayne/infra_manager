@@ -88,6 +88,9 @@ package com.mpx.infra_manager.common;
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3b（駁回）：旗標來源 FLAG_SRC_REVIEW、通知事件 EV_REVIEW_REJECT 與參照 REF_REVIEW（REF_ID＝REVIEW_ID）、
 //           駁回原因上限 REVIEW_REASON_MAX＝500（對齊 REJECT_REASON 500 CHAR）、半邊中文名 reviewHalfName（信件與歷史用）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 實測裁示 ①A：reviewHalfName 拿掉「半」，改回「Infra 主管」「資訊治理主管」（使用者看得到的文字一律不再出現「半」）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -353,12 +356,12 @@ public final class AcctConst {
 	/** 主表旗標原因的前綴：REVIEW_FLAG_REASON＝「定期審查駁回：{原因}」截 500 */
 	public static final String REVIEW_FLAG_PREFIX = "定期審查駁回：";
 
-	/** 半邊中文名（信件、歷史說明用）：INFRA 主管半、資訊治理主管半；其他值原樣回 */
+	/** 簽核身分中文名（信件、歷史說明用；與前端 REVIEW_HALF_LABEL 一致）：Infra 主管、資訊治理主管；其他值原樣回 */
 	public static String reviewHalfName(String half) {
 		if (HALF_INFRA.equals(half)) {
-			return "Infra 主管半";
+			return "Infra 主管";
 		}
-		return HALF_GOV.equals(half) ? "資訊治理主管半" : half;
+		return HALF_GOV.equals(half) ? "資訊治理主管" : half;
 	}
 
 	/** 到期提醒範圍：到期日 ≤ 今天＋30（spec §4.11） */

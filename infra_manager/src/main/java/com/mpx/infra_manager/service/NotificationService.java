@@ -64,6 +64,9 @@ package com.mpx.infra_manager.service;
 //           另一半簽核狀況，信末提醒「此帳號已標記審查異常；請確認後提出修改或停用申請，複驗通過後異常會自動清除」（常數 REVIEW_REJECT_FOOTER）；
 //           連結「定期審查」（③A）；
 //           參照 REVIEW／REVIEW_ID。寄失敗沿用 sendAll，不影響駁回結果
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 實測裁示 ①A：駁回信列名「駁回半邊」→「駁回身分」、「另一半簽核」→「另一位主管簽核」（拿掉「半」）
 // ============================================================
 
 import java.time.Clock;
@@ -404,7 +407,7 @@ public class NotificationService {
 		}
 	}
 
-	/** 駁回信本文：帳號 6 列＋駁回 4 列＋另一半簽核狀況，信末提醒處理方式 */
+	/** 駁回信本文：帳號 6 列＋駁回 4 列＋另一位主管的簽核狀況，信末提醒處理方式 */
 	static String reviewRejectBody(ReviewRound r) {
 		List<String[]> rows = new ArrayList<>();
 		rows.add(new String[] { "帳號單號", r.getAcctId() });
@@ -413,18 +416,18 @@ public class NotificationService {
 		rows.add(new String[] { "所屬系統", nvl(r.getSysName(), "") });
 		rows.add(new String[] { "使用人", nvl(r.getHolderName(), "") });
 		rows.add(new String[] { "原申請人", nvl(r.getApplyByName(), nvl(r.getApplyBy(), "")) });
-		rows.add(new String[] { "駁回半邊", AcctConst.reviewHalfName(r.getRejectHalfCode()) });
+		rows.add(new String[] { "駁回身分", AcctConst.reviewHalfName(r.getRejectHalfCode()) });
 		rows.add(new String[] { "駁回人", nvl(r.getRejectByName(), nvl(r.getRejectBy(), "")) });
 		rows.add(new String[] { "駁回時間", dateTimeText(r.getRejectDate()) });
 		rows.add(new String[] { "駁回原因", nvl(r.getRejectReason(), "") });
-		rows.add(new String[] { "另一半簽核", otherHalfText(r) });
+		rows.add(new String[] { "另一位主管簽核", otherHalfText(r) });
 		return MailHtml.table(rows) + MailHtml.para(REVIEW_REJECT_FOOTER);
 	}
 
 	/** 駁回信信末提醒（異常只在修改／停用／重新啟用申請複驗通過時清除，D42） */
 	static final String REVIEW_REJECT_FOOTER = "此帳號已標記審查異常；請確認後提出修改或停用申請，複驗通過後異常會自動清除";
 
-	/** 被駁回那一半以外的那一半：「{半邊名}已由 {姓名} 於 {時間} 簽核」或「{半邊名}尚未簽核」 */
+	/** 駁回身分以外的另一位主管：「{身分名}已由 {姓名} 於 {時間} 簽核」或「{身分名}尚未簽核」 */
 	static String otherHalfText(ReviewRound r) {
 		boolean rejectInfra = AcctConst.HALF_INFRA.equals(r.getRejectHalfCode());
 		String half = AcctConst.reviewHalfName(rejectInfra ? AcctConst.HALF_GOV : AcctConst.HALF_INFRA);

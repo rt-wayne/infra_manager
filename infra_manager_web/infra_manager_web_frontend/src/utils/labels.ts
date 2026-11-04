@@ -28,6 +28,10 @@
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R5 審查 M1／S1：reviewActableHalves——「我可簽核或駁回的半邊」抽成共用函式，清單「審查」鈕與彈窗按鈕
 //           都用它（原本兩邊各自判斷，先簽完自己那一半的主管會點到沒有任何按鈕的彈窗）；同人兩半（⑪A）也在前端先擋
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 實測裁示（2026-11-04 ①A／②A）：REVIEW_HALF_LABEL 拿掉「半」改「Infra 主管」「資訊治理主管」；
+//           reviewActableHalves 同人判斷只比有效身分，不再比實際操作人（切換身分代簽不擋；後端 checkSameSigner 同步）
 // ============================================================
 import type { ReqTypeCode } from '../types/account'
 import type { Me } from '../types/common'
@@ -171,30 +175,30 @@ export const REVIEW_STATE_FILTER: { value: string; label: string }[] = [
   ...Object.entries(REVIEW_STATE_LABEL).map(([value, text]) => ({ value, label: text }))
 ]
 
-/** 簽核半邊名稱（與後端 AcctConst.reviewHalfName 一致） */
+/** 兩個簽核身分的名稱（與後端 AcctConst.reviewHalfName 一致；2026-11-04 裁示①A 拿掉「半」） */
 export const REVIEW_HALF_LABEL: Record<string, string> = {
-  INFRA: 'Infra 主管半',
-  GOV: '資訊治理主管半'
+  INFRA: 'Infra 主管',
+  GOV: '資訊治理主管'
 }
 
 /** 定期審查可簽核／駁回的狀態（與後端 AcctConst.REVIEW_SIGNABLE_STATES 一致） */
 export const REVIEW_SIGNABLE_STATES: readonly string[] = ['DUE', 'OVERDUE']
 
 /**
- * 定期審查：我可以簽核或駁回的半邊（清單「審查」鈕與彈窗的簽核鈕、可駁回半邊共用，兩邊不再各自判斷）。
- * 條件與後端同口徑：狀態為待複審／逾期未審；該半我有權限且尚未有人簽；另一半的簽核人（有效身分）不是我的有效身分、
- * 實際操作人也不是我的實際操作人（⑪A 同一人不得簽兩半，切換身分代簽也擋；後端 ReviewService.checkSameSigner 同樣驗）。
- * 被駁回的那一半已有人簽就不能駁回（R3b ①A），所以可駁回的半邊＝可簽核的半邊
+ * 定期審查：我可以簽核或駁回的身分（INFRA／GOV；清單「審查」鈕與彈窗的簽核鈕、可駁回身分共用，兩邊不再各自判斷）。
+ * 條件與後端同口徑：狀態為待複審／逾期未審；該身分我有權限且尚未有人簽；另一位主管的簽核人（有效身分）不是我的有效身分
+ * （⑪A 同一有效身分不得簽兩個；2026-11-04 裁示②A：不比實際操作人，切換身分代簽放行；後端 ReviewService.checkSameSigner 同口徑）。
+ * 被駁回的那個身分已有人簽就不能駁回（R3b ①A），所以可駁回的身分＝可簽核的身分
  */
 export function reviewActableHalves(r: ReviewItem, can: (code: PermCode) => boolean, me: Me | null): ReviewHalf[] {
   if (!REVIEW_SIGNABLE_STATES.includes(r.reviewStateCode ?? '')) return []
-  const halves: { half: ReviewHalf; perm: PermCode; signBy: string | null; otherBy: string | null; otherActBy: string | null }[] = [
-    { half: 'INFRA', perm: 'REVIEW_SIGN_INFRA', signBy: r.infraSignBy, otherBy: r.govSignBy, otherActBy: r.govSignActBy },
-    { half: 'GOV', perm: 'REVIEW_SIGN_GOV', signBy: r.govSignBy, otherBy: r.infraSignBy, otherActBy: r.infraSignActBy }
+  const halves: { half: ReviewHalf; perm: PermCode; signBy: string | null; otherBy: string | null }[] = [
+    { half: 'INFRA', perm: 'REVIEW_SIGN_INFRA', signBy: r.infraSignBy, otherBy: r.govSignBy },
+    { half: 'GOV', perm: 'REVIEW_SIGN_GOV', signBy: r.govSignBy, otherBy: r.infraSignBy }
   ]
   return halves
     .filter(h => can(h.perm) && !h.signBy)
-    .filter(h => !me || !((h.otherBy && h.otherBy === me.userId) || (h.otherActBy && h.otherActBy === me.realUserId)))
+    .filter(h => !me || !(h.otherBy && h.otherBy === me.userId))
     .map(h => h.half)
 }
 

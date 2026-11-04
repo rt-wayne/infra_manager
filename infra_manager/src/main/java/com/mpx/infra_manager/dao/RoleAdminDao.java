@@ -41,6 +41,9 @@ package com.mpx.infra_manager.dao;
 // 變更說明: BACKLOG 第 158 項 R3b：在途定期審查 FIND_IN_FLIGHT_REVIEW——進行中（OPEN）且 :half 那一半尚未簽的輪，DOC_ID＝帳號單號、
 //           關卡名「定期審查 Infra 半待簽」／「定期審查治理半待簽」；HolderGuard 拿掉 REVIEW_SIGN_INFRA／GOV 時用。
 //           還沒有一輪（沒人簽過）的待複審帳號不算在途：沒有紀錄可列，且另一位主管加回權限後隨時可簽
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 實測裁示 ①A：關卡名改「定期審查 Infra 主管待簽」／「定期審查資訊治理主管待簽」（拿掉「半」）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -206,7 +209,7 @@ public class RoleAdminDao {
 	 */
 	public static final String FIND_IN_FLIGHT_REVIEW = """
 			SELECT R.ACCT_ID AS DOC_ID,
-			       CASE WHEN :half = 'INFRA' THEN '定期審查 Infra 半待簽' ELSE '定期審查治理半待簽' END AS STAGE_NAME
+			       CASE WHEN :half = 'INFRA' THEN '定期審查 Infra 主管待簽' ELSE '定期審查資訊治理主管待簽' END AS STAGE_NAME
 			  FROM IM_ACCT_REVIEW R
 			 WHERE R.REVIEW_STATE_CODE = 'OPEN'
 			   AND R.STATUS = 1
