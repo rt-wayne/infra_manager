@@ -29,8 +29,10 @@
   AI版本  : Claude Fable 5.1 (claude-fable-5-1)
   修改日期: 2026-11-04
   變更說明: BACKLOG 第 158 項 R8（⑳B 第四區、⑬A 看全部）：新增「📋 定期審查」區兩張卡——逾期未定期審查（淡橘警示）、審查異常待處理（淡紅警示）；
-            不是看全部（reviewAll）時標題加「我的」；點擊：有 REVIEW_LIST → 定期審查清單帶 ?state=OVERDUE／ABNORMAL，否則 → 無權限頁
-            （比照「30 天內到期」）；主色藍綠
+            不是看全部（reviewAll）時標題加「我的」；點擊：有 REVIEW_LIST → 定期審查清單帶 ?state=OVERDUE／ABNORMAL；主色藍綠
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: BACKLOG 第 158 項 R8 審查裁示 ①B：沒有 REVIEW_LIST 時兩張卡不可點、不加 click 樣式、不顯示「點擊查看」提示（原本進無權限頁，提示與行為不一致）
 -->
 <template>
   <main>
@@ -59,10 +61,10 @@
     <div class="module-card sec sec-review">
       <h2>📋 定期審查</h2>
       <div class="stat-row">
-        <div :class="['stat-card', 'click', 'card-review-overdue', alertClass(stats?.reviewOverdue, 'warn')]" title="點擊查看逾期未審清單" @click="onReviewClick('OVERDUE')">
+        <div :class="['stat-card', { click: canReviewList }, 'card-review-overdue', alertClass(stats?.reviewOverdue, 'warn')]" :title="canReviewList ? '點擊查看逾期未審清單' : undefined" @click="onReviewClick('OVERDUE')">
           <div class="num warn">{{ n(stats?.reviewOverdue) }}</div><div class="lbl">{{ reviewPrefix }}逾期未定期審查</div>
         </div>
-        <div :class="['stat-card', 'click', 'card-review-abnormal', alertClass(stats?.reviewAbnormal, 'red')]" title="點擊查看審查異常清單" @click="onReviewClick('ABNORMAL')">
+        <div :class="['stat-card', { click: canReviewList }, 'card-review-abnormal', alertClass(stats?.reviewAbnormal, 'red')]" :title="canReviewList ? '點擊查看審查異常清單' : undefined" @click="onReviewClick('ABNORMAL')">
           <div class="num red">{{ n(stats?.reviewAbnormal) }}</div><div class="lbl">{{ reviewPrefix }}審查異常待處理</div>
         </div>
       </div>
@@ -123,12 +125,12 @@ function onEmgClick(state: string): void {
   void router.push({ path: '/emergency', query: { state } })
 }
 
-/** 定期審查清單只給 REVIEW_LIST（看全部的人卡片數＝清單套該狀態的筆數）；沒有的人卡片只算自己的、沒有清單可進 → 無權限頁 */
+/** 定期審查清單只給 REVIEW_LIST（看全部的人卡片數＝清單套該狀態的筆數）；沒有的人卡片只算自己的、沒有清單可進 → 不可點、不顯示提示（R8 審查裁示 ①B） */
+const canReviewList = computed(() => can('REVIEW_LIST'))
+
 function onReviewClick(state: 'OVERDUE' | 'ABNORMAL'): void {
-  if (can('REVIEW_LIST')) {
+  if (canReviewList.value) {
     void router.push({ path: '/reviews', query: { state } })
-  } else {
-    void router.push('/no-access')
   }
 }
 

@@ -28,6 +28,9 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R8：FIND_STATS 定期審查兩張卡用 ReviewDao.REVIEW_STATE_EXPR＋JOIN_ASSET_CLASS、帶 REVIEW_MINE_COND、不過濾帳號狀態；
 //           stats 依 REVIEW_LIST 決定第四個參數綁 NULL 或工號、回 reviewAll，只有 REVIEW_LIST 不讓巡檢區顯示、數字原樣帶出
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R8 審查 S1：兩個定期審查子查詢改整段精確比對（FROM＋JOIN＋WHERE＋別名），多任何條件或 JOIN 就失敗
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -144,13 +147,15 @@ class AccountAndHomeServiceTest {
 		assertThat(insp).doesNotContain(":acctApplyBy").doesNotContain(":emgApplyBy").doesNotContain(":reviewApplyBy");
 		assertThat(com.mpx.infra_manager.dao.HomeDao.FIND_EXPIRING).contains(AcctDao.EXPIRING_COND);
 		// R8：定期審查兩張卡——狀態用清單同一句 REVIEW_STATE_EXPR、同一個資產分類 JOIN、各帶個人過濾；不另抄狀態判斷、不過濾帳號狀態
+		// 整段子查詢精確比對（R8 審查 S1）：FROM 到 WHERE 之間不得多任何條件或 JOIN，卡片數才會等於清單 FIND_LIST 套同狀態的筆數
 		String review = stats.substring(stats.indexOf("AS EMG_RETURNED"));
-		assertThat(review).contains("AS REVIEW_OVERDUE").contains("AS REVIEW_ABNORMAL")
-				.contains(com.mpx.infra_manager.dao.ReviewDao.REVIEW_STATE_EXPR + " = 'OVERDUE' AND " + com.mpx.infra_manager.dao.HomeDao.REVIEW_MINE_COND)
-				.contains(com.mpx.infra_manager.dao.ReviewDao.REVIEW_STATE_EXPR + " = 'ABNORMAL' AND " + com.mpx.infra_manager.dao.HomeDao.REVIEW_MINE_COND)
-				.doesNotContain("A.STATUS").doesNotContain("ACCT_STATE_CODE = 'APPROVED' AND A.")
-				.satisfies(r -> assertThat(r.split(com.mpx.infra_manager.dao.ReviewDao.JOIN_ASSET_CLASS, -1)).hasSize(3))
-				.satisfies(r -> assertThat(r.split(com.mpx.infra_manager.dao.HomeDao.REVIEW_MINE_COND, -1)).hasSize(3));
+		for (String state : List.of("OVERDUE", "ABNORMAL")) {
+			String expected = "(SELECT COUNT(*)\n          FROM IM_ACCT A " + com.mpx.infra_manager.dao.ReviewDao.JOIN_ASSET_CLASS + "\n         WHERE "
+					+ com.mpx.infra_manager.dao.ReviewDao.REVIEW_STATE_EXPR + " = '" + state + "' AND " + com.mpx.infra_manager.dao.HomeDao.REVIEW_MINE_COND
+					+ "       ) AS REVIEW_" + state;
+			assertThat(review).as(state).contains(expected);
+		}
+		assertThat(review.split("\\(SELECT COUNT\\(\\*\\)", -1)).hasSize(3);
 		assertThat(stats.split(com.mpx.infra_manager.dao.HomeDao.REVIEW_MINE_COND, -1)).hasSize(3);
 	}
 

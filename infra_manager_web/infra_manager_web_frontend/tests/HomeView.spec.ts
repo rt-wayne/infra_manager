@@ -16,6 +16,9 @@
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R8：第四區「定期審查」兩張卡——名稱與數字、一般人加「我的」、載入失敗「—」、兩張都是警示卡（逾期橘、異常紅，共六張）、
 //           點擊依 REVIEW_LIST 分流（有 → /reviews?state=OVERDUE／ABNORMAL，沒有 → 無權限頁）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R8 審查裁示 ①B：沒有 REVIEW_LIST 改驗「沒有 click 樣式、沒有 title、點了留在首頁」；有權限驗 click 樣式與提示
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -215,19 +218,23 @@ describe('首頁', () => {
     w.unmount()
   })
 
-  it('定期審查兩張卡：有 REVIEW_LIST → 定期審查清單帶 state（逾期 OVERDUE、異常 ABNORMAL）；沒有 → 無權限頁', async () => {
+  it('定期審查兩張卡：有 REVIEW_LIST → 可點、進定期審查清單帶 state（逾期 OVERDUE、異常 ABNORMAL）；沒有 → 不可點、沒有提示、留在首頁', async () => {
     const expected: [string, string][] = [['.card-review-overdue', 'OVERDUE'], ['.card-review-abnormal', 'ABNORMAL']]
     for (const [sel] of expected) {
       statsMock.mockResolvedValueOnce({ ...MINE })
       const w = await mountHome()
+      expect(w.find(sel).classes(), sel).not.toContain('click')
+      expect(w.find(sel).attributes('title'), sel).toBeUndefined()
       await w.find(sel).trigger('click')
       await flushPromises()
-      expect(router.currentRoute.value.path, sel).toBe('/no-access')
+      expect(router.currentRoute.value.path, sel).toBe('/')
       w.unmount()
     }
     useSession().me.value = makeMe({ permissions: [...GENERAL_PERMS, 'REVIEW_LIST'] })
     for (const [sel, state] of expected) {
       const w = await mountHome()
+      expect(w.find(sel).classes(), sel).toContain('click')
+      expect(w.find(sel).attributes('title'), sel).toMatch(/^點擊查看/)
       await w.find(sel).trigger('click')
       await flushPromises()
       expect(router.currentRoute.value.path, sel).toBe('/reviews')
