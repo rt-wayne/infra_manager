@@ -120,10 +120,11 @@ public class HomeDao {
 
 	/**
 	 * 鈴鐺類別 2（R9）：審查狀態為 ABNORMAL 的帳號，FROM／JOIN／狀態句／個人過濾都與 FIND_STATS 的 REVIEW_ABNORMAL 子查詢相同
-	 * （首頁卡片數＝鈴鐺筆數）；依旗標標記日期新到舊（空的最後）、再單號。需綁 :today 與 :reviewApplyBy
+	 * （首頁卡片數＝鈴鐺筆數）；依旗標標記日期新到舊（空的最後）、再單號。需綁 :today 與 :reviewApplyBy。
+	 * 不帶 APPLY_BY：過濾已在 WHERE 做完，Service 不逐筆判斷（R9 審查 S3）
 	 */
 	public static final String FIND_REVIEW_ABNORMAL = """
-			SELECT A.ACCT_ID, A.ACCT_NAME, A.CATG_ID, C.CATG_NAME, A.APPLY_BY, A.REVIEW_FLAG_DATE, A.REVIEW_FLAG_REASON, A.REVIEW_FLAG_SOURCE_CODE
+			SELECT A.ACCT_ID, A.ACCT_NAME, A.CATG_ID, C.CATG_NAME, A.REVIEW_FLAG_DATE, A.REVIEW_FLAG_REASON, A.REVIEW_FLAG_SOURCE_CODE
 			  FROM IM_ACCT A
 			  LEFT JOIN IM_ACCT_CATG C ON C.CATG_ID = A.CATG_ID
 			""" + "  " + ReviewDao.JOIN_ASSET_CLASS + "\n"

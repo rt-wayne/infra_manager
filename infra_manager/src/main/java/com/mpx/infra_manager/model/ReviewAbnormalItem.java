@@ -4,13 +4,12 @@ package com.mpx.infra_manager.model;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
 // 變更說明: 新增：BACKLOG 第 158 項 R9——GET /home/review-abnormal 鈴鐺類別 2（審查異常未處理）一筆；
-//           applyBy（原新增申請人）只給 DAO 過濾與測試用，欄位與 getter 都 @JsonIgnore、不輸出（比照 ExpiringAcct）
+//           相關性過濾在 SQL（HomeDao.REVIEW_MINE_COND）做完，不帶原新增申請人欄位（R9 審查 S3，與 ExpiringAcct 逐筆過濾不同）
 // ============================================================
 
 import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 
 public class ReviewAbnormalItem {
 
@@ -24,8 +23,6 @@ public class ReviewAbnormalItem {
 	private String reviewFlagReason;
 	/** 旗標來源（REVIEW 駁回／EMG 緊急存取退回或異常結案） */
 	private String reviewFlagSourceCode;
-	@JsonIgnore
-	private String applyBy;
 
 	public String getAcctId() {
 		return acctId;
@@ -81,14 +78,5 @@ public class ReviewAbnormalItem {
 
 	public void setReviewFlagSourceCode(String reviewFlagSourceCode) {
 		this.reviewFlagSourceCode = reviewFlagSourceCode;
-	}
-
-	@JsonIgnore
-	public String getApplyBy() {
-		return applyBy;
-	}
-
-	public void setApplyBy(String applyBy) {
-		this.applyBy = applyBy;
 	}
 }

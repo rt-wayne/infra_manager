@@ -20,6 +20,9 @@
   AI版本  : Claude Fable 5.1 (claude-fable-5-1)
   修改日期: 2026-11-04
   變更說明: R5b（裁示 ①B）：兩位主管欄的簽核人改走共用 reviewSignerText，切換身分代簽時顯示「姓名（實際操作人：姓名） 時間」
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: R9 審查 S1：簽核彈窗 changed 後除了重查清單也重算鈴鐺（駁回會讓帳號變成審查異常、鈴鐺類別 2 要立刻多一筆；比照緊急存取清單）
 -->
 
 <template>
@@ -84,7 +87,7 @@
       <div v-else class="empty">查無資料，請換個條件再試一次</div>
     </template>
 
-    <ReviewSignModal v-if="reviewing" :item="reviewing" @close="reviewing = null" @changed="load" />
+    <ReviewSignModal v-if="reviewing" :item="reviewing" @close="reviewing = null" @changed="onReviewChanged" />
     <ToastHost />
   </main>
 </template>
@@ -105,7 +108,7 @@ import { dateOnly, toMinute } from '../utils/date'
 import { REVIEW_STATE_FILTER, REVIEW_STATE_LABEL, accountOps, isOn, label, reviewActableHalves, reviewSignerText, reviewStateTagClass } from '../utils/labels'
 
 const { toast } = useToast()
-const { can, me } = useSession()
+const { can, me, refreshBadges } = useSession()
 const route = useRoute()
 const router = useRouter()
 
@@ -148,6 +151,12 @@ function halfText(r: ReviewItem, half: ReviewHalf): string {
     : reviewSignerText(r.govSignByName, r.govSignBy, r.govSignActByName, r.govSignActBy)
   if (!who) return '—'
   return `${who} ${toMinute(half === 'INFRA' ? r.infraSignDate : r.govSignDate)}`.trim()
+}
+
+/** 簽核彈窗有異動（簽核、駁回、409）：重查清單並重算鈴鐺（駁回後帳號變審查異常，鈴鐺類別 2 要立刻反映；R9 審查 S1） */
+function onReviewChanged(): void {
+  void load()
+  void refreshBadges()
 }
 
 async function load(): Promise<void> {

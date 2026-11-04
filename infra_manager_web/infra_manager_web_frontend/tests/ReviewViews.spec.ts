@@ -22,6 +22,9 @@
 // 修改日期: 2026-11-04
 // 變更說明: R5b（裁示 ①B）：夾具加 infraSignActByName／govSignActByName；清單與彈窗各加一例——代簽顯示「姓名（實際操作人：姓名） 時間」、
 //           實際操作人相同不加、沒有姓名用工號
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: 第 158 項 R9 審查 S1：清單頁彈窗 changed 後除了重查清單，也驗有重算鈴鐺（listReviewAbnormal 被呼叫；需有 token 才會查）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -29,7 +32,9 @@ import type { VueWrapper } from '@vue/test-utils'
 import http from '../src/api/http'
 import ReviewSignModal from '../src/components/ReviewSignModal.vue'
 import ReviewListView from '../src/views/ReviewListView.vue'
+import { listReviewAbnormal } from '../src/api/common'
 import { listReviews, rejectReview, signReview } from '../src/api/review'
+import { clearToken, setToken } from '../src/api/tokenStore'
 import { resetSession, useSession } from '../src/composables/useSession'
 import { useToast } from '../src/composables/useToast'
 import type { ReviewItem } from '../src/types/review'
@@ -254,9 +259,12 @@ describe('定期審查清單', () => {
     w.unmount()
   })
 
-  it('點「審查」開彈窗帶該列（治理半權限、該列治理半未簽，彈窗有簽核鈕）；彈窗 changed 重查清單、close 關閉', async () => {
+  it('點「審查」開彈窗帶該列（治理半權限、該列治理半未簽，彈窗有簽核鈕）；彈窗 changed 重查清單並重算鈴鐺、close 關閉', async () => {
     useSession().me.value = makeMe({ permissions: ['REVIEW_LIST', 'REVIEW_SIGN_GOV'] })
+    setToken('tok')
+    vi.mocked(listReviewAbnormal).mockClear()
     const w = await mountList()
+    expect(listReviewAbnormal).not.toHaveBeenCalled()
     expect(w.findComponent(ReviewSignModal).exists()).toBe(false)
     await w.findAll('tbody tr')[1].find('.op-review').trigger('click')
     const modal = w.findComponent(ReviewSignModal)
@@ -269,10 +277,13 @@ describe('定期審查清單', () => {
     modal.vm.$emit('changed')
     await flushPromises()
     expect(listMock).toHaveBeenCalledTimes(2)
+    // R9 審查 S1：駁回後帳號變審查異常，鈴鐺類別 2 要立刻重算
+    expect(listReviewAbnormal).toHaveBeenCalledTimes(1)
     modal.vm.$emit('close')
     await flushPromises()
     expect(w.findComponent(ReviewSignModal).exists()).toBe(false)
     w.unmount()
+    clearToken()
   })
 })
 

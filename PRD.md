@@ -149,7 +149,7 @@
 | GOV | APPR_G4、VERIFY_G7 |
 | GOV_MGR | SYS_AUDIT_VIEW、ACC_EXPIRY_ALL、REVIEW_LIST、REVIEW_SIGN_GOV、EMG_VIEW_ALL、EMG_DECIDE |
 | IT_HEAD | APPR_G5、ACC_EXPIRY_ALL、REVIEW_LIST、EMG_VIEW_ALL、EMG_DECIDE |
-| ACCT_REGISTRY | ACC_LIST_FULL、ACC_EXPORT、ACC_EXPIRY_ALL（第 148 項裁示 ②C：看全部清冊的人首頁到期卡與鈴鐺也看全部，點卡進列表筆數才一致） |
+| ACCT_REGISTRY | ACC_LIST_FULL、ACC_EXPORT、ACC_EXPIRY_ALL（第 148 項裁示 ②C：看全部清冊的人首頁到期卡與鈴鐺到期類別也看全部，點卡進列表筆數才一致；鈴鐺另兩類要 REVIEW_LIST／EMG_VIEW_ALL，此角色沒有） |
 | INSP_STAFF | INSP_VIEW、INSP_CREATE、INSP_RESOLVE、INSP_EXPORT |
 | SYS_ADMIN | SYS_ROLE、SYS_EXECUTOR、SYS_IMPERSONATE、SYS_AUDIT_VIEW、SYS_JOB_RUN |
 
@@ -1172,7 +1172,7 @@ END
 | GET | `/codes` | 登入 | categories[catgId、catgName、catgDescr、enabled、suggestExpiry、sortSeq]、assetClasses[assetClassId、assetTypeCode、assetClassName、reviewTrigger、selectable、ctrlDescr、sortSeq]、stages[stageId、stageName、stageTypeCode、permId] |
 | GET | `/home/stats` | 登入 | acctTotal、acctReviewing、acctExpiring、acctPriv、inspThisMonth、inspExcptThisMonth、emgUndecided（緊急存取尚未處理，含逾期）、emgReturned（緊急存取已退回未結案）、reviewOverdue（審查狀態逾期未審）、reviewAbnormal（審查狀態審查異常）、acctAll、emgAll、reviewAll、inspVisible；帳號四張無 ACC_EXPIRY_ALL 只算 APPLY_BY＝有效身分、緊急存取兩張無 EMG_VIEW_ALL 只算 APPLY_BY＝有效身分、定期審查兩張無 REVIEW_LIST 只算 APPLY_BY＝有效身分、巡檢兩張 inspVisible 為 false 時 null |
 | GET | `/home/expiring` | 登入 | [acctId、acctName、catgId、catgName、acctStateCode、expiryDate、daysLeft]（不含 applyBy） |
-| GET | `/home/review-abnormal` | 登入 | [acctId、acctName、catgId、catgName、reviewFlagDate（yyyy-MM-dd）、reviewFlagReason、reviewFlagSourceCode]（不含 applyBy）；審查狀態「審查異常」的帳號，有 REVIEW_LIST 看全部、否則只回 APPLY_BY＝有效身分；依 REVIEW_FLAG_DATE 新到舊、空的最後（第 158 項 R9 鈴鐺類別） |
+| GET | `/home/review-abnormal` | 登入 | [acctId、acctName、catgId、catgName、reviewFlagDate（yyyy-MM-dd）、reviewFlagReason、reviewFlagSourceCode]（相關性在 SQL 過濾，不回申請人欄位）；審查狀態「審查異常」的帳號，有 REVIEW_LIST 看全部、否則只回 APPLY_BY＝有效身分；依 REVIEW_FLAG_DATE 新到舊、空的最後（第 158 項 R9 鈴鐺類別） |
 | GET | `/todos` | 登入 | [source（ACCT_REQ／REVIEW）、reqId（申請單號；審查列＝帳號單號）、acctId、reviewId、half（INFRA／GOV）、review（審查列：整筆同 `GET /reviews` 一列；申請單列這四欄 null）、title、reqTypeCode、catgId、catgName、acctName、isPriv、applyBy、applyByName、stageId、stageName（審查列「Infra 主管待簽」／「資訊治理主管待簽」）、submitDate（審查列 null）、actionKind（APPROVE、EXEC、VERIFY、REVIEW）、versionNo（審查列＝進行中那一輪版本，沒有＝0）、verifyRejectCnt、verifyRejectReason]；申請單列在前，審查列接在後面、依下次應審查日 |
 
 **帳號**
