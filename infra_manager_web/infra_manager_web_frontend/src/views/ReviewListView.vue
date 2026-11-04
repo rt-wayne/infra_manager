@@ -6,7 +6,12 @@
             每列：帳號單號、類別、帳號名稱、所屬系統、使用人、上次／下次審查日、審查狀態標籤、進行中那一輪兩半的簽核人與時間（沒有顯示「—」）
             網址 ?state= 是下拉有的值時當預設篩選（首頁第四區導入用，R8）；查詢失敗只 toast；分頁每頁 20 筆
             操作欄（審查彈窗、停用捷徑）留第 2 單位
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: 第 158 項 R5 第 2 單位：操作欄加「審查」（狀態待複審／逾期未審且我有任一簽核權限；開 ReviewSignModal，成功後重查清單）
+            與「停用申請」（裁示③A：審查異常列、需 ACC_APPLY 且帳號狀態可停用 → /requests/new?reqType=DISABLE）
 -->
+
 <template>
   <main>
     <div class="toolbar">
@@ -55,7 +60,12 @@
               <td><span class="tag" :class="reviewStateTagClass(r.reviewStateCode)">{{ label(REVIEW_STATE_LABEL, r.reviewStateCode) }}</span></td>
               <td class="half">{{ halfText(r.infraSignByName, r.infraSignBy, r.infraSignDate) }}</td>
               <td class="half">{{ halfText(r.govSignByName, r.govSignBy, r.govSignDate) }}</td>
-              <td class="ops"></td>
+              <td>
+                <span class="ops">
+                  <button v-if="canReview(r)" type="button" class="btn-link op-review" @click="reviewing = r">審查</button>
+                  <button v-if="canDisable(r)" type="button" class="btn-link warn op-disable" @click="goDisable(r)">停用申請</button>
+                </span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -64,25 +74,30 @@
       <div v-else class="empty">查無資料，請換個條件再試一次</div>
     </template>
 
+    <ReviewSignModal v-if="reviewing" :item="reviewing" @close="reviewing = null" @changed="load" />
     <ToastHost />
   </main>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import PagerBar from '../components/PagerBar.vue'
+import ReviewSignModal from '../components/ReviewSignModal.vue'
 import ToastHost from '../components/ToastHost.vue'
 import { errorMessage } from '../api/errors'
 import { listReviews } from '../api/review'
 import { usePaging } from '../composables/usePaging'
+import { useSession } from '../composables/useSession'
 import { useToast } from '../composables/useToast'
 import type { ReviewItem, ReviewQuery } from '../types/review'
 import { dateOnly, toMinute } from '../utils/date'
-import { REVIEW_STATE_FILTER, REVIEW_STATE_LABEL, isOn, label, reviewStateTagClass } from '../utils/labels'
+import { REVIEW_STATE_FILTER, REVIEW_STATE_LABEL, accountOps, isOn, label, reviewStateTagClass } from '../utils/labels'
 
 const { toast } = useToast()
+const { can } = useSession()
 const route = useRoute()
+const router = useRouter()
 
 /** 網址 ?state= 是下拉有的值才當預設篩選，其餘一律視為需處理 */
 function initialState(): string {
@@ -96,6 +111,25 @@ const rows = ref<ReviewItem[]>([])
 const loaded = ref(false)
 const loading = ref(false)
 const { page, totalPages, pageRows } = usePaging(rows)
+/** 正在審查的那一列（開簽核／駁回彈窗） */
+const reviewing = ref<ReviewItem | null>(null)
+
+/** 「審查」鈕：狀態待複審／逾期未審，且我有任一半的簽核權限（該半簽過沒、同人兩半由彈窗與後端判斷） */
+function canReview(r: ReviewItem): boolean {
+  return (r.reviewStateCode === 'DUE' || r.reviewStateCode === 'OVERDUE') && (can('REVIEW_SIGN_INFRA') || can('REVIEW_SIGN_GOV'))
+}
+
+/** 「停用申請」捷徑（裁示③A）：審查異常列、我有 ACC_APPLY、帳號目前狀態可發起停用（在途申請由後端檢查） */
+function canDisable(r: ReviewItem): boolean {
+  return r.reviewStateCode === 'ABNORMAL' && can('ACC_APPLY') && accountOps({ acctStateCode: r.acctStateCode }).includes('DISABLE')
+}
+
+/** 帶到停用申請表單（query 格式同帳號操作鈕 AcctOpButtons） */
+function goDisable(r: ReviewItem): void {
+  const query: Record<string, string> = { reqType: 'DISABLE', acctId: r.acctId }
+  if (r.acctName) query.acctName = r.acctName
+  void router.push({ path: '/requests/new', query })
+}
 
 /** 一半的簽核狀況：「姓名 2026-10-30 10:30」，還沒簽顯示「—」 */
 function halfText(name: string | null, by: string | null, date: string | null): string {
