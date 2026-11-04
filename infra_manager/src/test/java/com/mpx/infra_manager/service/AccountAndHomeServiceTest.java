@@ -22,13 +22,14 @@ package com.mpx.infra_manager.service;
 // 變更說明: BACKLOG 第 158 項 R5 第 3 單位：帳號明細走 acctDao.findDetail（綁今天）、原樣帶出 DAO 算的 reviewStateCode；lookup／歷史以外不呼叫 findDetail
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
-// 變更說明: BACKLOG 第 158 項 R6：待辦的定期審查列——有 REVIEW_SIGN_INFRA 的看到 Infra 未簽的、簽過的不列、另一位簽核人是我的不列、
-//           切換身分代簽（實際操作人是我）放行、沒權限的人不查 findTodo；審查列接在申請單後面；欄位與標題
+// 變更說明: BACKLOG 第 158 項 R6：待辦的定期審查列——有 REVIEW_SIGN_INFRA 的看到 Infra 未簽的、簽過的不列、另一位簽核人（有效身分）是我的不列、
+//           另一位是我代簽的（實際操作人是我、有效身分不是）照列、雙簽核權限者同帳號兩列、沒權限的人不查 findTodo；審查列接在申請單後面；欄位與標題
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
 import static com.mpx.infra_manager.support.TestFixture.ALEX;
 import static com.mpx.infra_manager.support.TestFixture.GARY;
+import static com.mpx.infra_manager.support.TestFixture.HANK;
 import static com.mpx.infra_manager.support.TestFixture.KEVIN;
 import static com.mpx.infra_manager.support.TestFixture.MICHAEL;
 import static com.mpx.infra_manager.support.TestFixture.MOLLY;
@@ -279,13 +280,14 @@ class AccountAndHomeServiceTest {
 
 	@Test
 	void 待辦_定期審查列_依簽核權限與同人規則_接在申請單後面() {
-		// 三筆待審帳號：A 沒人簽；B Infra 已由 TERRY 簽；C 資訊治理已由 TERRY（有效身分）簽、實際操作人 TESTER
+		// 三筆待審帳號：A 沒人簽；B Infra 由 MOLLY 切換成 TERRY 代簽（有效身分 TERRY、實際操作人 MOLLY）；
+		// C 資訊治理已由 TERRY（有效身分）簽、實際操作人 TESTER
 		ReviewItem a = reviewTodoItem("AR20261001-001", "DOOR", "機房門禁卡", null, LocalDateTime.of(2026, 9, 1, 0, 0), "OVERDUE");
 		ReviewItem b = reviewTodoItem("AR20261001-002", "DB", "資料庫帳號", "sa", LocalDateTime.of(2026, 10, 20, 0, 0), "DUE");
 		b.setReviewId(7L);
 		b.setReviewVersionNo(1);
 		b.setInfraSignBy(TERRY);
-		b.setInfraSignActBy(TERRY);
+		b.setInfraSignActBy(MOLLY);
 		ReviewItem c = reviewTodoItem("AR20261001-003", "HOST", "主機帳號", "root", LocalDateTime.of(2026, 10, 25, 0, 0), "DUE");
 		c.setReviewId(8L);
 		c.setReviewVersionNo(1);
@@ -317,7 +319,8 @@ class AccountAndHomeServiceTest {
 		assertThat(t.getReview()).isSameAs(a);
 		assertThat(t.getSubmitDate()).isNull();
 
-		// MOLLY（GOV_MGR）：A、B 可簽資訊治理（B 的 Infra 是 TERRY 不是我）；C 自己這個身分已有人簽 → 不列
+		// MOLLY（GOV_MGR）：A、B 可簽資訊治理——B 的 Infra 是 MOLLY 自己代 TERRY 簽的，只比有效身分（②A）所以放行；
+		// C 自己這個身分已有人簽 → 不列
 		List<TodoItem> molly = fx.homeService.todos(id(MOLLY));
 		assertThat(molly).extracting(TodoItem::getReqId).containsExactly("AR20261001-001", "AR20261001-002");
 		assertThat(molly).extracting(TodoItem::getHalf).containsOnly("GOV");
@@ -326,10 +329,17 @@ class AccountAndHomeServiceTest {
 		assertThat(molly.get(1).getVersionNo()).isEqualTo(1);
 		assertThat(molly.get(1).getReviewId()).isEqualTo(7L);
 
-		// TESTER 切換成 TERRY 簽 C 的資訊治理後，TESTER 本人（沒有簽核權限）不查；GARY（IT_HEAD，只有 REVIEW_LIST）也不查
+		// 同時有兩個簽核權限的人（初始資料沒有）：A 兩列（先 Infra 後資訊治理）、B 只剩資訊治理、C 只剩 Infra（另一位是 TERRY 不是我）
+		List<TodoItem> both = fx.homeService.todos(TestFixture.idWith(HANK,
+				java.util.Set.of(AcctConst.PERM_REVIEW_SIGN_INFRA, AcctConst.PERM_REVIEW_SIGN_GOV), List.of()));
+		assertThat(both).extracting(TodoItem::getReqId, TodoItem::getHalf).containsExactly(
+				org.assertj.core.groups.Tuple.tuple("AR20261001-001", "INFRA"), org.assertj.core.groups.Tuple.tuple("AR20261001-001", "GOV"),
+				org.assertj.core.groups.Tuple.tuple("AR20261001-002", "GOV"), org.assertj.core.groups.Tuple.tuple("AR20261001-003", "INFRA"));
+
+		// TESTER（沒有簽核權限）不查；GARY（IT_HEAD，只有 REVIEW_LIST）也不查 → findTodo 只被 TERRY、MOLLY、雙權限者叫了 3 次
 		fx.homeService.todos(id(TESTER));
 		fx.homeService.todos(id(GARY));
-		verify(fx.reviewDao, org.mockito.Mockito.times(2)).findTodo(TODAY);
+		verify(fx.reviewDao, org.mockito.Mockito.times(3)).findTodo(TODAY);
 	}
 
 	private static ReviewItem reviewTodoItem(String acctId, String catgId, String catgName, String acctName, LocalDateTime next, String state) {

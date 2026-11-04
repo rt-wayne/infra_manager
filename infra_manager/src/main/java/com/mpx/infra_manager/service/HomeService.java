@@ -58,7 +58,7 @@ public class HomeService {
 	public static final String KIND_VERIFY = "VERIFY";
 	public static final String KIND_REVIEW = "REVIEW";
 
-	public static final String SOURCE_ACCT_REQ = "ACCT_REQ";
+	/** 待辦來源（申請單列的 'ACCT_REQ' 由 AcctReqDao 的 SQL 字面值帶出，這裡只有審查列用） */
 	public static final String SOURCE_REVIEW = "REVIEW";
 
 	private final PermissionService perm;

@@ -17,9 +17,9 @@
 | 158 | 定期權限審查（SA §5.10、J04；從第 14 項拆出）：審查狀態即時計算、Infra／治理雙簽、駁回標旗標、J04 待複審信、J02 加逾期未審、待辦、首頁第四區兩張卡、鈴鐺類別 2。21 項裁示 2026-10-30 全部依 architect 建議，分 R0～R10 共 12 段 | [backlog/158-定期審查.md](backlog/158-定期審查.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：**R6 待辦整合已實作並 commit（2026-11-04；裁示 ①A ②A ③A）**：有 REVIEW_SIGN_INFRA／GOV 的人在待辦簽核頁看到自己那個身分的待簽帳號（待複審／逾期未審、該身分未簽、另一位簽核人不是我），按「審查」直接開簽核彈窗，側欄數字含審查。接著 (1) 使用者瀏覽器實測（細項見計畫檔交接欄）；(2) 平行派 code-reviewer（範圍 `3a4c509` 起）＋ test-runner，必須修正修完 → R6 結案、交接指向 R7 J04 待複審通知。R5 是正式環境最早部署點，部署前 UAT／正式先跑 R1 腳本與文案腳本（SETUP 第 6 節）
+- 下一步：**R6 已結案（2026-11-04；實測通過、審查 0 必須修正，S3／S4 登記第 169、170 項）**。接 R7 J04 待複審通知（排程每日寄待複審帳號給兩位主管、J02 加逾期未審區塊；設計要點見計畫檔交接欄與設計段「J04」；約 3 回合）。R7 開工時把 HEAD 記進「本階段起點」。R5 是正式環境最早部署點，部署前 UAT／正式先跑 R1 腳本與文案腳本（SETUP 第 6 節）
 - 已改動（未 commit）：無
-- 本階段起點：R6 `3a4c509`；歷史：R5b `34b9976`、R5 `fd82b3c`、R4 `9800824`、R3b `aa917ac`、R3a `53eb425`、R2 `146e78a`、R1 `f2219ec`、R0 `05865e0`
+- 本階段起點：R7 開工時填 HEAD；歷史：R6 `3a4c509`、R5b `34b9976`、R5 `fd82b3c`、R4 `9800824`、R3b `aa917ac`、R3a `53eb425`、R2 `146e78a`、R1 `f2219ec`、R0 `05865e0`
 - 卡住／待確認：UAT／正式環境的 R1 腳本與 `infra_manager_158_review_wording.sql` 於 R5 部署前執行（SETUP 第 6 節已寫）
 
 ## 已拍板待實作
@@ -56,6 +56,8 @@
 | 165 | `JobAndNotifyTest` 定期審查駁回通知第二筆標題寫「未知事件不外拋」，但沒有 `findRound(89L)` 的樁，`reviewEvent` 在查無該輪就 return，`default -> throw IllegalArgumentException` 加 catch 那條路沒跑過；補樁即可。第 158 項 R3b code-reviewer S1 | 2026-10-30 | — |
 | 166 | `RoleAdminDao.FIND_IN_FLIGHT_REVIEW`（守門的在途定期審查）只看 OPEN＋該半未簽，沒 JOIN 帳號主表：帳號在有進行中一輪時被緊急存取標旗標（或 R4 前被停用／刪除）後沒人簽得成，卻仍算在途、擋下移除 REVIEW_SIGN_* 最後一位持有人（多擋不少擋）。R4 時評估改成只算狀態 DUE／OVERDUE 的帳號，或 PRD 註明「含已不可簽的進行中輪」。第 158 項 R3b code-reviewer S4。R5 code-reviewer S7 補：R5 畫面對「掛旗標（審查異常）但仍有 OPEN 輪」的帳號，清單兩半欄照列簽核人、沒有任何操作鈕、彈窗也沒鈕，這是現況不是錯；守門要不要排除這種輪仍未決，R5 未處理 | 2026-10-30 | — |
 | 168 | 定期審查的「停用申請」捷徑（清單審查異常列、駁回後彈窗）只以 `accountOps({acctStateCode})` 判斷、沒看在途申請：駁回後申請人提出修改／停用 → 在途期間旗標不清、仍是審查異常，捷徑照樣出現，使用者填完表單送出才被後端擋。改法：`ReviewDao.SELECT_COLS` 照抄 `AcctDao.SELECT_BASE` 的 IN_FLIGHT 純量子查詢、`ReviewItem` 加 inFlight、兩處改 `accountOps({acctStateCode, inFlight})`（要動後端）。第 158 項 R5 code-reviewer S2 | 2026-11-04 | — |
+| 169 | `GET /todos` 的定期審查列內嵌整筆 ReviewItem（33 欄、空值照送、無壓縮，約 1.3～1.5 KB／列），而側欄徽章 `useSession.refreshBadges` 每次換頁都打一次 `/todos` 只為算筆數，後端每次都跑 `FIND_TODO`（整個 IM_ACCT 算狀態＋5 組姓名 JOIN）。現在量級可忽略（測試 DB 審查範圍 3 筆、正式 0 筆），但第 133 項舊資料轉入後所有範圍內帳號當天變逾期未審（Q3 已定不給初值），假設 1,000 筆每次換頁回應約 1.5 MB、雙權限者加倍。可能做法：徽章改用只回筆數的端點；或待辦列只帶 acctId、按「審查」時再取單筆（目前沒有單筆 API）。綁第 133 項轉入時機處理。第 158 項 R6 code-reviewer S3 | 2026-11-04 | — |
+| 170 | 待辦審查列排序 `ReviewDao.FIND_TODO` 只依下次應審查日（NULLS FIRST）、單號，沒有像清單 `FIND_LIST` 先依狀態（逾期在待複審前）；只有「上次審查日為空、下次應審查日在未來」這種異常資料會讓逾期列排到待複審後面（正常流程兩個日期一起寫、轉入資料兩個都空會排最前）。要與清單一致時在 ORDER BY 前加狀態 CASE，SqlConstantScanTest 斷言同步。第 158 項 R6 code-reviewer S4 | 2026-11-04 | — |
 | 167 | `RequestServiceTest.assertLockApplyCancel`（關卡 6 回報「鎖帳號列 → 覆寫主表 → 取消審查輪」的共用檢查）的中間步驟是呼叫端傳進來的普通 `verify`，不在 InOrder 裡，重新啟用、停用、刪除三筆只能證明鎖在取消之前，證明不了覆寫主表夾在中間；改成 `Consumer<InOrder>` 參數，修改那筆內聯的四行一併改用此函式消重複。第 158 項 R4 code-reviewer S1 | 2026-10-30 | — |
 | 16 | 原始規格書缺件：子 README 與 `.example` 註解（範本已於 2026-10-14 刪除）引用 `spec_im_acct_insp_v2.0.md`、變更單 #1～#4，但 repo 與使用者手上都沒有；PRD 不引用 | 2026-10-10 | — |
 | 17 | `infra_manager_web\README.md` 第 2 節「兩包結構」表仍是範本初始描述：說 Controller 目錄只有 `package-info.java`、`src\types\` 與 `src\views\` 只有 `.gitkeep`、router 的 routes 是空陣列，實際都已有程式（4 個型別檔、10 個畫面、14 個 path） | 2026-10-10 | — |

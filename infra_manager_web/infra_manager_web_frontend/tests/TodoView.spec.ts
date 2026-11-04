@@ -12,7 +12,8 @@
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R6：夾具加審查列四欄；定期審查列的顯示（標籤、標題、關卡、狀態與應審查日、沒有查看明細）、
-//           與同編號申請單列並存不撞鍵、「審查」開 ReviewSignModal 並以內嵌 review 簽核、簽完重載待辦與徽章
+//           與同編號申請單列並存不撞鍵、雙權限者同帳號兩列（身分不同）不撞鍵、「審查」開 ReviewSignModal 並以內嵌 review 簽核、
+//           簽完重載待辦（徽章重算走 useSession.refreshBadges，測試沒有 token 不會真的打 API，不在此驗）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -311,6 +312,15 @@ describe('TodoView', () => {
       const req = w.find('tr[data-key="ACCT_REQ:AR1:"]')
       expect(req.text()).toContain('查看明細')
       expect(req.find('.act-approve').exists()).toBe(true)
+      w.unmount()
+    })
+
+    it('雙簽核權限者同一帳號兩列（身分不同），列鍵不撞、各自關卡名', async () => {
+      todosMock.mockResolvedValue([reviewTodo, { ...reviewTodo, half: 'GOV', stageName: '資訊治理主管待簽' }])
+      const w = await mountTodo()
+      expect(w.findAll('tbody tr')).toHaveLength(2)
+      expect(w.find('tr[data-key="REVIEW:AR1:INFRA"]').findAll('td')[4].text()).toBe('Infra 主管待簽')
+      expect(w.find('tr[data-key="REVIEW:AR1:GOV"]').findAll('td')[4].text()).toBe('資訊治理主管待簽')
       w.unmount()
     })
 

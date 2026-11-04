@@ -129,7 +129,7 @@
 | SYS_IMPERSONATE＝切換身分 | SYS | 1 |
 | SYS_JOB_RUN＝手動觸發排程 | SYS | 1 |
 | ACC_EXPORT＝帳號權限清單匯出（帳號列表「匯出 Excel」） | ACCT | 1（同碼的「批次匯出帳號歷史」仍為階段 2，見 BACKLOG 第 14 項） |
-| REVIEW_LIST、REVIEW_SIGN_INFRA、REVIEW_SIGN_GOV＝定期審查清單／Infra 主管簽核／資訊治理主管簽核 | REVIEW | 1（REVIEW_LIST 見「15. 定期審查」；REVIEW_SIGN_* 已進可見清單，簽核判斷點隨簽核 API 上線，進度見 BACKLOG 第 158 項） |
+| REVIEW_LIST、REVIEW_SIGN_INFRA、REVIEW_SIGN_GOV＝定期審查清單／Infra 主管簽核／資訊治理主管簽核 | REVIEW | 1（三個權限碼的判斷點見「15. 定期審查」：REVIEW_LIST 看清單、REVIEW_SIGN_* 簽核／駁回與待辦審查列；功能分批施工中，進度見 BACKLOG 第 158 項） |
 | EMG_APPLY、EMG_VIEW_ALL、EMG_DECIDE＝緊急存取申請／看全部／補核准退回結案 | EMG | 1（見「14. 緊急存取」） |
 | STATS_VIEW＝統計頁 | STATS | 2 |
 | INSP_EXPORT＝巡檢紀錄匯出 | INSP | 2 |
@@ -564,7 +564,7 @@
 **本功能分批施工中，進度見 `BACKLOG.md` 第 158 項**；本節只寫已上線的部分：審查狀態定義、清單 API、兩位主管簽核與完成、駁回與駁回信、名單維護守門、帳號異動時取消進行中一輪、清單頁與簽核／駁回彈窗（含駁回後停用捷徑；見「畫面說明」`/reviews`）、帳號明細的審查狀態（`GET /accounts/{id}` 多回 reviewStateCode，同一句狀態片段計算；帳號明細彈窗「定期審查」列顯示）、待辦整合（有簽核權限的人在待辦簽核頁看到自己那個身分的待簽帳號，見「11. 首頁、鈴鐺、待辦」待辦簽核段）。待複審通知（J04）、首頁第四區、鈴鐺尚未上線。
 
 - **審查範圍**：帳號狀態為 APPROVED（生效中），且符合任一——資產分類的 IS_REVIEW_TRIGGER＝1（只看啟用中的分類，分類停用或查無視同不符）、類別為門禁卡（DOOR）、IS_PRIV＝1。與「6. 7 關簽核」的審查日期寫入條件、關卡 5 免簽判斷是同一個判斷（程式共用 `ReviewRule.matches`；SQL 片段 `ReviewDao.REVIEW_SCOPE_COND` 對齊，有測試鎖住）。已逾期（EXPIRED）、停用、刪除、審核中的帳號都不在範圍。
-- **審查狀態**（不存欄位，每次查詢以當天日期即時計算，SQL 片段 `ReviewDao.REVIEW_STATE_EXPR`；清單、之後的首頁卡、排程、鈴鐺、簽核都用同一句），依序判斷：
+- **審查狀態**（不存欄位，每次查詢以當天日期即時計算，SQL 片段 `ReviewDao.REVIEW_STATE_EXPR`；清單、簽核、帳號明細、待辦、之後的首頁卡、排程、鈴鐺都用同一句），依序判斷：
   1. **ABNORMAL 審查異常**：IS_REVIEW_FLAG＝1 且帳號未刪除——不分旗標來源、不分帳號狀態（停用中的也算），優先於其他狀態；
   2. 不在審查範圍 → **沒有審查狀態**（清單不列、不適用）；
   3. **OVERDUE 逾期未審**：LAST_REVIEW_DATE 或 NEXT_REVIEW_DATE 為空，或 NEXT_REVIEW_DATE < 今天；
