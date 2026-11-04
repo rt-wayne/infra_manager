@@ -26,6 +26,9 @@
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R8：HomeStats 加 reviewOverdue、reviewAbnormal、reviewAll（首頁第四區定期審查兩張卡）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R9：加 ReviewAbnormalItem（GET /home/review-abnormal 一列，鈴鐺類別 2 審查異常未處理）
 // ============================================================
 import type { ReviewHalf, ReviewItem } from './review'
 
@@ -140,6 +143,19 @@ export interface ExpiringItem {
   acctStateCode: string
   expiryDate: string
   daysLeft: number
+}
+
+/** GET /home/review-abnormal 一列（鈴鐺類別 2：審查異常未處理；範圍由後端依 REVIEW_LIST 決定，前端不再過濾） */
+export interface ReviewAbnormalItem {
+  acctId: string
+  acctName: string | null
+  catgId: string
+  catgName: string | null
+  /** 旗標標記日期 yyyy-MM-dd（舊資料可能為 null） */
+  reviewFlagDate: string | null
+  reviewFlagReason: string | null
+  /** 旗標來源：REVIEW（駁回）／EMG（緊急存取） */
+  reviewFlagSourceCode: string | null
 }
 
 /** 待辦可做的動作；REVIEW＝定期審查簽核（第 158 項 R6） */

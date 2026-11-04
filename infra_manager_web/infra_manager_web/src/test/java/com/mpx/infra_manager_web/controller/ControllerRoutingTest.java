@@ -23,6 +23,9 @@ package com.mpx.infra_manager_web.controller;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R5：加 ReviewController 3 條（清單、簽核、駁回），52 → 55 案
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R9：HomeController 加 /home/review-abnormal（鈴鐺類別 2），55 → 56 案
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -89,6 +92,7 @@ class ControllerRoutingTest {
 				Arguments.of("GET", "/codes", "/codes"),
 				Arguments.of("GET", "/home/stats", "/home/stats"),
 				Arguments.of("GET", "/home/expiring", "/home/expiring"),
+				Arguments.of("GET", "/home/review-abnormal", "/home/review-abnormal"),
 				Arguments.of("GET", "/todos", "/todos"),
 				// AccountController
 				Arguments.of("GET", "/accounts?keyword=a&expiring=1", "/accounts?keyword=a&expiring=1"),

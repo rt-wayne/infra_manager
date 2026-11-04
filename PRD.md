@@ -166,7 +166,7 @@
 | 帳號明細、歷史 | 登入 | 「可看帳號」者 |
 | 申請單明細、附件下載與網頁開啟 | 登入 | 「可看申請單」者 |
 | 待辦 | 登入 | 我此刻能處理的 |
-| 鈴鐺 | 登入 | 逐筆與我相關者 |
+| 鈴鐺 | 登入 | 逐筆與我相關者（到期類別：ACC_EXPIRY_ALL、原新增申請人或該類別執行人；定期審查異常類別：REVIEW_LIST 看全部、否則原新增申請人；緊急存取類別：EMG_VIEW_ALL 看全部、否則申請人） |
 | 首頁卡片 | 登入 | 只回聚合數字；帳號四張有 ACC_EXPIRY_ALL 看全部、否則只算我原新增申請的；緊急存取兩張有 EMG_VIEW_ALL 看全部、否則只算我申請的；巡檢兩張看全部，只給有 INSP_VIEW、ACC_EXPIRY_ALL 或 EMG_VIEW_ALL 任一者；定期審查兩張有 REVIEW_LIST 看全部、否則只算我原新增申請的（REVIEW_LIST 不影響巡檢區） |
 | 代碼、資產分類說明 | 登入 | 全部 |
 | 切換身分名單 | 實際操作人有 SYS_IMPERSONATE | 啟用中、不含自己 |
@@ -494,8 +494,9 @@
 - 機房巡檢：本月巡檢次數、本月發現異常項目數（本月巡檢中異常且未處理的項目數），數字一律看全部（巡檢是共同業務）。只給有 INSP_VIEW 的人、或帳號／緊急存取任一區看全部的人（主管沒有巡檢權限也維持看得到）；其他人兩個數字回 null、整區不顯示。
 - 外觀：四區各一主色（帳號權限管理藍、緊急存取深紫、定期審查藍綠、機房巡檢綠），區塊標題列塗主色白字置中（24px，比其他頁區塊標題 20px 大）、卡片淡色底。六張警示卡（30 天內到期、緊急存取待補核准、緊急存取異常待追蹤、逾期未定期審查、審查異常待處理、本月發現異常項目數）數字大於 0 時整張卡換淡紅（到期、異常待追蹤、審查異常）或淡橘（待補核准、逾期未定期審查、巡檢異常）底並加外框；0、載入前與載入失敗不標。
 
-**頁首鈴鐺**（多類別通知面板）：徽章數＝各類別筆數合計；每個類別只在有項目時顯示整節（SA §7.2：與登入者無關的事項連筆數都不顯示）；全部為空時不顯示徽章，仍可點開，面板顯示「目前沒有與您相關的通知」。
+**頁首鈴鐺**（多類別通知面板）：徽章數＝各類別筆數合計；每個類別只在有項目時顯示整節（SA §7.2：與登入者無關的事項連筆數都不顯示）；全部為空時不顯示徽章，仍可點開，面板顯示「目前沒有與您相關的通知」。面板最高 70% 視窗高度、超過在面板內捲動（三類筆數一多底部項目仍點得到）。三個類別依序：
 - 類別「30 天內到期或已逾期」（到期帳號）：到期提醒範圍內，逐筆判斷與我相關才列：我有 ACC_EXPIRY_ALL；或我是原新增申請人；或我是該類別執行人。有 ACC_LIST_FULL 且有項目時顯示「查看全部到期清單」。點單筆：有 ACC_LIST_FULL → 帳號列表到期篩選；否則開唯讀帳號明細彈窗（不顯示異動按鈕）。
+- 類別「定期審查異常未處理」（第 158 項 R9）：審查狀態為「審查異常」的帳號（第 15 節同一句狀態片段；不分旗標來源），範圍與首頁「審查異常待處理」卡同口徑——有 REVIEW_LIST 看全部，否則只列原新增申請人是我（有效身分）的帳號（2026-11-04 裁示 ①A；不像到期類別加該類別執行人）；由後端 `GET /home/review-abnormal` 過濾，依旗標標記日期新到舊、空的最後。每筆顯示帳號名稱（無名稱顯示帳號單號）、類別、「標記 yyyy-MM-dd」（沒有標記日顯示「審查異常」），滑過顯示旗標原因。點單筆：有 REVIEW_LIST → 定期審查清單套「審查異常」篩選；否則開唯讀帳號明細彈窗（與到期類別同一個彈窗，明細內「審查異常標記」列可看原因與標記日）。
 - 類別「緊急存取已退回未結案」：已退回且尚未結案的緊急存取單，範圍與緊急存取清單同口徑（有 EMG_VIEW_ALL 看全部，否則只列本人送出的單＝原申請人）。點單筆：有 EMG_VIEW_ALL → 緊急存取清單套「已退回」篩選；否則開該單明細彈窗（申請人對已退回單無可做動作，等同唯讀）。
 
 **待辦簽核**：只列我此刻能處理的事，兩種來源；每次依當下名單計算。申請單列送出時間由舊到新排前面，標題格式「{申請類型} {帳號類別}：{帳號名稱}」；定期審查列接在後面、逾期最久的先（下次應審查日舊到新、空值最前），標題格式「定期審查 {帳號類別}：{帳號名稱}」（2026-11-04 裁示 ③A，兩種日期意義不同不混排）。側欄「待辦簽核」數字＝兩種來源合計。
@@ -575,10 +576,10 @@
 
 #### 15. 定期審查（SA §5.10）
 
-**本功能分批施工中，進度見 `BACKLOG.md` 第 158 項**；本節只寫已上線的部分：審查狀態定義、清單 API、兩位主管簽核與完成、駁回與駁回信、名單維護守門、帳號異動時取消進行中一輪、清單頁與簽核／駁回彈窗（含駁回後停用捷徑；見「畫面說明」`/reviews`）、帳號明細的審查狀態（`GET /accounts/{id}` 多回 reviewStateCode，同一句狀態片段計算；帳號明細彈窗「定期審查」列顯示）、待辦整合（有簽核權限的人在待辦簽核頁看到自己那個身分的待簽帳號，見「11. 首頁、鈴鐺、待辦」待辦簽核段）、待複審通知（排程 J04 每日把進入待複審的帳號各寄一封給兩位主管權限持有人、每輪一次，見第 8 節 J04 與第 9 節）、每週彙總信的「逾期未審帳號」區塊（排程 J02，逾期未審帳號每週再列、主旨帶兩個筆數，見第 8 節 J02）、首頁第四區「定期審查」兩張卡（逾期未定期審查、審查異常待處理；有 REVIEW_LIST 看全部並可點進清單，見「11. 首頁、鈴鐺、待辦」首頁十張卡片段）。鈴鐺類別尚未上線。
+**本功能分批施工中，進度見 `BACKLOG.md` 第 158 項**；本節只寫已上線的部分：審查狀態定義、清單 API、兩位主管簽核與完成、駁回與駁回信、名單維護守門、帳號異動時取消進行中一輪、清單頁與簽核／駁回彈窗（含駁回後停用捷徑；見「畫面說明」`/reviews`）、帳號明細的審查狀態（`GET /accounts/{id}` 多回 reviewStateCode，同一句狀態片段計算；帳號明細彈窗「定期審查」列顯示）、待辦整合（有簽核權限的人在待辦簽核頁看到自己那個身分的待簽帳號，見「11. 首頁、鈴鐺、待辦」待辦簽核段）、待複審通知（排程 J04 每日把進入待複審的帳號各寄一封給兩位主管權限持有人、每輪一次，見第 8 節 J04 與第 9 節）、每週彙總信的「逾期未審帳號」區塊（排程 J02，逾期未審帳號每週再列、主旨帶兩個筆數，見第 8 節 J02）、首頁第四區「定期審查」兩張卡（逾期未定期審查、審查異常待處理；有 REVIEW_LIST 看全部並可點進清單，見「11. 首頁、鈴鐺、待辦」首頁十張卡片段）、頁首鈴鐺類別「定期審查異常未處理」（`GET /home/review-abnormal`，與審查異常卡同口徑，見「11. 首頁、鈴鐺、待辦」頁首鈴鐺段）。
 
 - **審查範圍**：帳號狀態為 APPROVED（生效中），且符合任一——資產分類的 IS_REVIEW_TRIGGER＝1（只看啟用中的分類，分類停用或查無視同不符）、類別為門禁卡（DOOR）、IS_PRIV＝1。與「6. 7 關簽核」的審查日期寫入條件、關卡 5 免簽判斷是同一個判斷（程式共用 `ReviewRule.matches`；SQL 片段 `ReviewDao.REVIEW_SCOPE_COND` 對齊，有測試鎖住）。已逾期（EXPIRED）、停用、刪除、審核中的帳號都不在範圍。
-- **審查狀態**（不存欄位，每次查詢以當天日期即時計算，SQL 片段 `ReviewDao.REVIEW_STATE_EXPR`；清單、簽核、帳號明細、待辦、首頁卡、排程、之後的鈴鐺都用同一句），依序判斷：
+- **審查狀態**（不存欄位，每次查詢以當天日期即時計算，SQL 片段 `ReviewDao.REVIEW_STATE_EXPR`；清單、簽核、帳號明細、待辦、首頁卡、排程、鈴鐺都用同一句），依序判斷：
   1. **ABNORMAL 審查異常**：IS_REVIEW_FLAG＝1 且帳號未刪除——不分旗標來源、不分帳號狀態（停用中的也算），優先於其他狀態；
   2. 不在審查範圍 → **沒有審查狀態**（清單不列、不適用）；
   3. **OVERDUE 逾期未審**：LAST_REVIEW_DATE 或 NEXT_REVIEW_DATE 為空，或 NEXT_REVIEW_DATE < 今天；
@@ -1171,6 +1172,7 @@ END
 | GET | `/codes` | 登入 | categories[catgId、catgName、catgDescr、enabled、suggestExpiry、sortSeq]、assetClasses[assetClassId、assetTypeCode、assetClassName、reviewTrigger、selectable、ctrlDescr、sortSeq]、stages[stageId、stageName、stageTypeCode、permId] |
 | GET | `/home/stats` | 登入 | acctTotal、acctReviewing、acctExpiring、acctPriv、inspThisMonth、inspExcptThisMonth、emgUndecided（緊急存取尚未處理，含逾期）、emgReturned（緊急存取已退回未結案）、reviewOverdue（審查狀態逾期未審）、reviewAbnormal（審查狀態審查異常）、acctAll、emgAll、reviewAll、inspVisible；帳號四張無 ACC_EXPIRY_ALL 只算 APPLY_BY＝有效身分、緊急存取兩張無 EMG_VIEW_ALL 只算 APPLY_BY＝有效身分、定期審查兩張無 REVIEW_LIST 只算 APPLY_BY＝有效身分、巡檢兩張 inspVisible 為 false 時 null |
 | GET | `/home/expiring` | 登入 | [acctId、acctName、catgId、catgName、acctStateCode、expiryDate、daysLeft]（不含 applyBy） |
+| GET | `/home/review-abnormal` | 登入 | [acctId、acctName、catgId、catgName、reviewFlagDate（yyyy-MM-dd）、reviewFlagReason、reviewFlagSourceCode]（不含 applyBy）；審查狀態「審查異常」的帳號，有 REVIEW_LIST 看全部、否則只回 APPLY_BY＝有效身分；依 REVIEW_FLAG_DATE 新到舊、空的最後（第 158 項 R9 鈴鐺類別） |
 | GET | `/todos` | 登入 | [source（ACCT_REQ／REVIEW）、reqId（申請單號；審查列＝帳號單號）、acctId、reviewId、half（INFRA／GOV）、review（審查列：整筆同 `GET /reviews` 一列；申請單列這四欄 null）、title、reqTypeCode、catgId、catgName、acctName、isPriv、applyBy、applyByName、stageId、stageName（審查列「Infra 主管待簽」／「資訊治理主管待簽」）、submitDate（審查列 null）、actionKind（APPROVE、EXEC、VERIFY、REVIEW）、versionNo（審查列＝進行中那一輪版本，沒有＝0）、verifyRejectCnt、verifyRejectReason]；申請單列在前，審查列接在後面、依下次應審查日 |
 
 **帳號**

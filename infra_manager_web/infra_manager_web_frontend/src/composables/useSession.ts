@@ -24,13 +24,16 @@
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S9（SA §7.2）：鈴鐺分類化——refreshBadges 多查鈴鐺類別 3（緊急存取已退回未結案，
 //           emgReturned；相關性由後端依 EMG_VIEW_ALL／本人過濾），與到期清單、待辦數並行查、失敗不擋畫面
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R9：refreshBadges 多查鈴鐺類別 2（審查異常未處理，reviewAbnormal；相關性由後端依 REVIEW_LIST／原新增申請人過濾），四路並行、失敗只當該類空
 // ============================================================
 import { computed, ref } from 'vue'
 import { endImpersonate as apiEndImpersonate, getMe, impersonate as apiImpersonate, login as apiLogin, logout as apiLogout } from '../api/auth'
 import { revokeOpenedAttachments } from '../api/attachment'
-import { getCodes, listEmgReturned, listExpiring, listTodos } from '../api/common'
+import { getCodes, listEmgReturned, listExpiring, listReviewAbnormal, listTodos } from '../api/common'
 import { clearToken, getToken, notifyOtherTabs, setToken } from '../api/tokenStore'
-import type { Codes, ExpiringItem, Me } from '../types/common'
+import type { Codes, ExpiringItem, Me, ReviewAbnormalItem } from '../types/common'
 import type { Emg } from '../types/emergency'
 import { hasPerm } from '../utils/perms'
 import type { PermCode } from '../utils/perms'
@@ -43,6 +46,8 @@ const todoCount = ref<number | null>(null)
 const expiring = ref<ExpiringItem[]>([])
 /** 鈴鐺類別 3：緊急存取已退回未結案（只含與我相關的；SA §7.2） */
 const emgReturned = ref<Emg[]>([])
+/** 鈴鐺類別 2：審查異常未處理（第 158 項 R9；有 REVIEW_LIST 看全部，否則只含我原新增申請的） */
+const reviewAbnormal = ref<ReviewAbnormalItem[]>([])
 const bellOpen = ref(false)
 /** 切換身分後遞增；版面以它當 router-view 的 key，讓畫面重新載入資料 */
 const viewKey = ref(0)
@@ -63,13 +68,14 @@ async function loadMe(): Promise<void> {
   }
 }
 
-/** 頁首鈴鐺（到期＋緊急存取已退回）與側欄待辦數；失敗時不擋畫面（待辦數顯示空白、該類別當作空） */
+/** 頁首鈴鐺（到期＋審查異常＋緊急存取已退回）與側欄待辦數；失敗時不擋畫面（待辦數顯示空白、該類別當作空） */
 async function refreshBadges(): Promise<void> {
   if (!getToken()) return
-  const [t, e, g] = await Promise.allSettled([listTodos(), listExpiring(), listEmgReturned()])
+  const [t, e, g, r] = await Promise.allSettled([listTodos(), listExpiring(), listEmgReturned(), listReviewAbnormal()])
   todoCount.value = t.status === 'fulfilled' && Array.isArray(t.value) ? t.value.length : null
   expiring.value = e.status === 'fulfilled' && Array.isArray(e.value) ? e.value : []
   emgReturned.value = g.status === 'fulfilled' && Array.isArray(g.value) ? g.value : []
+  reviewAbnormal.value = r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []
 }
 
 /** 有 token 時載 /me；只跑一次，路由守衛與版面共用（登出、401 後由 resetSession 重來） */
@@ -148,6 +154,7 @@ export function resetSession(): void {
   todoCount.value = null
   expiring.value = []
   emgReturned.value = []
+  reviewAbnormal.value = []
   bellOpen.value = false
   viewKey.value = 0
   initPromise = null
@@ -173,6 +180,7 @@ export function useSession() {
     todoCount,
     expiring,
     emgReturned,
+    reviewAbnormal,
     bellOpen,
     viewKey,
     loginNotice,

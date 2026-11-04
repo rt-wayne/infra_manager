@@ -50,6 +50,10 @@
   AI版本  : Claude Fable 5.1 (claude-fable-5-1)
   修改日期: 2026-10-30
   變更說明: BACKLOG 第 158 項 R5：「帳號權限管理」區塊在「緊急存取」之後加「定期審查」（REVIEW_LIST 才顯示）
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: BACKLOG 第 158 項 R9（裁示 ①A）：鈴鐺加類別 2「定期審查異常未處理」（排在到期之後、緊急存取之前）；徽章＝三類合計；
+            一筆點擊：有 REVIEW_LIST → 定期審查清單套「審查異常」篩選，否則（原新增申請人）開該帳號唯讀明細彈窗（與類別 1 同一個彈窗）
 -->
 <template>
   <div class="app">
@@ -103,6 +107,14 @@
                 </button>
                 <button v-if="can('ACC_LIST_FULL')" type="button" class="btn full" @click="goExpiring">查看全部到期清單</button>
               </template>
+              <template v-if="reviewAbnormal.length > 0">
+                <div class="bell-panel-title">🔁 定期審查異常未處理</div>
+                <button v-for="r in reviewAbnormal" :key="r.acctId" type="button" class="bell-item bell-review"
+                  :title="r.reviewFlagReason || undefined" @click="onBellReview(r)">
+                  <span><b>{{ r.acctName || r.acctId }}</b>（{{ r.catgName || r.catgId }}）</span>
+                  <span class="bell-days">{{ r.reviewFlagDate ? `標記 ${dateOnly(r.reviewFlagDate)}` : '審查異常' }}</span>
+                </button>
+              </template>
               <template v-if="emgReturned.length > 0">
                 <div class="bell-panel-title">🚨 緊急存取已退回未結案</div>
                 <button v-for="g in emgReturned" :key="g.emgId" type="button" class="bell-item bell-emg" @click="onBellEmg(g)">
@@ -139,7 +151,7 @@ import ImpersonateModal from '../components/ImpersonateModal.vue'
 import { errorMessage } from '../api/errors'
 import { useSession } from '../composables/useSession'
 import { useToast } from '../composables/useToast'
-import type { ExpiringItem } from '../types/common'
+import type { ExpiringItem, ReviewAbnormalItem } from '../types/common'
 import type { Emg } from '../types/emergency'
 import { dateOnly } from '../utils/date'
 import { daysLeftText, EMG_RETURNED } from '../utils/labels'
@@ -148,8 +160,8 @@ const route = useRoute()
 const router = useRouter()
 const { toast } = useToast()
 const {
-  userName, realUserName, impersonating, canImpersonate, todoCount, expiring, emgReturned, bellOpen, viewKey, meFailed,
-  can, initSession, impersonate, endImpersonate, logout, refreshBadges
+  userName, realUserName, impersonating, canImpersonate, todoCount, expiring, emgReturned, reviewAbnormal, bellOpen, viewKey,
+  meFailed, can, initSession, impersonate, endImpersonate, logout, refreshBadges
 } = useSession()
 
 const ready = ref(false)
@@ -159,8 +171,8 @@ const switching = ref(false)
 const bellAcctId = ref('')
 const bellEmgId = ref('')
 
-/** 鈴鐺徽章＝兩類合計（到期提醒＋緊急存取已退回未結案） */
-const bellCount = computed(() => expiring.value.length + emgReturned.value.length)
+/** 鈴鐺徽章＝三類合計（到期提醒＋定期審查異常未處理＋緊急存取已退回未結案） */
+const bellCount = computed(() => expiring.value.length + reviewAbnormal.value.length + emgReturned.value.length)
 
 const pageTitle = computed(() => (typeof route.meta.title === 'string' ? route.meta.title : ''))
 
@@ -218,6 +230,16 @@ function onBellItem(x: ExpiringItem): void {
   } else {
     bellOpen.value = false
     bellAcctId.value = x.acctId
+  }
+}
+
+/** 鈴鐺類別 2 一筆（R9 裁示 ①A）：有 REVIEW_LIST → 定期審查清單（審查異常篩選）；否則（原新增申請人）開該帳號唯讀明細 */
+function onBellReview(r: ReviewAbnormalItem): void {
+  bellOpen.value = false
+  if (can('REVIEW_LIST')) {
+    void router.push({ path: '/reviews', query: { state: 'ABNORMAL' } })
+  } else {
+    bellAcctId.value = r.acctId
   }
 }
 

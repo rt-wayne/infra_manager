@@ -57,7 +57,8 @@ vi.mock('../src/api/common', () => ({
   getHomeStats: vi.fn(),
   listExpiring: vi.fn(),
   listTodos: vi.fn(),
-  listEmgReturned: vi.fn().mockResolvedValue([])
+  listEmgReturned: vi.fn().mockResolvedValue([]),
+  listReviewAbnormal: vi.fn().mockResolvedValue([])
 }))
 vi.mock('../src/api/account', () => ({
   listAccounts: vi.fn(),

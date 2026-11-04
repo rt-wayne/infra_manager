@@ -31,6 +31,10 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R8 審查 S1：兩個定期審查子查詢改整段精確比對（FROM＋JOIN＋WHERE＋別名），多任何條件或 JOIN 就失敗
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R9：鈴鐺類別 2——FIND_REVIEW_ABNORMAL 整段精確比對（與首頁 REVIEW_ABNORMAL 子查詢同 JOIN、同狀態句、同個人過濾）；
+//           reviewAbnormal 有 REVIEW_LIST 綁 NULL、否則綁有效身分工號、結果原樣帶出
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -157,6 +161,40 @@ class AccountAndHomeServiceTest {
 		}
 		assertThat(review.split("\\(SELECT COUNT\\(\\*\\)", -1)).hasSize(3);
 		assertThat(stats.split(com.mpx.infra_manager.dao.HomeDao.REVIEW_MINE_COND, -1)).hasSize(3);
+	}
+
+	@Test
+	void 鈴鐺類別2SQL_與首頁審查異常卡同JOIN同狀態句同過濾_依標記日期新到舊() {
+		// R9：FROM 到 ORDER BY 整段精確比對——多任何條件或 JOIN 就失敗，鈴鐺筆數才會等於首頁「審查異常待處理」卡片數
+		String sql = com.mpx.infra_manager.dao.HomeDao.FIND_REVIEW_ABNORMAL;
+		assertThat(sql).startsWith("SELECT A.ACCT_ID, A.ACCT_NAME, A.CATG_ID, C.CATG_NAME, A.APPLY_BY, A.REVIEW_FLAG_DATE, A.REVIEW_FLAG_REASON, A.REVIEW_FLAG_SOURCE_CODE\n")
+				.contains("\n  FROM IM_ACCT A\n  LEFT JOIN IM_ACCT_CATG C ON C.CATG_ID = A.CATG_ID\n  " + com.mpx.infra_manager.dao.ReviewDao.JOIN_ASSET_CLASS
+						+ "\n WHERE " + com.mpx.infra_manager.dao.ReviewDao.REVIEW_STATE_EXPR + " = 'ABNORMAL' AND "
+						+ com.mpx.infra_manager.dao.HomeDao.REVIEW_MINE_COND + "\n ORDER BY A.REVIEW_FLAG_DATE DESC NULLS LAST, A.ACCT_ID\n")
+				.doesNotContain("A.STATUS");
+		// 帳號狀態只在狀態句裡判斷（ABNORMAL 已含「非 DELETED」），WHERE 不另加帳號狀態條件
+		assertThat(sql.split("A.ACCT_STATE_CODE", -1)).hasSize(com.mpx.infra_manager.dao.ReviewDao.REVIEW_STATE_EXPR.split("A.ACCT_STATE_CODE", -1).length);
+	}
+
+	@Test
+	void 鈴鐺類別2_有REVIEW_LIST看全部_否則只列我原新增申請的_結果原樣帶出() {
+		com.mpx.infra_manager.model.ReviewAbnormalItem r = new com.mpx.infra_manager.model.ReviewAbnormalItem();
+		r.setAcctId("AR20261012-004");
+		r.setApplyBy(MICHAEL);
+		when(fx.homeDao.findReviewAbnormal(any(), any())).thenReturn(List.of(r));
+		// GARY（IT_HEAD，有 REVIEW_LIST）看全部 → 綁 NULL
+		assertThat(fx.homeService.reviewAbnormal(id(GARY))).extracting(com.mpx.infra_manager.model.ReviewAbnormalItem::getAcctId)
+				.containsExactly("AR20261012-004");
+		verify(fx.homeDao).findReviewAbnormal(TODAY, null);
+		// 一般人（TESTER）只列自己原新增申請的 → 綁有效身分工號；Service 不再逐筆過濾（SQL 已過濾）
+		assertThat(fx.homeService.reviewAbnormal(id(TESTER))).hasSize(1);
+		verify(fx.homeDao).findReviewAbnormal(TODAY, TESTER);
+		// 只有 REVIEW_LIST（沒有其他主管權限）也看全部
+		fx.homeService.reviewAbnormal(TestFixture.idWith(MICHAEL, java.util.Set.of("REVIEW_LIST"), List.of()));
+		verify(fx.homeDao, org.mockito.Mockito.times(2)).findReviewAbnormal(TODAY, null);
+		// 切換身分：有效身分 KEVIN（沒有 REVIEW_LIST）、實際操作人 GARY → 以有效身分為準
+		fx.homeService.reviewAbnormal(TestFixture.impersonate(GARY, KEVIN));
+		verify(fx.homeDao).findReviewAbnormal(TODAY, KEVIN);
 	}
 
 	@Test

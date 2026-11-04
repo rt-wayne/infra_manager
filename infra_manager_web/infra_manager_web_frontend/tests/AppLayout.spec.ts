@@ -41,6 +41,10 @@
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R5：只有 GENERAL 不顯示「定期審查」；有 REVIEW_LIST 顯示在「緊急存取」之後並連 /reviews
 //           （2026-11-04 R5 審查 S4：本紀錄原誤插在第 46 項 S3 與 S9 之間、版本日期沿用了上一筆，移到這裡並更正）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R9：鈴鐺類別 2 兩案——有 REVIEW_LIST：徽章＝三類合計、三節順序、一筆顯示名稱／類別／標記日、點了進 /reviews?state=ABNORMAL；
+//           無 REVIEW_LIST（原新增申請人）：點一筆開唯讀帳號明細、類別 2 查詢失敗只當該類空；mock 工廠補 listReviewAbnormal
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -51,7 +55,7 @@ import { defineComponent, h } from 'vue'
 import AppLayout from '../src/layouts/AppLayout.vue'
 import { endImpersonate, getMe, impersonate, listUsers, logout } from '../src/api/auth'
 import { getAccount } from '../src/api/account'
-import { listEmgReturned, listExpiring, listTodos } from '../src/api/common'
+import { listEmgReturned, listExpiring, listReviewAbnormal, listTodos } from '../src/api/common'
 import { getEmergency } from '../src/api/emergency'
 import { getToken, setToken } from '../src/api/tokenStore'
 import { resetSession } from '../src/composables/useSession'
@@ -72,7 +76,8 @@ vi.mock('../src/api/common', () => ({
   getHomeStats: vi.fn(),
   listExpiring: vi.fn(),
   listTodos: vi.fn(),
-  listEmgReturned: vi.fn()
+  listEmgReturned: vi.fn(),
+  listReviewAbnormal: vi.fn()
 }))
 vi.mock('../src/api/emergency', () => ({
   submitEmergency: vi.fn(),
@@ -160,6 +165,7 @@ describe('AppLayout', () => {
     vi.mocked(listTodos).mockReset().mockResolvedValue([])
     vi.mocked(listExpiring).mockReset().mockResolvedValue([])
     vi.mocked(listEmgReturned).mockReset().mockResolvedValue([])
+    vi.mocked(listReviewAbnormal).mockReset().mockResolvedValue([])
     vi.mocked(getAccount).mockReset()
     vi.mocked(getEmergency).mockReset()
   })
@@ -418,7 +424,69 @@ describe('AppLayout', () => {
     w2.unmount()
   })
 
-  it('鈴鐺分類：兩類都空 → 無徽章、面板顯示「目前沒有與您相關的通知」', async () => {
+  it('鈴鐺類別 2：有 REVIEW_LIST → 徽章＝三類合計、三節依序、一筆顯示名稱／類別／標記日、點了進定期審查清單套審查異常篩選', async () => {
+    vi.mocked(listExpiring).mockResolvedValue([
+      { acctId: 'AR1', acctName: 'dbuser', catgId: 'DB', catgName: '資料庫帳號', acctStateCode: 'APPROVED', expiryDate: '2026-10-17', daysLeft: 10 }
+    ])
+    vi.mocked(listReviewAbnormal).mockResolvedValue([
+      { acctId: 'AR20261012-004', acctName: 'sa', catgId: 'DB', catgName: '資料庫帳號', reviewFlagDate: '2026-10-13', reviewFlagReason: '退回原因', reviewFlagSourceCode: 'EMG' },
+      { acctId: 'AR20261012-005', acctName: null, catgId: 'DOOR', catgName: '機房門禁卡', reviewFlagDate: null, reviewFlagReason: null, reviewFlagSourceCode: 'REVIEW' }
+    ])
+    vi.mocked(listEmgReturned).mockResolvedValue([emgRow()])
+    const { w, router } = await mountLayout(makeMe({ permissions: [...GENERAL_PERMS, 'REVIEW_LIST'] }))
+    expect(w.find('.bell-badge').text()).toBe('4')
+    await w.find('.bell-btn').trigger('click')
+    expect(w.findAll('.bell-panel-title').map(t => t.text())).toEqual(['⚠️ 30 天內到期或已逾期', '🔁 定期審查異常未處理', '🚨 緊急存取已退回未結案'])
+    const items = w.findAll('.bell-review')
+    expect(items).toHaveLength(2)
+    expect(items[0].text()).toContain('sa')
+    expect(items[0].text()).toContain('資料庫帳號')
+    expect(items[0].text()).toContain('標記 2026-10-13')
+    expect(items[0].attributes('title')).toBe('退回原因')
+    // 沒有名稱顯示單號、沒有標記日顯示「審查異常」
+    expect(items[1].text()).toContain('AR20261012-005')
+    expect(items[1].text()).toContain('審查異常')
+    expect(items[1].text()).not.toContain('標記')
+    await items[0].trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/reviews?state=ABNORMAL')
+    expect(w.find('.bell-panel').exists()).toBe(false)
+    expect(getAccount).not.toHaveBeenCalled()
+    w.unmount()
+  })
+
+  it('鈴鐺類別 2：無 REVIEW_LIST（原新增申請人）點一筆開唯讀帳號明細；類別 2 查詢失敗只當該類空', async () => {
+    vi.mocked(listReviewAbnormal).mockResolvedValue([
+      { acctId: 'AR20261012-004', acctName: 'sa', catgId: 'DB', catgName: '資料庫帳號', reviewFlagDate: '2026-10-13', reviewFlagReason: null, reviewFlagSourceCode: 'EMG' }
+    ])
+    vi.mocked(getAccount).mockResolvedValue({
+      acctId: 'AR20261012-004', catgId: 'DB', acctName: 'sa', sysName: 's', doorScopeCode: null, assetClassId: null, isPriv: 1,
+      holderName: 'h', holderDept: 'd', holderCntct: null, holderEmail: null, accessLevelCode: 'RO', accessTarget: null,
+      applyReason: null, expiryTypeCode: 'DATE', expiryDate: '2026-12-31', acctStateCode: 'APPROVED', allowedReqTypes: ['MODIFY']
+    })
+    const { w, router } = await mountLayout(makeMe())
+    expect(w.find('.bell-badge').text()).toBe('1')
+    await w.find('.bell-btn').trigger('click')
+    expect(w.findAll('.bell-panel-title').map(t => t.text())).toEqual(['🔁 定期審查異常未處理'])
+    await w.find('.bell-review').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(getAccount).toHaveBeenCalledWith('AR20261012-004')
+    expect(w.find('.modal').text()).toContain('sa')
+    expect(w.find('.modal .op-modify').exists()).toBe(false)
+    w.unmount()
+
+    resetSession()
+    vi.mocked(listReviewAbnormal).mockRejectedValue(new Error('500'))
+    vi.mocked(listEmgReturned).mockResolvedValue([emgRow()])
+    const { w: w2 } = await mountLayout(makeMe())
+    expect(w2.find('.bell-badge').text()).toBe('1')
+    await w2.find('.bell-btn').trigger('click')
+    expect(w2.findAll('.bell-panel-title').map(t => t.text())).toEqual(['🚨 緊急存取已退回未結案'])
+    w2.unmount()
+  })
+
+  it('鈴鐺分類：三類都空 → 無徽章、面板顯示「目前沒有與您相關的通知」', async () => {
     const { w } = await mountLayout(makeMe())
     expect(w.find('.bell-badge').exists()).toBe(false)
     await w.find('.bell-btn').trigger('click')

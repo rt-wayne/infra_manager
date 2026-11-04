@@ -31,6 +31,10 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R8（⑬A）：卡片加定期審查兩張——有 REVIEW_LIST 看全部、否則只算我（有效身分）原新增申請的帳號，回 reviewAll 旗標；
 //           巡檢區顯示條件不納入 REVIEW_LIST
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R9（鈴鐺類別 2；裁示 ①A）：加 reviewAbnormal——審查異常未處理的帳號清單，有 REVIEW_LIST 看全部、
+//           否則只列我（有效身分）原新增申請的（與首頁審查異常卡同口徑，不加該類別執行人；被否決的是 B 比照到期鈴鐺加執行人）
 // ============================================================
 
 import java.time.Clock;
@@ -51,6 +55,7 @@ import com.mpx.infra_manager.dao.ReviewDao;
 import com.mpx.infra_manager.model.ApprStage;
 import com.mpx.infra_manager.model.ExpiringAcct;
 import com.mpx.infra_manager.model.HomeStats;
+import com.mpx.infra_manager.model.ReviewAbnormalItem;
 import com.mpx.infra_manager.model.ReviewItem;
 import com.mpx.infra_manager.model.TodoItem;
 
@@ -112,6 +117,15 @@ public class HomeService {
 			}
 		}
 		return result;
+	}
+
+	/**
+	 * 鈴鐺類別 2（R9；裁示 ①A）：審查異常未處理的帳號——有 REVIEW_LIST 看全部，否則只列我（有效身分）原新增申請的；
+	 * 相關性由 SQL 過濾（REVIEW_MINE_COND），與首頁「審查異常待處理」卡同口徑，筆數一致
+	 */
+	public List<ReviewAbnormalItem> reviewAbnormal(Identity id) {
+		boolean all = perm.can(id, AcctConst.PERM_REVIEW_LIST);
+		return homeDao.findReviewAbnormal(LocalDate.now(clock), all ? null : id.getUserId());
 	}
 
 	public List<TodoItem> todos(Identity id) {

@@ -43,7 +43,8 @@ vi.mock('../src/api/common', () => ({
   getHomeStats: vi.fn(),
   listExpiring: vi.fn(),
   listTodos: vi.fn(),
-  listEmgReturned: vi.fn().mockResolvedValue([])
+  listEmgReturned: vi.fn().mockResolvedValue([]),
+  listReviewAbnormal: vi.fn().mockResolvedValue([])
 }))
 
 /** 假 adapter：記下請求設定並回指定狀態碼（4xx 以 AxiosError reject，同真 adapter 的 settle） */

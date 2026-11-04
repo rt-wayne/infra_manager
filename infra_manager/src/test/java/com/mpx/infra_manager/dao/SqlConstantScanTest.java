@@ -129,6 +129,9 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R7：ReviewDao.REVIEW_REF_EXPR 與 FIND_DUE_UNNOTIFIED 斷言（只取 DUE、NOT EXISTS 通知紀錄以 :eventCode＋REVIEW＋參照鍵比對）；
 //           第 2 單位加 FIND_OVERDUE_FOR_SUMMARY 斷言（只取 OVERDUE、NULLS FIRST、不帶通知紀錄條件）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R9：API 數 51 → 52（GET /home/review-abnormal）；HomeDao.FIND_REVIEW_ABNORMAL 由既有掃描自動納入
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -835,7 +838,8 @@ class SqlConstantScanTest {
 		// 第 89 項階段 2：/admin/executors、/admin/executors/{catgId}/members、…/{userId}/revoke（43 → 46）
 		// 第 89 項階段 3：/admin/role-perms、/admin/roles/{roleId}/perms（46 → 48）
 		// 第 158 項 R2：GET /reviews（48 → 49）；R3a：POST /reviews/{acctId}/sign（49 → 50）；R3b：POST /reviews/{acctId}/reject（50 → 51）
-		assertThat(apis).isEqualTo(51);
+		// 第 158 項 R9：GET /home/review-abnormal（51 → 52）
+		assertThat(apis).isEqualTo(52);
 		assertThat(missing).isEmpty();
 	}
 }

@@ -13,6 +13,9 @@ package com.mpx.infra_manager_web.controller;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp_web 改名為 com.mpx.infra_manager_web（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R9：加 /home/review-abnormal 轉送（鈴鐺類別 2 審查異常未處理）
 // ============================================================
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -52,6 +55,12 @@ public class HomeController {
 	@GetMapping("/home/expiring")
 	public ResponseEntity<byte[]> expiring(HttpServletRequest request) {
 		return backend.get("/home/expiring", request);
+	}
+
+	/** 鈴鐺審查異常未處理清單：GET <backend>/home/review-abnormal */
+	@GetMapping("/home/review-abnormal")
+	public ResponseEntity<byte[]> reviewAbnormal(HttpServletRequest request) {
+		return backend.get("/home/review-abnormal", request);
 	}
 
 	/** 待辦簽核：GET <backend>/todos */

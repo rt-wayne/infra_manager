@@ -34,6 +34,10 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R8（⑳B 第四區、⑬A 看全部）：卡片加兩張——逾期未定期審查（審查狀態 OVERDUE）、審查異常待處理（ABNORMAL），
 //           狀態直接引用 ReviewDao.REVIEW_STATE_EXPR（與清單同一句、同 FROM），以 :reviewApplyBy 可選過濾（綁 NULL 看全部，Service 依 REVIEW_LIST 決定）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R9（鈴鐺類別 2；裁示 ①A 相關性同 ⑬A）：加 FIND_REVIEW_ABNORMAL／findReviewAbnormal——審查狀態 ABNORMAL 的帳號清單，
+//           同一句 REVIEW_STATE_EXPR、同一個 JOIN_ASSET_CLASS、同一個 REVIEW_MINE_COND（卡片數＝鈴鐺筆數），依標記日期新到舊
 // ============================================================
 
 import java.time.LocalDate;
@@ -47,6 +51,7 @@ import org.springframework.stereotype.Repository;
 import com.mpx.common.db.DbClient;
 import com.mpx.infra_manager.model.ExpiringAcct;
 import com.mpx.infra_manager.model.HomeStats;
+import com.mpx.infra_manager.model.ReviewAbnormalItem;
 
 @Repository
 public class HomeDao {
@@ -113,6 +118,19 @@ public class HomeDao {
 			 ORDER BY A.EXPIRY_DATE, A.ACCT_ID
 			""";
 
+	/**
+	 * 鈴鐺類別 2（R9）：審查狀態為 ABNORMAL 的帳號，FROM／JOIN／狀態句／個人過濾都與 FIND_STATS 的 REVIEW_ABNORMAL 子查詢相同
+	 * （首頁卡片數＝鈴鐺筆數）；依旗標標記日期新到舊（空的最後）、再單號。需綁 :today 與 :reviewApplyBy
+	 */
+	public static final String FIND_REVIEW_ABNORMAL = """
+			SELECT A.ACCT_ID, A.ACCT_NAME, A.CATG_ID, C.CATG_NAME, A.APPLY_BY, A.REVIEW_FLAG_DATE, A.REVIEW_FLAG_REASON, A.REVIEW_FLAG_SOURCE_CODE
+			  FROM IM_ACCT A
+			  LEFT JOIN IM_ACCT_CATG C ON C.CATG_ID = A.CATG_ID
+			""" + "  " + ReviewDao.JOIN_ASSET_CLASS + "\n"
+			+ " WHERE " + ReviewDao.REVIEW_STATE_EXPR + " = 'ABNORMAL' AND " + REVIEW_MINE_COND + "\n" + """
+			 ORDER BY A.REVIEW_FLAG_DATE DESC NULLS LAST, A.ACCT_ID
+			""";
+
 	private final DbClient dbClient;
 	private final String itflowDb;
 
@@ -143,5 +161,13 @@ public class HomeDao {
 		Map<String, Object> params = new HashMap<>();
 		params.put("today", DaoSupport.ts(today));
 		return dbClient.query(itflowDb, FIND_EXPIRING, params, ExpiringAcct.class);
+	}
+
+	/** @param reviewApplyBy 只列此人原新增申請的帳號；null 看全部（R9） */
+	public List<ReviewAbnormalItem> findReviewAbnormal(LocalDate today, String reviewApplyBy) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("today", DaoSupport.ts(today));
+		params.put("reviewApplyBy", reviewApplyBy);
+		return dbClient.query(itflowDb, FIND_REVIEW_ABNORMAL, params, ReviewAbnormalItem.class);
 	}
 }

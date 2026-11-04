@@ -11,9 +11,12 @@
 // 變更說明: BACKLOG 第 46 項 S9（SA §7.2 鈴鐺類別 3）：新增 listEmgReturned——沿用既有 GET /emergencies
 //           固定帶 stateCode=RETURNED，不另開後端端點；該 API 的權限口徑（EMG_VIEW_ALL 看全部、
 //           其他人只回本人的單）恰好就是類別 3 的「相關的人」
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R9（鈴鐺類別 2）：新增 listReviewAbnormal——GET /home/review-abnormal（後端依 REVIEW_LIST 決定看全部或只回我原新增申請的）
 // ============================================================
 import http from './http'
-import type { Codes, ExpiringItem, HomeStats, Todo } from '../types/common'
+import type { Codes, ExpiringItem, HomeStats, ReviewAbnormalItem, Todo } from '../types/common'
 import type { Emg } from '../types/emergency'
 import { EMG_RETURNED } from '../utils/labels'
 
@@ -43,4 +46,9 @@ export function listTodos(): Promise<Todo[]> {
  */
 export function listEmgReturned(): Promise<Emg[]> {
   return http.get<Emg[]>('/emergencies', { params: { stateCode: EMG_RETURNED } }).then(r => r.data)
+}
+
+/** 鈴鐺類別 2（審查異常未處理）：GET /home/review-abnormal（有 REVIEW_LIST 看全部，否則只回我原新增申請的） */
+export function listReviewAbnormal(): Promise<ReviewAbnormalItem[]> {
+  return http.get<ReviewAbnormalItem[]>('/home/review-abnormal').then(r => r.data)
 }
