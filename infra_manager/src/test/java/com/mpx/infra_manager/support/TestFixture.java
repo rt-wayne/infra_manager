@@ -74,6 +74,9 @@ package com.mpx.infra_manager.support;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R6：HomeService 建構子多傳 ReviewDao（待辦的定期審查列）；reviewDao.findTodo 預設回空
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R7：jobService() 建構子多傳 ReviewDao（J04 待複審掃描）；reviewDao.findDueUnnotified 預設回空
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -357,6 +360,7 @@ public class TestFixture {
 		when(reviewDao.rejectRound(anyLong(), anyInt(), any(), any(), any(), any(), any())).thenReturn(1);
 		when(reviewDao.cancelOpen(any(), any(), any(), any(), any())).thenReturn(0);
 		when(reviewDao.findTodo(any())).thenReturn(List.of());
+		when(reviewDao.findDueUnnotified(any(), any())).thenReturn(List.of());
 
 		when(acctHistDao.insert(any())).thenAnswer(inv -> {
 			AcctHist h = new AcctHist();
@@ -494,8 +498,8 @@ public class TestFixture {
 	}
 
 	public JobService jobService(boolean allowBaseDate) {
-		return new JobService(acctDao, acctHistDao, jobRunDao, notifyLogDao, emgDao, notificationService, permissionService, tx,
-				clock, true, allowBaseDate);
+		return new JobService(acctDao, acctHistDao, jobRunDao, notifyLogDao, emgDao, reviewDao, notificationService,
+				permissionService, tx, clock, true, allowBaseDate);
 	}
 
 	// ------------------------------------------------------------

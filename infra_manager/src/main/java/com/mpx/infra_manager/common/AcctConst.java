@@ -91,6 +91,10 @@ package com.mpx.infra_manager.common;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R5 實測裁示 ①A：reviewHalfName 拿掉「半」，改回「Infra 主管」「資訊治理主管」（使用者看得到的文字一律不再出現「半」）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R7（排程與通知）：通知事件 EV_REVIEW_DUE（待複審信，REF_ID＝ACCT_ID_下次應審查日yyyymmdd，⑭A）；
+//           排程代碼 JOB_J04（待複審通知，日期型）並納入 JOB_CODES
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -218,6 +222,11 @@ public final class AcctConst {
 	public static final String EV_EMG_RETURN = "EMG_RETURN";
 	/** 定期審查駁回（第 158 項 R3b）：寄原新增申請人＋所有 REVIEW_SIGN_GOV 持有人；REF_ID＝REVIEW_ID */
 	public static final String EV_REVIEW_REJECT = "REVIEW_REJECT";
+	/**
+	 * 定期審查待複審（第 158 項 R7，排程 J04）：寄所有 REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 持有人（⑯A）；
+	 * REF_ID＝ACCT_ID_下次應審查日yyyymmdd（⑭A，本輪防重寄鍵；雙簽完成後下次應審查日改變＝新的一輪）
+	 */
+	public static final String EV_REVIEW_DUE = "REVIEW_DUE";
 	public static final String REF_REQ = "REQ";
 	public static final String REF_ACCT = "ACCT";
 	public static final String REF_WEEK = "WEEK";
@@ -233,7 +242,9 @@ public final class AcctConst {
 	public static final String JOB_J02 = "J02";
 	/** J03 緊急存取逾期通知（BACKLOG 第 46 項 S7）：基準為時間點（到秒），J01／J02 為日期 */
 	public static final String JOB_J03 = "J03";
-	public static final List<String> JOB_CODES = List.of(JOB_J01, JOB_J02, JOB_J03);
+	/** J04 定期審查待複審通知（BACKLOG 第 158 項 R7）：基準為日期（同 J01／J02） */
+	public static final String JOB_J04 = "J04";
+	public static final List<String> JOB_CODES = List.of(JOB_J01, JOB_J02, JOB_J03, JOB_J04);
 	public static final String JR_RUNNING = "RUNNING";
 	public static final String JR_SUCCESS = "SUCCESS";
 	public static final String JR_PARTIAL = "PARTIAL";

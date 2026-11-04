@@ -125,6 +125,9 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R5 第 3 單位：AcctDao.FIND_DETAIL 斷言（內層就是 FIND_BY_ID、外層套 ReviewDao 審查狀態片段與啟用中分類 JOIN、
 //           綁 :today）；FIND_BY_ID 與 SELECT_BASE 不得帶 :today（其他查詢不算狀態）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R7：ReviewDao.REVIEW_REF_EXPR 與 FIND_DUE_UNNOTIFIED 斷言（只取 DUE、NOT EXISTS 通知紀錄以 :eventCode＋REVIEW＋參照鍵比對）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -558,6 +561,13 @@ class SqlConstantScanTest {
 		assertThat(ReviewDao.FIND_TODO).contains(ReviewDao.SELECT_BASE).contains("X.REVIEW_STATE_CODE IN ('DUE', 'OVERDUE')")
 				.contains("ORDER BY X.NEXT_REVIEW_DATE NULLS FIRST, X.ACCT_ID").doesNotContain(":stateCode").doesNotContain(":keyword")
 				.contains(":today");
+		// R7 J04：只取待複審（⑱A，逾期由 J02 涵蓋）、此參照鍵（帳號單號_下次應審查日，⑭A）尚無 :eventCode 的 REVIEW 紀錄；寫法比照 AcctDao.NOT_NOTIFIED
+		assertThat(ReviewDao.REVIEW_REF_EXPR).isEqualTo("X.ACCT_ID || '_' || TO_CHAR(X.NEXT_REVIEW_DATE, 'YYYYMMDD')");
+		assertThat(ReviewDao.FIND_DUE_UNNOTIFIED).contains(ReviewDao.SELECT_BASE).contains("WHERE X.REVIEW_STATE_CODE = 'DUE'")
+				.contains("NOT EXISTS (SELECT 1 FROM IM_ACCT_NOTIFY_LOG N").contains("N.EVENT_CODE = :eventCode")
+				.contains("N.REF_TYPE_CODE = 'REVIEW'").contains("N.REF_ID = " + ReviewDao.REVIEW_REF_EXPR)
+				.contains("ORDER BY X.NEXT_REVIEW_DATE, X.ACCT_ID").contains(":today").doesNotContain("X.REVIEW_STATE_CODE IN")
+				.doesNotContain(":stateCode").doesNotContain("SYSDATE");
 	}
 
 	/** 第 158 項 R3a：簽核 SQL——首簽建輪、簽半樂觀鎖、雙簽完成；歷史帶 REVIEW_ID */

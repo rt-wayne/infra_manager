@@ -29,7 +29,7 @@
 **既有環境升級（2026-10-14 起的版本）**：DB 別名的 key 由 `db.connect.itflow` 改名為 `itflow.db.alias`。已有 `config\database.properties` 的環境（各開發機，含打包 UAT／正式 jar 的那台），重新建置前把該行 key 改名、值不變（例 `db.connect.itflow=itflow_uat` → `itflow.db.alias=itflow_uat`）。沒改的話建置會成功、但後端啟動失敗，log 出現 `Could not resolve placeholder 'itflow.db.alias'`。
 
 - 附件根目錄在 Windows 要用 `/` 或 `\\`（例 `D:/home/infra_manager/attach`）；寫成單一 `\` 會被當跳脫字元，變成相對路徑而啟動失敗。目錄須讓執行帳號可讀寫。
-- 測試環境若要用 baseDate 手動跑排程，把 `infra.manager.job.allow-base-date` 設為 true；正式環境保持 false。J03（緊急存取逾期通知）預設每 15 分鐘跑一次，不想在本機跑就把 `infra.manager.job.j03.cron` 設為 `-`。
+- 測試環境若要用 baseDate 手動跑排程，把 `infra.manager.job.allow-base-date` 設為 true；正式環境保持 false。J03（緊急存取逾期通知）預設每 15 分鐘跑一次，不想在本機跑就把 `infra.manager.job.j03.cron` 設為 `-`；J04（定期審查待複審通知）預設每日 00:20，鍵為 `infra.manager.job.j04.cron`。
 - 寄信：
   - 寄信設定都在 `environment.properties`：SMTP 的 `spring.mail.host`（`mail.pxmart.com.tw`）、`spring.mail.port`（`25`）、`spring.mail.properties.mail.smtp.connectiontimeout`／`timeout`／`writetimeout`（各 `15000`），以及寄件人 `infra.manager.mail.from`。`spring.mail.host` 與 `infra.manager.mail.from` 都有值才會實際寄出，否則只寫 log；後端啟動 log 會印「寄信：SMTP 實際寄出」或「SMTP 未設定」，可用來確認。
   - **既有開發機升級（2026-10-29 起的版本）**：上面五個 `spring.mail.*` 鍵原本放在 `application.properties`，請搬到 `environment.properties`，值不變。不搬也照樣寄信（兩個檔都會打包進 jar），只是之後改值的人會找錯檔。UAT 與正式環境不用動：共用 config 目錄是逐鍵蓋值，不看鍵原本在 jar 裡的哪個檔。
@@ -319,12 +319,13 @@ UPDATE IM_ASSET_CLASS
  WHERE ASSET_CLASS_ID = '【資產分類代碼】';
 ```
 
-**10. 讓排程信重寄**（J01、J02、J03 只要通知紀錄裡有任何一筆就不再寄，連寄送失敗、收件人沒有 Email、不在寄送名單而略過的也算；修好 SMTP 或改了寄送名單後要重測，先刪掉那一輪的紀錄，再依第 7 節觸發排程。紀錄刪了就查不回來，先用第一句確認要刪的筆數）
+**10. 讓排程信重寄**（J01、J02、J03、J04 只要通知紀錄裡有任何一筆就不再寄，連寄送失敗、收件人沒有 Email、不在寄送名單而略過的也算；修好 SMTP 或改了寄送名單後要重測，先刪掉那一輪的紀錄，再依第 7 節觸發排程。紀錄刪了就查不回來，先用第一句確認要刪的筆數）
 
 ```sql
 -- 事件代碼：J02 每週彙總＝WEEKLY_SUMMARY（參照鍵＝該週週一，例 20261005）；
 --           J01 逾期信＝EXPIRED、到期前 7 天信＝EXPIRY_7D（參照鍵＝帳號單號_到期日，中間無空格，例 AR20261001-001_20261006）；
---           J03 緊急存取逾期信＝EMG_OVERDUE（參照鍵＝緊急存取單號，例 EA20261013-001）
+--           J03 緊急存取逾期信＝EMG_OVERDUE（參照鍵＝緊急存取單號，例 EA20261013-001）；
+--           J04 定期審查待複審信＝REVIEW_DUE（參照鍵＝帳號單號_下次應審查日，例 AR20261007-010_20261120）
 SELECT RCPT_USER_ID, SEND_DATE, RESULT_CODE, ERR_MSG
   FROM IM_ACCT_NOTIFY_LOG
  WHERE EVENT_CODE = '【事件代碼】' AND REF_ID = '【參照鍵】';
@@ -336,6 +337,7 @@ DELETE FROM IM_ACCT_NOTIFY_LOG
 
 - J01 刪了紀錄後，帳號要仍符合條件才會重寄：逾期信要帳號仍是已逾期；7 天提醒要仍是已核准、且到期日落在基準日到基準日＋7 天之間（可用第 7 節的 baseDate 調整基準日，但先看該處的粗體警告：帶未來日期會把帳號轉成逾期，且無法復原）。不符合時觸發排程也不會寄，不代表 SMTP 有問題。
 - J03 刪了紀錄後，該單要仍是「逾期未補核准」（主管還沒補核准或退回）才會重寄；已處理的單刪了也不會再寄。J03 預設每 15 分鐘自動跑，刪完紀錄後不手動觸發也會在下一輪補寄。
+- J04 刪了紀錄後，該帳號要仍是「待複審」（下次應審查日在基準日到基準日＋30 天之間）才會重寄；已逾期未審、已雙簽完成（下次應審查日已往後推，參照鍵也變了）的帳號刪了也不會再寄。
 
 **未列出的操作**（例如改巡檢項目說明、資產分類名稱；使用者的姓名、Email、部門不在本系統，要改請找同步表 `PX_SYNC_EMP` 的負責同事）：UPDATE 一律一併設 `UPDATE_DATE = SYSDATE`、`UPDATE_BY = '【操作人工號】'`，WHERE 用該表主鍵，確認影響 1 筆再 COMMIT。新增代碼（帳號類別、巡檢項目、資產分類）可能牽動程式邏輯，先找開發人員，不要直接 INSERT。
 
@@ -384,10 +386,14 @@ curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/infra_manager/api/v1
 # J03：緊急存取逾期未補核准通知，每張單只寄一次（寄送失敗、收件人沒有 Email 或不在寄送名單也算已寄，不會重寄）
 curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/infra_manager/api/v1/jobs/J03/run \
   -H "Authorization: Bearer $TOKEN"
+
+# J04：定期審查待複審通知，每個帳號每輪只寄一次（同上，有紀錄就不重寄；逾期未審的帳號不在這裡寄）
+curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/infra_manager/api/v1/jobs/J04/run \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 - 成功回 200，JSON 為 `runId`（執行紀錄序號）、`resultCode`（`SUCCESS`／`PARTIAL`／`FAIL`）、`affectedCnt`。
-- `affectedCnt` 的意思：J01＝轉逾期的帳號數，加上本次有寫逾期信或 7 天提醒通知紀錄的帳號數（每個帳號算 1，不論收件人幾位；寄失敗、收件人都沒 Email 或不在寄送名單而略過的也算；同一帳號可能被算兩次）；J02＝彙總信列出的逾期帳號數，不是寄出封數；J03＝本次有寫逾期通知紀錄的緊急存取單數（每張算 1，不論收件人幾位；收件人沒 Email 或不在寄送名單而略過、寄失敗的也算；寄前發現主管已處理的單不算）。三者回 `SUCCESS` 都不代表信已寄達。
+- `affectedCnt` 的意思：J01＝轉逾期的帳號數，加上本次有寫逾期信或 7 天提醒通知紀錄的帳號數（每個帳號算 1，不論收件人幾位；寄失敗、收件人都沒 Email 或不在寄送名單而略過的也算；同一帳號可能被算兩次）；J02＝彙總信列出的逾期帳號數，不是寄出封數；J03＝本次有寫逾期通知紀錄的緊急存取單數（每張算 1，不論收件人幾位；收件人沒 Email 或不在寄送名單而略過、寄失敗的也算；寄前發現主管已處理的單不算）；J04＝本次有寫待複審通知紀錄的帳號數（每個帳號算 1，不論收件人幾位；略過、寄失敗的也算；沒有任何人持有 REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 時一筆都不寫、筆數 0 但結果仍 `SUCCESS`，下次執行會再試）。四者回 `SUCCESS` 都不代表信已寄達。
 - J03 回 `PARTIAL` 時看 `IM_ACCT_JOB_RUN.ERR_MSG`：「{單號}:未寫入通知紀錄」＝沒有任何人持有 EMG_DECIDE 權限、通知紀錄寫不進 DB、或重讀單據／查收件人／寄信途中出錯，該單下一輪會再試（沒人有權限時每 15 分鐘都會 PARTIAL，但排程失敗信一天只寄一封）；「{單號}:全部收件人寄送失敗」＝紀錄已寫、沒人收到信，不會再寄，要補寄依第 6 節第 10 段刪紀錄。「{單號}:例外類別」是程式內部防線，一般不會出現；看到就把後端 log 一起交給開發人員。
 - J02 回 `SUCCESS` 且 0 筆有三種可能：本週已有彙總紀錄（不再寄，含本週寄送失敗、收件人沒有 Email 或不在寄送名單的情況）；目前沒有逾期帳號（照常寄給每位收件人一封「0 筆」彙總）；或沒有逾期帳號、也沒有任何收件人（什麼都不寄、不留紀錄，下次執行會再試）。要確認寄送結果請查（週一日期＝基準日所在週的週一，例 `20261005`；`RESULT_CODE` 為寄送結果）：
 
@@ -402,7 +408,7 @@ SELECT RCPT_USER_ID, RCPT_EMAIL, SEND_DATE, RESULT_CODE, ERR_MSG
 - 錯誤：
   - 401「登入已逾時，請重新登入」＝token 已失效：變數 `TOKEN` 是空的（登入沒成功）或少了 `Bearer `、閒置超過 480 分鐘、登入已滿 8 小時、已登出，或登入者已被停用。重新登入取 token；重新登入回「帳號或密碼錯誤」而密碼確定沒錯時，查該工號的 STATUS（第 6 節查代碼的第三句）。
   - 403「您沒有執行此操作的權限」：登入者沒有 SYS_JOB_RUN（沒有這個權限時，代碼打錯也是回 403）。
-  - 404：代碼不是大寫的 `J01`／`J02`／`J03`（`j01` 也是 404）。
+  - 404：代碼不是大寫的 `J01`／`J02`／`J03`／`J04`（`j01` 也是 404）。
   - 409 E16「排程執行中，請稍後再試」：同一排程正在執行。
   - 400 E17「此環境不允許指定基準日」：見下方 baseDate。
   - 500「系統發生錯誤，請稍後再試或聯絡系統管理員」：多半是連不上 DB，連開始紀錄都寫不進去，所以排程沒有執行、也沒有 `runId`。後端 log 會有「開始紀錄寫入失敗」，系統也會試著寄 JOB_FAIL 信給系統管理員（DB 全斷時寄不出）。DB 恢復後重新觸發即可。
@@ -411,10 +417,10 @@ SELECT RCPT_USER_ID, RCPT_EMAIL, SEND_DATE, RESULT_CODE, ERR_MSG
 - J03 的排程失敗信同一種失敗一天只寄一封，所以同一天第二次 PARTIAL 不會再收到信，要看結果請查 `IM_ACCT_JOB_RUN`（每次執行都有紀錄）。「同一種」＝信裡的「結果」加上例外類別：PARTIAL 不分原因算一種；FAIL 與開始紀錄寫入失敗合併計算，同一個例外類別算一種（DB 間歇性斷線一整天只有一封；DB 完全斷線時查不到收件人，一封都寄不出）；結束紀錄寫入失敗不論結果是 SUCCESS、PARTIAL 或 FAIL，都依結束紀錄那個例外另算一種，所以當天已收過 PARTIAL 信，再遇到 PARTIAL 加結束紀錄寫入失敗仍會收到一封。沒有寄到任何人（SMTP 全掛、或沒人有 SYS_ADMIN）不算已寄：下一輪若仍是同一種失敗會再寄，已恢復正常的那次不會補寄。後端重啟後當天可能多收一封。J01、J02 每次失敗都寄。
 - 上一段「下次開跑補記成 `FAIL` 時不會再寄」對 J03 有一個例外：J03 被「一天一封」擋下、沒寄出結束紀錄寫入失敗那封的那幾輪，紀錄一樣停在 `RUNNING`，下一輪開跑補記時仍會收到「上次執行未正常結束」的信（這封以執行序號去重、不受一天一封限制）。這不是重複故障，是同一件事的補記。
 
-**指定基準日（僅測試環境）**：`infra.manager.job.allow-base-date=true` 的環境可在網址加 `?baseDate=`，以該日（J01、J02）或該時間點（J03）代替現在執行；正式環境為 false，帶了一律回 400 E17。格式不對回 400。
+**指定基準日（僅測試環境）**：`infra.manager.job.allow-base-date=true` 的環境可在網址加 `?baseDate=`，以該日（J01、J02、J04）或該時間點（J03）代替現在執行；正式環境為 false，帶了一律回 400 E17。格式不對回 400。
 
 ```bash
-# J01、J02：日期
+# J01、J02、J04：日期
 curl -s -w "\n%{http_code}\n" -X POST "http://localhost:8989/infra_manager/api/v1/jobs/J01/run?baseDate=【yyyy-MM-dd】" \
   -H "Authorization: Bearer $TOKEN"
 
@@ -425,6 +431,7 @@ curl -s -w "\n%{http_code}\n" -X POST "http://localhost:8989/infra_manager/api/v
 
 - **J01 帶未來日期會把到期日早於該日的帳號全部轉成逾期**、寫入帳號歷史並寄通知，系統沒有復原功能；只在確定要模擬那一天時使用。
 - **J03 帶未來時間點會替目前還沒逾期、但在那個時間點已過期限的單寄逾期信並寫 EMG_OVERDUE 紀錄，之後它真的逾期時不會再寄**；單本身不會被改動。要恢復可依第 6 節第 10 段刪掉該單的 EMG_OVERDUE 紀錄。
+- **J04 帶未來日期會替目前還不到待複審、但在那一天已進入 30 天內的帳號寄待複審信並寫 REVIEW_DUE 紀錄，之後它真的進入待複審時不會再寄**；帳號本身不會被改動。要恢復可依第 6 節第 10 段刪掉該帳號這一輪的 REVIEW_DUE 紀錄。驗證「每輪只寄一次」：同一個 baseDate 連跑兩次，第二次 `affectedCnt` 應為 0。
 
 **3. 用完登出並清掉變數**（不登出的話 token 最長 8 小時內有效；登出後立即失效）
 

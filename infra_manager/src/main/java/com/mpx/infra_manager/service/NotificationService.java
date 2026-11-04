@@ -67,6 +67,12 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R5 實測裁示 ①A：駁回信列名「駁回半邊」→「駁回身分」、「另一半簽核」→「另一位主管簽核」（拿掉「半」）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R7：新增 reviewDue（J04 呼叫，每帳號一封 ⑰A）——寄所有 REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 持有人（⑯A，去重），
+//           主旨「【定期審查】{帳號單號} 待複審（應審查日 yyyy-MM-dd）」（裁示 ①A），本文帳號 6 列＋上次／下次應審查日＋兩位主管本輪簽核狀況
+//           （代簽時加「（實際操作人：姓名）」，與 ReviewService.signerText 同口徑），信末提醒 REVIEW_DUE_FOOTER、連結待辦簽核（R6 後可在待辦直接簽）；
+//           參照 REVIEW／ACCT_ID_下次應審查日yyyymmdd（⑭A，reviewRefId 與 ReviewDao.REVIEW_REF_EXPR 同口徑）、CREATE_BY＝SYSTEM；回寫入筆數
 // ============================================================
 
 import java.time.Clock;
@@ -95,6 +101,7 @@ import com.mpx.infra_manager.model.AcctReq;
 import com.mpx.infra_manager.model.ApprStage;
 import com.mpx.infra_manager.model.Emg;
 import com.mpx.infra_manager.model.Recipient;
+import com.mpx.infra_manager.model.ReviewItem;
 import com.mpx.infra_manager.model.ReviewRound;
 
 @Service
@@ -165,6 +172,11 @@ public class NotificationService {
 	/** 帳號類通知參照鍵 ACCT_ID_到期日yyyymmdd（與 AcctDao.ACCT_REF_EXPR 同口徑） */
 	public static String acctRefId(String acctId, LocalDate expiryDate) {
 		return acctId + "_" + (expiryDate == null ? "" : expiryDate.format(YMD));
+	}
+
+	/** 待複審信參照鍵 ACCT_ID_下次應審查日yyyymmdd（⑭A；與 ReviewDao.REVIEW_REF_EXPR 同口徑，雙簽完成推日期後即新的一輪） */
+	public static String reviewRefId(String acctId, LocalDate nextReviewDate) {
+		return acctId + "_" + (nextReviewDate == null ? "" : nextReviewDate.format(YMD));
 	}
 
 	// ------------------------------------------------------------
@@ -377,7 +389,7 @@ public class NotificationService {
 	// ------------------------------------------------------------
 
 	/**
-	 * @param event    REVIEW_REJECT（REVIEW_DUE 由排程 J04 走，R7 補）
+	 * @param event    REVIEW_REJECT（REVIEW_DUE 由排程 J04 走 reviewDue）
 	 * @param reviewId 該輪流水號（重新讀取提交後的內容）
 	 * @param createBy 寫通知紀錄的 CREATE_BY（實際操作人）
 	 */
@@ -434,6 +446,61 @@ public class NotificationService {
 		String by = rejectInfra ? nvl(r.getGovSignByName(), r.getGovSignBy()) : nvl(r.getInfraSignByName(), r.getInfraSignBy());
 		LocalDateTime at = rejectInfra ? r.getGovSignDate() : r.getInfraSignDate();
 		return by == null ? half + "尚未簽核" : half + "已由 " + by + " 於 " + dateTimeText(at) + " 簽核";
+	}
+
+	/**
+	 * REVIEW_DUE（J04 待複審信，R7）：每個帳號一封（⑰A），寄所有 REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 持有人（⑯A；sendAll 依工號去重）。
+	 * 參照 REVIEW／ACCT_ID_下次應審查日yyyymmdd（⑭A）、CREATE_BY＝SYSTEM；連結待辦簽核（R6 起簽核人可在待辦直接簽）。
+	 * 不外拋：途中例外記 log 回 0（J04 不計、下次掃描再列出）
+	 *
+	 * @return 寫入的通知紀錄筆數（SKIP／FAIL 也算寫入；0＝沒有收件人、紀錄全部寫入失敗或例外）
+	 */
+	public int reviewDue(ReviewItem r, LocalDate today) {
+		try {
+			List<Recipient> rcpts = new ArrayList<>(withPerm(AcctConst.PERM_REVIEW_SIGN_INFRA));
+			rcpts.addAll(withPerm(AcctConst.PERM_REVIEW_SIGN_GOV));
+			LocalDate next = r.getNextReviewDate() == null ? null : r.getNextReviewDate().toLocalDate();
+			String subject = "【定期審查】" + r.getAcctId() + " 待複審（應審查日 " + dateText(next) + "）";
+			return sendAll(AcctConst.EV_REVIEW_DUE, AcctConst.REF_REVIEW, reviewRefId(r.getAcctId(), next), rcpts, subject,
+					html.page(subject, reviewDueBody(r), MailHtml.PATH_TODO), AcctConst.SYSTEM_USER).written();
+		} catch (RuntimeException ex) {
+			log.error("通知失敗 event={} acctId={} 例外={}", AcctConst.EV_REVIEW_DUE, r.getAcctId(), ex.getClass().getSimpleName());
+			return 0;
+		}
+	}
+
+	/** 待複審信本文：帳號 6 列＋上次審查日、下次應審查日＋兩位主管本輪簽核狀況，信末提醒處理方式 */
+	static String reviewDueBody(ReviewItem r) {
+		List<String[]> rows = new ArrayList<>();
+		rows.add(new String[] { "帳號單號", r.getAcctId() });
+		rows.add(new String[] { "帳號類別", nvl(r.getCatgName(), r.getCatgId()) });
+		rows.add(new String[] { "帳號名稱", acctNameText(r.getCatgId(), r.getAcctName()) });
+		rows.add(new String[] { "所屬系統", nvl(r.getSysName(), "") });
+		rows.add(new String[] { "使用人", nvl(r.getHolderName(), "") });
+		rows.add(new String[] { "原申請人", nvl(r.getApplyByName(), nvl(r.getApplyBy(), "")) });
+		rows.add(new String[] { "上次審查日", dateText(r.getLastReviewDate() == null ? null : r.getLastReviewDate().toLocalDate()) });
+		rows.add(new String[] { "下次應審查日", dateText(r.getNextReviewDate() == null ? null : r.getNextReviewDate().toLocalDate()) });
+		rows.add(new String[] { AcctConst.reviewHalfName(AcctConst.HALF_INFRA) + "簽核",
+				halfSignText(r.getInfraSignByName(), r.getInfraSignBy(), r.getInfraSignActByName(), r.getInfraSignActBy(),
+						r.getInfraSignDate()) });
+		rows.add(new String[] { AcctConst.reviewHalfName(AcctConst.HALF_GOV) + "簽核",
+				halfSignText(r.getGovSignByName(), r.getGovSignBy(), r.getGovSignActByName(), r.getGovSignActBy(), r.getGovSignDate()) });
+		return MailHtml.table(rows) + MailHtml.para(REVIEW_DUE_FOOTER);
+	}
+
+	/** 待複審信信末提醒（雙簽完成後下次應審查日往後推 180 天；逾期後仍可簽，並會列入每週彙總） */
+	static final String REVIEW_DUE_FOOTER = "請兩位主管於應審查日前完成簽核；逾期未審仍可簽核，但會列入每週彙總信";
+
+	/** 本輪某位主管的簽核狀況：「尚未簽核」或「已由 {姓名} 於 {時間} 簽核」（代簽時姓名後加「（實際操作人：姓名）」，R5b 口徑） */
+	static String halfSignText(String byName, String by, String actByName, String actBy, LocalDateTime at) {
+		if (by == null) {
+			return "尚未簽核";
+		}
+		return "已由 " + ReviewService.signerText(byName, by, actByName, actBy) + " 於 " + dateTimeText(at) + " 簽核";
+	}
+
+	private static String dateText(LocalDate d) {
+		return d == null ? "" : d.format(DATE);
 	}
 
 	// ------------------------------------------------------------

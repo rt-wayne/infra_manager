@@ -6,7 +6,8 @@ package com.mpx.infra_manager.service;
 // 變更說明: 新增：到期排程 J01／J02 與手動觸發（spec v2.0 §4.11、§6.7）
 //           排程：@Scheduled cron 取 im.acct.insp.job.j01.cron／j02.cron（時區 Asia/Taipei），
 //           im.acct.insp.job.enabled＝false 時排程觸發直接略過（手動 API 仍可用）；
-//           手動：POST /jobs/{code}/run 需 SYS_JOB_RUN，code 限 J01／J02（其他 404）；baseDate 僅 allow-base-date＝true 時可帶（否則 400 E17）；
+//           手動：POST /jobs/{code}/run 需 SYS_JOB_RUN，code 限 AcctConst.JOB_CODES（當時 J01／J02；S7 加 J03、第 158 項 R7 加 J04；其他 404）；
+//           baseDate 僅 allow-base-date＝true 時可帶（否則 400 E17）；
 //           不重入：同一 JOB_CODE 同時只跑一個（本 JVM 內鎖），執行中再觸發 409 E16；
 //           每次寫 IM_ACCT_JOB_RUN（RUNNING → SUCCESS／PARTIAL／FAIL、AFFECTED_CNT、RUN_BY、BASE_DATE），PARTIAL／FAIL 寄 JOB_FAIL；
 //           J01：①轉逾期（每筆帳號一個交易：帶條件 UPDATE 主表 → 影響 1 筆才寫歷史 EXPIRE／SYS；單筆失敗記錄後繼續＝PARTIAL）
@@ -48,6 +49,11 @@ package com.mpx.infra_manager.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp 改名為 com.mpx.infra_manager（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R7：新增 J04 定期審查待複審通知（預設每日 00:20，infra.manager.job.j04.cron；日期型基準同 J01／J02）——
+//           查待複審（DUE）且本輪（參照鍵 ACCT_ID_下次應審查日）尚無 REVIEW_DUE 紀錄的帳號（⑱A），逐帳號寄給兩位主管權限持有人（⑰A、⑯A）；
+//           AFFECTED_CNT＝有寫入通知紀錄的帳號數，寄信失敗不算 PARTIAL（同 J01 第 2、3 步口徑），查詢失敗整體 FAIL；建構子加 ReviewDao
 // ============================================================
 
 import java.time.Clock;
@@ -83,10 +89,12 @@ import com.mpx.infra_manager.dao.AcctHistDao;
 import com.mpx.infra_manager.dao.EmgDao;
 import com.mpx.infra_manager.dao.JobRunDao;
 import com.mpx.infra_manager.dao.NotifyLogDao;
+import com.mpx.infra_manager.dao.ReviewDao;
 import com.mpx.infra_manager.model.Acct;
 import com.mpx.infra_manager.model.AcctHist;
 import com.mpx.infra_manager.model.Emg;
 import com.mpx.infra_manager.model.JobRunResult;
+import com.mpx.infra_manager.model.ReviewItem;
 
 @Service
 public class JobService {
@@ -120,6 +128,7 @@ public class JobService {
 	private final JobRunDao jobRunDao;
 	private final NotifyLogDao notifyLogDao;
 	private final EmgDao emgDao;
+	private final ReviewDao reviewDao;
 	private final NotificationService notificationService;
 	private final PermissionService perm;
 	private final TransactionTemplate tx;
@@ -139,14 +148,15 @@ public class JobService {
 	private final Map<String, LocalDate> jobFailSentOn = new ConcurrentHashMap<>();
 
 	public JobService(AcctDao acctDao, AcctHistDao acctHistDao, JobRunDao jobRunDao, NotifyLogDao notifyLogDao, EmgDao emgDao,
-			NotificationService notificationService, PermissionService perm, TransactionTemplate tx, Clock clock,
-			@Value("${infra.manager.job.enabled:true}") boolean enabled,
+			ReviewDao reviewDao, NotificationService notificationService, PermissionService perm, TransactionTemplate tx,
+			Clock clock, @Value("${infra.manager.job.enabled:true}") boolean enabled,
 			@Value("${infra.manager.job.allow-base-date:false}") boolean allowBaseDate) {
 		this.acctDao = acctDao;
 		this.acctHistDao = acctHistDao;
 		this.jobRunDao = jobRunDao;
 		this.notifyLogDao = notifyLogDao;
 		this.emgDao = emgDao;
+		this.reviewDao = reviewDao;
 		this.notificationService = notificationService;
 		this.perm = perm;
 		this.tx = tx;
@@ -174,7 +184,12 @@ public class JobService {
 		scheduled(AcctConst.JOB_J03);
 	}
 
-	/** 排程入口：基準＝現在時刻（到秒，Oracle DATE 精度）；J01／J02 只取其日期 */
+	@Scheduled(cron = "${infra.manager.job.j04.cron:0 20 0 * * *}", zone = ZONE)
+	public void scheduledJ04() {
+		scheduled(AcctConst.JOB_J04);
+	}
+
+	/** 排程入口：基準＝現在時刻（到秒，Oracle DATE 精度）；J01／J02／J04 只取其日期 */
 	void scheduled(String code) {
 		if (!enabled) {
 			return;
@@ -210,7 +225,7 @@ public class JobService {
 
 	/**
 	 * 手動觸發的基準（S7-②）：J03 是時間點，收 yyyy-MM-dd HH:mm:ss（T 可換空白、可省秒；只給日期 → 400 BAD_DATE_TIME）；
-	 * J01／J02 是日期，只收 yyyy-MM-dd（格式錯 → 400 BAD_DATE），回當天 00:00
+	 * J01／J02／J04 是日期，只收 yyyy-MM-dd（格式錯 → 400 BAD_DATE），回當天 00:00
 	 */
 	static LocalDateTime parseBase(String code, String bd, LocalDateTime now) {
 		if (AcctConst.JOB_J03.equals(code)) {
@@ -225,7 +240,7 @@ public class JobService {
 
 	/**
 	 * 執行一次（排程與手動共用）；同一 JOB_CODE 執行中 → 409 E16。
-	 * base：J03 為基準時間點（到秒），J01／J02 只取其日期（BASE_DATE 寫當天 00:00）
+	 * base：J03 為基準時間點（到秒），J01／J02／J04 只取其日期（BASE_DATE 寫當天 00:00）
 	 */
 	JobRunResult run(String code, LocalDateTime base, String runBy) {
 		AtomicBoolean flag = running.get(code);
@@ -239,7 +254,7 @@ public class JobService {
 		try {
 			String createBy = runBy == null ? AcctConst.SYSTEM_USER : runBy;
 			recoverStale(code, createBy);
-			// 目前只有 J03 以時間點為基準；日後新增時間點型排程（例如 J04）要把它加進這個判斷，否則會被截成 00:00
+			// 目前只有 J03 以時間點為基準（J04 是日期型）；日後新增時間點型排程要把它加進這個判斷，否則會被截成 00:00
 			boolean dateBased = !AcctConst.JOB_J03.equals(code);
 			LocalDateTime baseToWrite = dateBased ? base.toLocalDate().atStartOfDay() : base;
 			Long runId = null;
@@ -262,6 +277,7 @@ public class JobService {
 				case AcctConst.JOB_J01 -> j01(base.toLocalDate());
 				case AcctConst.JOB_J02 -> j02(base.toLocalDate());
 				case AcctConst.JOB_J03 -> j03(base);
+				case AcctConst.JOB_J04 -> j04(base.toLocalDate());
 				default -> throw new IllegalArgumentException("未知的排程代碼 " + code);
 				};
 			} catch (RuntimeException e) {
@@ -466,5 +482,25 @@ public class JobService {
 		}
 		return errors.isEmpty() ? new Outcome(AcctConst.JR_SUCCESS, affected, null)
 				: new Outcome(AcctConst.JR_PARTIAL, affected, String.join("; ", errors));
+	}
+
+	// ------------------------------------------------------------
+	// J04 定期審查待複審通知（BACKLOG 第 158 項 R7）
+	// ------------------------------------------------------------
+
+	/**
+	 * 以 today 為基準日，找待複審（今天 ≤ 下次應審查日 ≤ 今天＋30）且本輪尚無 REVIEW_DUE 紀錄的帳號（⑱A；參照鍵 ACCT_ID_下次應審查日，⑭A），
+	 * 逐帳號寄一封（⑰A）給兩位主管權限持有人（⑯A）。AFFECTED_CNT＝有寫入通知紀錄的帳號數（SKIP／FAIL 紀錄也算寫入，之後不重寄）；
+	 * 沒寫入任何紀錄（無收件人、途中例外）的帳號不計、不算失敗，下次掃描會再列出——與 J01 第 2、3 步同口徑，不像 J03 記 PARTIAL。
+	 * 逾期未審的帳號不在這裡寄，由 J02 週彙總的「逾期未審」區塊涵蓋；查詢本身失敗由 run 的外層 catch 記 FAIL
+	 */
+	Outcome j04(LocalDate today) {
+		int affected = 0;
+		for (ReviewItem r : reviewDao.findDueUnnotified(AcctConst.EV_REVIEW_DUE, today)) {
+			if (notificationService.reviewDue(r, today) > 0) {
+				affected++;
+			}
+		}
+		return new Outcome(AcctConst.JR_SUCCESS, affected, null);
 	}
 }

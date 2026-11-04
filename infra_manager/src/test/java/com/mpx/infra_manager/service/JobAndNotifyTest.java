@@ -65,6 +65,13 @@ package com.mpx.infra_manager.service;
 // 變更說明: BACKLOG 第 158 項 R3b：NotificationService 建構子多傳 ReviewDao；新增定期審查駁回通知測試——寄原申請人＋REVIEW_SIGN_GOV 持有人
 //           （同一人去重）、主旨「審查駁回」、本文 11 列（另一半已簽／尚未簽兩種文字）與提醒句、值跳脫、連結定期審查頁、
 //           紀錄事件 REVIEW_REJECT／參照 REVIEW／REF_ID＝REVIEW_ID；查無該輪不寄；未知事件不外拋
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R7：JobService 建構子多傳 ReviewDao；原「未知代碼 404」的 J04 改用 J99；cron 預設值測試加 J04（每日 00:20）與 JOB_CODES 四碼；
+//           J04 排程測試——逐帳號寄待複審信、AFFECTED_CNT＝有寫入紀錄的帳號數、寫入 0 筆不計不算失敗（SUCCESS）、同基準重跑查詢回空不重寄、
+//           查詢失敗整體 FAIL、手動 baseDate 收日期（BASE_DATE 寫 00:00）、排程觸發 RUN_BY 空、不碰 J01／J02／J03；
+//           通知測試——reviewDue 寄兩個簽核權限持有人去重、主旨含應審查日、本文 10 列（兩位主管簽核狀況：尚未簽核／已簽／代簽帶實際操作人）、
+//           提醒句、連結待辦簽核、紀錄 REVIEW_DUE／REVIEW／ACCT_ID_下次應審查日／SYSTEM；無收件人回 0；例外回 0 不外拋
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -120,6 +127,7 @@ import com.mpx.infra_manager.model.Emg;
 import com.mpx.infra_manager.model.EmgDetail;
 import com.mpx.infra_manager.model.JobRunResult;
 import com.mpx.infra_manager.model.Recipient;
+import com.mpx.infra_manager.model.ReviewItem;
 import com.mpx.infra_manager.model.ReviewRound;
 import com.mpx.infra_manager.service.NotificationService.OverdueResult;
 import com.mpx.infra_manager.service.NotificationService.SendResult;
@@ -324,7 +332,7 @@ class JobAndNotifyTest {
 	@Test
 	void 手動觸發_權限_未知代碼_基準日開關() {
 		assertStatus(() -> job.runManual(id(KEVIN), "J01", null), HttpStatus.FORBIDDEN, AcctMsg.P01);
-		assertStatus(() -> job.runManual(id(HANK), "J04", null), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		assertStatus(() -> job.runManual(id(HANK), "J99", null), HttpStatus.NOT_FOUND, AcctMsg.N01);
 		JobService noBase = fx.jobService(false);
 		assertStatus(() -> noBase.runManual(id(HANK), "J01", "2026-10-09"), HttpStatus.BAD_REQUEST, AcctMsg.E17);
 		assertStatus(() -> job.runManual(id(HANK), "J01", "2026/10/09"), HttpStatus.BAD_REQUEST, AcctMsg.BAD_DATE);
@@ -366,10 +374,11 @@ class JobAndNotifyTest {
 
 	@Test
 	void 排程觸發_關閉時不執行_由排程觸發RUN_BY為空() {
-		JobService off = new JobService(fx.acctDao, fx.acctHistDao, fx.jobRunDao, fx.notifyLogDao, fx.emgDao, fx.notificationService,
-				fx.permissionService, fx.tx, fx.clock, false, false);
+		JobService off = new JobService(fx.acctDao, fx.acctHistDao, fx.jobRunDao, fx.notifyLogDao, fx.emgDao, fx.reviewDao,
+				fx.notificationService, fx.permissionService, fx.tx, fx.clock, false, false);
 		off.scheduledJ01();
 		off.scheduledJ03();
+		off.scheduledJ04();
 		verify(fx.jobRunDao, never()).nextId();
 		job.scheduledJ02();
 		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J02"), isNull(), eq(TODAY.atStartOfDay()), any(), eq(AcctConst.SYSTEM_USER));
@@ -438,8 +447,8 @@ class JobAndNotifyTest {
 	@Test
 	void J03_排程失敗信同一種失敗當天只寄一封_PARTIAL整天一封_FAIL依例外類別_隔天再寄_J01J02照舊每次寄() {
 		MutableClock clock = new MutableClock(NOW);
-		JobService j = new JobService(fx.acctDao, fx.acctHistDao, fx.jobRunDao, fx.notifyLogDao, fx.emgDao, fx.notificationService,
-				fx.permissionService, fx.tx, clock, true, true);
+		JobService j = new JobService(fx.acctDao, fx.acctHistDao, fx.jobRunDao, fx.notifyLogDao, fx.emgDao, fx.reviewDao,
+				fx.notificationService, fx.permissionService, fx.tx, clock, true, true);
 		when(fx.emgDao.findOverdueUnnotified(eq(AcctConst.EV_EMG_OVERDUE), any())).thenReturn(List.of(overdueEmg("EA20261006-001")));
 		when(fx.notificationService.emgOverdue(anyString(), any())).thenReturn(OverdueResult.NOT_WRITTEN);
 		when(fx.notificationService.jobFail(any(), any(), any(), any())).thenReturn(true); // 失敗信都寄到了
@@ -582,8 +591,8 @@ class JobAndNotifyTest {
 	void J03_排程觸發基準為現在時刻截到秒_每個排程代碼都有鎖_JOB_CODES外的代碼丟例外不跑任何排程() {
 		// 時鐘帶毫秒：BASE_DATE 與查詢的 :now 都截到秒（Oracle DATE 精度），寫入與查詢才會一致
 		Clock millis = Clock.fixed(NOW.plusNanos(123_456_789).atZone(AppConfig.ZONE).toInstant(), AppConfig.ZONE);
-		JobService j = new JobService(fx.acctDao, fx.acctHistDao, fx.jobRunDao, fx.notifyLogDao, fx.emgDao, fx.notificationService,
-				fx.permissionService, fx.tx, millis, true, true);
+		JobService j = new JobService(fx.acctDao, fx.acctHistDao, fx.jobRunDao, fx.notifyLogDao, fx.emgDao, fx.reviewDao,
+				fx.notificationService, fx.permissionService, fx.tx, millis, true, true);
 		when(fx.emgDao.findOverdueUnnotified(eq(AcctConst.EV_EMG_OVERDUE), any())).thenReturn(List.of(overdueEmg("EA20261006-001")));
 		when(fx.notificationService.emgOverdue(anyString(), any())).thenReturn(OverdueResult.SENT);
 		j.scheduledJ03();
@@ -610,6 +619,89 @@ class JobAndNotifyTest {
 		Emg e = new Emg();
 		e.setEmgId(emgId);
 		return e;
+	}
+
+	// ------------------------------------------------------------
+	// J04 定期審查待複審通知（BACKLOG 第 158 項 R7）
+	// ------------------------------------------------------------
+
+	@Test
+	void J04_逐帳號寄待複審信_計數為有寫入紀錄的帳號數_寫入0筆不計不算失敗_基準為日期_不碰其他排程() {
+		ReviewItem a = dueItem("AR20261001-001");
+		ReviewItem b = dueItem("AR20261001-002");
+		ReviewItem c = dueItem("AR20261001-003");
+		when(fx.reviewDao.findDueUnnotified(AcctConst.EV_REVIEW_DUE, TODAY)).thenReturn(List.of(a, b, c));
+		when(fx.notificationService.reviewDue(any(), any())).thenReturn(2);
+		// 無收件人或紀錄全部寫入失敗：不計、不算失敗（同 J01 第 2、3 步口徑），下次掃描會再列出
+		when(fx.notificationService.reviewDue(eq(b), any())).thenReturn(0);
+
+		JobRunResult r = job.runManual(id(HANK), "J04", null);
+		assertThat(r.getRunId()).isEqualTo(77L);
+		assertThat(r.getResultCode()).isEqualTo(AcctConst.JR_SUCCESS);
+		assertThat(r.getAffectedCnt()).isEqualTo(2);
+		verify(fx.notificationService).reviewDue(a, TODAY);
+		verify(fx.notificationService).reviewDue(b, TODAY);
+		verify(fx.notificationService).reviewDue(c, TODAY);
+		// 日期型：BASE_DATE 寫當天 00:00（不是 J03 那種時間點）
+		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J04"), eq(HANK), eq(TODAY.atStartOfDay()), any(), eq(HANK));
+		verify(fx.jobRunDao).finish(eq(77L), eq("SUCCESS"), eq(2), isNull(), any(), eq(HANK));
+		verify(fx.notificationService, never()).jobFail(any(), any(), any(), any());
+		// 不碰 J01／J02／J03 的查詢與寄信
+		verify(fx.acctDao, never()).findToExpire(any());
+		verify(fx.acctDao, never()).findExpiredAll();
+		verify(fx.emgDao, never()).findOverdueUnnotified(any(), any());
+		verify(fx.notifyLogDao, never()).countByEventRef(eq(AcctConst.EV_WEEKLY_SUMMARY), any(), any());
+		verify(fx.notificationService, never()).weeklySummary(any(), any(), any());
+		verify(fx.notificationService, never()).expiryEvent(any(), any(), any());
+		verify(fx.notificationService, never()).emgOverdue(any(), any());
+	}
+
+	@Test
+	void J04_同基準重跑查詢回空不重寄_查詢失敗整體FAIL_排程觸發RUN_BY為空() {
+		// 防重寄在 SQL（參照鍵已有紀錄的不會被查出來）：第二次查詢回空 → 0 筆、不寄
+		JobRunResult again = job.runManual(id(HANK), "J04", null);
+		assertThat(again.getResultCode()).isEqualTo(AcctConst.JR_SUCCESS);
+		assertThat(again.getAffectedCnt()).isZero();
+		verify(fx.notificationService, never()).reviewDue(any(), any());
+
+		// 查詢本身失敗：FAIL、0 筆、錯誤摘要為例外名稱、寄排程失敗信（每次都寄，不套 J03 的一天一封）
+		when(fx.reviewDao.findDueUnnotified(any(), any())).thenThrow(new IllegalStateException("db"));
+		JobRunResult f = job.runManual(id(HANK), "J04", null);
+		assertThat(f.getResultCode()).isEqualTo(AcctConst.JR_FAIL);
+		assertThat(f.getAffectedCnt()).isZero();
+		verify(fx.jobRunDao).finish(eq(77L), eq("FAIL"), eq(0), eq("IllegalStateException"), any(), eq(HANK));
+		verify(fx.notificationService).jobFail("J04", 77L, AcctConst.JR_FAIL, "IllegalStateException");
+		job.runManual(id(HANK), "J04", null);
+		verify(fx.notificationService, times(2)).jobFail("J04", 77L, AcctConst.JR_FAIL, "IllegalStateException");
+
+		// 排程觸發：RUN_BY 空、CREATE_BY＝SYSTEM、基準＝今天 00:00
+		doReturn(List.of()).when(fx.reviewDao).findDueUnnotified(any(), any());
+		job.scheduledJ04();
+		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J04"), isNull(), eq(TODAY.atStartOfDay()), any(), eq(AcctConst.SYSTEM_USER));
+		verify(fx.reviewDao, times(4)).findDueUnnotified(AcctConst.EV_REVIEW_DUE, TODAY);
+	}
+
+	@Test
+	void J04_手動基準收日期_帶時間400_以該日查詢並寫BASE_DATE() {
+		assertStatus(() -> job.runManual(id(HANK), "J04", "2026-10-15 10:00:00"), HttpStatus.BAD_REQUEST, AcctMsg.BAD_DATE);
+		assertStatus(() -> job.runManual(id(HANK), "J04", "2026/10/15"), HttpStatus.BAD_REQUEST, AcctMsg.BAD_DATE);
+		JobService noBase = fx.jobService(false);
+		assertStatus(() -> noBase.runManual(id(HANK), "J04", "2026-10-15"), HttpStatus.BAD_REQUEST, AcctMsg.E17);
+		verify(fx.jobRunDao, never()).nextId();
+
+		LocalDate base = LocalDate.of(2026, 10, 15);
+		job.runManual(id(HANK), "J04", "2026-10-15");
+		verify(fx.reviewDao).findDueUnnotified(AcctConst.EV_REVIEW_DUE, base);
+		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J04"), eq(HANK), eq(base.atStartOfDay()), any(), eq(HANK));
+	}
+
+	/** 待複審掃描查到的帳號（J04 整筆交給寄信端） */
+	static ReviewItem dueItem(String acctId) {
+		ReviewItem r = new ReviewItem();
+		r.setAcctId(acctId);
+		r.setReviewStateCode(AcctConst.RVS_DUE);
+		r.setNextReviewDate(TODAY.plusDays(10).atStartOfDay());
+		return r;
 	}
 
 	// ------------------------------------------------------------
@@ -770,6 +862,11 @@ class JobAndNotifyTest {
 		var s3 = JobService.class.getMethod("scheduledJ03").getAnnotation(org.springframework.scheduling.annotation.Scheduled.class);
 		assertThat(s3.cron()).isEqualTo("${infra.manager.job.j03.cron:0 */15 * * * *}");
 		assertThat(s3.zone()).isEqualTo("Asia/Taipei");
+		// R7：J04 每日 00:20（J01 00:10 之後、J02 08:00 之前）
+		var s4 = JobService.class.getMethod("scheduledJ04").getAnnotation(org.springframework.scheduling.annotation.Scheduled.class);
+		assertThat(s4.cron()).isEqualTo("${infra.manager.job.j04.cron:0 20 0 * * *}");
+		assertThat(s4.zone()).isEqualTo("Asia/Taipei");
+		assertThat(AcctConst.JOB_CODES).containsExactly("J01", "J02", "J03", "J04");
 		assertThat(new ApiException(HttpStatus.CONFLICT, AcctMsg.E16).getStatus()).isEqualTo(HttpStatus.CONFLICT);
 	}
 
@@ -1093,6 +1190,82 @@ class JobAndNotifyTest {
 		r.setRejectDate(NOW);
 		r.setRejectReason("權限過大\n<請縮減>");
 		return r;
+	}
+
+	@Test
+	void 定期審查_待複審通知寄兩個簽核權限持有人去重_主旨含應審查日_本文10列含兩位主管簽核狀況_連結待辦_紀錄REVIEW_DUE參照鍵為帳號加下次應審查日() {
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		ReviewItem r = dueItem("AR20261001-001");
+		r.setCatgId("DB");
+		r.setCatgName("資料庫");
+		r.setAcctName("prod <root>");
+		r.setSysName("ERP");
+		r.setHolderName("王小明");
+		r.setApplyBy(KEVIN);
+		r.setApplyByName("凱文 & 測試");
+		r.setLastReviewDate(LocalDate.of(2026, 4, 20).atStartOfDay());
+		r.setNextReviewDate(LocalDate.of(2026, 10, 17).atStartOfDay());
+		// Infra 主管已由 TESTER 代 TERRY 簽（R5b 口徑要帶實際操作人）；資訊治理主管尚未簽
+		r.setInfraSignBy("0000004");
+		r.setInfraSignByName("泰瑞");
+		r.setInfraSignActBy("0000012");
+		r.setInfraSignActByName("測試員 <代>");
+		r.setInfraSignDate(NOW.minusHours(1));
+		// 兩個權限持有人有重疊（GARY 兩邊都有），去重後 3 人
+		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_REVIEW_SIGN_INFRA))
+				.thenReturn(List.of(rcpt("0000004", "t@example.com"), rcpt(GARY, "g@example.com")));
+		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_REVIEW_SIGN_GOV))
+				.thenReturn(List.of(rcpt("0000002", "m@example.com"), rcpt(GARY, "g@example.com")));
+
+		assertThat(n.reviewDue(r, TODAY)).isEqualTo(3);
+		ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+		verify(sender).send(eq("t@example.com"), eq("【定期審查】AR20261001-001 待複審（應審查日 2026-10-17）"), body.capture());
+		verify(sender).send(eq("g@example.com"), eq("【定期審查】AR20261001-001 待複審（應審查日 2026-10-17）"), any());
+		verify(sender).send(eq("m@example.com"), eq("【定期審查】AR20261001-001 待複審（應審查日 2026-10-17）"), any());
+		verify(sender, times(3)).send(any(), any(), any());
+		assertThat(body.getValue()).startsWith("<!DOCTYPE html>")
+				.contains("帳號單號", "AR20261001-001").contains("帳號類別", "資料庫").contains("帳號名稱", "prod &lt;root&gt;")
+				.contains("所屬系統", "ERP").contains("使用人", "王小明").contains("原申請人", "凱文 &amp; 測試")
+				.contains("上次審查日", "2026-04-20").contains("下次應審查日", "2026-10-17")
+				.contains("Infra 主管簽核", "已由 泰瑞（實際操作人：測試員 &lt;代&gt;） 於 2026-10-07 09:30 簽核")
+				.contains("資訊治理主管簽核", "尚未簽核").doesNotContain("0000004").doesNotContain("半")
+				.contains("<p>" + NotificationService.REVIEW_DUE_FOOTER + "</p>")
+				.contains("<a href=\"http://h/ctx/#/todo\"", "前往「待辦簽核」", FOOTER);
+		// 紀錄事件 REVIEW_DUE、參照 REVIEW、REF_ID＝帳號單號_下次應審查日（⑭A）、CREATE_BY＝SYSTEM；三位收件人各一筆
+		verify(fx.notifyLogDao).insert(eq("REVIEW_DUE"), eq("REVIEW"), eq("AR20261001-001_20261017"), eq("0000004"),
+				eq("t@example.com"), eq("SUCCESS"), isNull(), any(), eq(AcctConst.SYSTEM_USER));
+		verify(fx.notifyLogDao).insert(eq("REVIEW_DUE"), eq("REVIEW"), eq("AR20261001-001_20261017"), eq(GARY), any(), any(),
+				any(), any(), eq(AcctConst.SYSTEM_USER));
+		verify(fx.notifyLogDao, times(3)).insert(any(), any(), any(), any(), any(), any(), any(), any(), any());
+		assertThat(NotificationService.reviewRefId("X", LocalDate.of(2026, 1, 2))).isEqualTo("X_20260102");
+		assertThat(NotificationService.reviewRefId("X", null)).isEqualTo("X_");
+	}
+
+	@Test
+	void 定期審查_待複審通知_兩位都未簽與本人簽的文字_無收件人回0_例外回0不外拋() {
+		ReviewItem r = dueItem("AR20261001-002");
+		r.setCatgId("DOOR");
+		r.setAcctName(null);
+		r.setNextReviewDate(null);
+		// 兩位都還沒簽、門禁卡無卡號、日期為空都不得出現 null
+		assertThat(NotificationService.reviewDueBody(r)).contains("（門禁卡，待發卡）").contains("尚未簽核").doesNotContain("null");
+		// 本人簽（實際操作人＝有效身分）不帶實際操作人；舊資料沒有實際操作人欄也不帶；姓名查無顯示工號
+		assertThat(NotificationService.halfSignText("泰瑞", "0000004", "泰瑞", "0000004", NOW)).isEqualTo("已由 泰瑞 於 2026-10-07 10:30 簽核");
+		assertThat(NotificationService.halfSignText("泰瑞", "0000004", null, null, NOW)).isEqualTo("已由 泰瑞 於 2026-10-07 10:30 簽核");
+		assertThat(NotificationService.halfSignText(null, "0000004", null, "0000012", NOW))
+				.isEqualTo("已由 0000004（實際操作人：0000012） 於 2026-10-07 10:30 簽核");
+		assertThat(NotificationService.halfSignText(null, null, null, null, null)).isEqualTo("尚未簽核");
+
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		// 沒有任何人持有兩個簽核權限：寫入 0 筆、不寄；J04 不計、下次再試
+		assertThat(n.reviewDue(r, TODAY)).isZero();
+		verify(sender, never()).send(any(), any(), any());
+		verify(fx.notifyLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any(), any());
+		// 查收件人丟例外：回 0、不外拋（排程照常跑下一筆）
+		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_REVIEW_SIGN_INFRA)).thenThrow(new IllegalStateException("db"));
+		assertThat(n.reviewDue(r, TODAY)).isZero();
 	}
 
 	@Test

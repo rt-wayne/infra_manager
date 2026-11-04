@@ -17,9 +17,9 @@
 | 158 | 定期權限審查（SA §5.10、J04；從第 14 項拆出）：審查狀態即時計算、Infra／治理雙簽、駁回標旗標、J04 待複審信、J02 加逾期未審、待辦、首頁第四區兩張卡、鈴鐺類別 2。21 項裁示 2026-10-30 全部依 architect 建議，分 R0～R10 共 12 段 | [backlog/158-定期審查.md](backlog/158-定期審查.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：**R6 已結案（2026-11-04；實測通過、審查 0 必須修正，S3／S4 登記第 169、170 項）**。接 R7 J04 待複審通知（排程每日寄待複審帳號給兩位主管、J02 加逾期未審區塊；設計要點見計畫檔交接欄與設計段「J04」；約 3 回合）。R7 開工時把 HEAD 記進「本階段起點」。R5 是正式環境最早部署點，部署前 UAT／正式先跑 R1 腳本與文案腳本（SETUP 第 6 節）
+- 下一步：**R7 進行中（2026-11-04 開工；裁示 ①A J04 主旨帶應審查日、②B J02 主旨沿用「【帳號到期】」前綴並寫兩個筆數、③A J02 收件人維持 GOV 成員）。第 1 單位 J04 待複審通知已 commit**（`ReviewDao.FIND_DUE_UNNOTIFIED`、`JobService.j04`、`NotificationService.reviewDue`，後端測試與 PRD／SETUP 同步）。接第 2 單位：J02 加「逾期未審」區塊——`ReviewDao` 加 FIND_OVERDUE_FOR_SUMMARY（REVIEW_STATE_CODE='OVERDUE'，依下次應審查日 NULLS FIRST、單號）、`JobService.j02` 多查一次並把筆數加總（⑲A）、`NotificationService.weeklySummary` 多收一個清單加 `reviewOverdueBlock`（欄：帳號單號、類別、帳號名稱、使用人、上次審查日、下次應審查日、逾期天數；從未審查顯示「從未審查」；0 筆文案「目前沒有逾期未審的帳號」）、主旨改「【帳號到期】本週彙總：已逾期未處理 {n} 筆、逾期未審 {m} 筆」；測試 J02 案例改寫；PRD 第 8 節 J02 段、第 9 節主旨、JOB_RUN 段、第 15 節；SETUP 第 7 節 affectedCnt。第 3 回合：重建重啟 8989 後請使用者以 `POST /jobs/J04/run?baseDate=` 連跑兩次（第二次 0 筆）、J02 兩區塊，再平行派 code-reviewer（範圍 `a71bf82` 起）＋test-runner。另待使用者裁示：測試信要寄到 ciliao@pxmart.com.tw 的做法（收件地址目前只來自同步表 PX_SYNC_EMP，見回合回報）。R5 是正式環境最早部署點，部署前 UAT／正式先跑 R1 腳本與文案腳本（SETUP 第 6 節）
 - 已改動（未 commit）：無
-- 本階段起點：R7 開工時填 HEAD；歷史：R6 `3a4c509`、R5b `34b9976`、R5 `fd82b3c`、R4 `9800824`、R3b `aa917ac`、R3a `53eb425`、R2 `146e78a`、R1 `f2219ec`、R0 `05865e0`
+- 本階段起點：R7 `a71bf82`；歷史：R6 `3a4c509`、R5b `34b9976`、R5 `fd82b3c`、R4 `9800824`、R3b `aa917ac`、R3a `53eb425`、R2 `146e78a`、R1 `f2219ec`、R0 `05865e0`
 - 卡住／待確認：UAT／正式環境的 R1 腳本與 `infra_manager_158_review_wording.sql` 於 R5 部署前執行（SETUP 第 6 節已寫）
 
 ## 已拍板待實作
@@ -47,7 +47,6 @@
 | 8 | `/me` 回 401 以外的錯誤時，需權限的頁面導向無權限頁而非顯示 U09「查詢失敗，請稍後再試」，要整頁重新整理才恢復（`useSession.ts:59-64`） | 2026-10-10 | — |
 | 12 | DAO 以參數顯式綁定 NULL 會蓋過 DB DEFAULT（IS_PRIV、EXPIRY_TYPE_CODE、IS_UNIQUE_CONF 等必填欄）；目前 Service 都先填值所以沒出事，日後新路徑漏填會直接 ORA-01400 | 2026-10-10 | — |
 | 14 | 第二階段功能：統計頁、批次匯出帳號歷史（SA 第 8.2 節，同用 ACC_EXPORT）、巡檢匯出、資產分類與巡檢項目維護（緊急存取已拆出為第 46 項、定期審查已拆出為第 158 項；帳號權限清單匯出已於第 80 項完成）；目前只有權限碼與預留欄位，無程式 | 2026-10-10 | — |
-| 159 | `JobService.java:9` 檔頭註解仍寫「code 限 J01／J02」，J03 加入後已過時（第 158 項 R7 加 J04 時順手改）。第 158 項 architect 盤點時發現 | 2026-10-30 | — |
 | 160 | `ReviewServiceTest.有審查狀態_與ReviewRule範圍同口徑` 其實是 Java 比 Java（`PermissionService.hasReviewState` 內部就呼叫 `ReviewRule.matches`），名實不符；Java↔SQL 審查範圍對齊目前只靠 `SqlConstantScanTest` 字串斷言。建議：測試改名為「只看 APPROVED、旗標與刪除」；下次測試 DB 實跑時補兩筆（APPROVED、非 DOOR、非特權、分類 IS_REVIEW_TRIGGER＝1 但分類 STATUS＝0；ASSET_CLASS_ID 為空）確認不出現在 `/reviews` 且只有 INFRA_MGR 的人開明細回 403。第 158 項 R2 code-reviewer S1 | 2026-10-30 | — |
 | 161 | 所有清單 API（`/accounts`、`/requests`、`/emergencies`、`/reviews`…）的 keyword 只修剪與 LIKE 跳脫、沒有長度上限（`security.md`「字串輸入要限制長度」）；既有共同寫法，非單一 API 問題。第 158 項 R2 code-reviewer S5 | 2026-10-30 | — |
 | 162 | 前端 `permGroups.ts` 的分組順序（帳號 → 簽核 → 巡檢 → 緊急存取 → 定期審查 → 系統管理）沒有測試鎖住，`AdminViews.spec.ts` 的 `groupPerms` 案例只涵蓋 SYS 與未知模組；補一筆含 EMG、REVIEW、SYS 的案例。第 158 項 R2 code-reviewer S6 | 2026-10-30 | — |

@@ -34,6 +34,11 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R6（待辦整合）：FIND_TODO／findTodo——待複審與逾期未審的帳號（含進行中那一輪），逾期最久的先；
 //           誰能簽哪個身分由 HomeService 依 REVIEW_SIGN_* 權限與同人規則過濾
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R7（J04 待複審通知）：REVIEW_REF_EXPR 通知參照鍵 ACCT_ID_下次應審查日yyyymmdd（⑭A，與
+//           NotificationService.reviewRefId 同口徑）；FIND_DUE_UNNOTIFIED／findDueUnnotified——待複審（DUE）且此參照鍵尚無任何
+//           :eventCode 通知紀錄的帳號（⑱A 只寄待複審，逾期未審由 J02 週彙總涵蓋），寫法比照 AcctDao.NOT_NOTIFIED
 // ============================================================
 
 import java.time.LocalDate;
@@ -156,6 +161,29 @@ public class ReviewDao {
 			 ORDER BY X.NEXT_REVIEW_DATE NULLS FIRST, X.ACCT_ID
 			""";
 
+	/**
+	 * 待複審信的通知參照鍵（R7，⑭A）：ACCT_ID_下次應審查日yyyymmdd；Java 端見 NotificationService.reviewRefId。
+	 * 雙簽完成會把下次應審查日往後推，鍵就不同＝新的一輪可再寄；套在子查詢 X 的欄位上
+	 */
+	static final String REVIEW_REF_EXPR = "X.ACCT_ID || '_' || TO_CHAR(X.NEXT_REVIEW_DATE, 'YYYYMMDD')";
+
+	/**
+	 * J04（R7）：待複審（DUE＝今天 ≤ 下次應審查日 ≤ 今天＋30）、且此參照鍵尚無任何 :eventCode 的通知紀錄（成功、失敗、略過都算有）。
+	 * 逾期未審不寄（⑱A，由 J02 週彙總涵蓋）；異常、正常、不在範圍本來就不是 DUE。寫法比照 AcctDao.NOT_NOTIFIED；依下次應審查日、單號
+	 */
+	public static final String FIND_DUE_UNNOTIFIED = """
+			SELECT X.*
+			  FROM (""" + SELECT_BASE + """
+			       ) X
+			 WHERE X.REVIEW_STATE_CODE = 'DUE'
+			   AND NOT EXISTS (SELECT 1 FROM IM_ACCT_NOTIFY_LOG N
+			                    WHERE N.EVENT_CODE = :eventCode
+			                      AND N.REF_TYPE_CODE = 'REVIEW'
+			                      AND N.REF_ID =""" + " " + REVIEW_REF_EXPR + """
+			)
+			 ORDER BY X.NEXT_REVIEW_DATE, X.ACCT_ID
+			""";
+
 	/** 單筆（簽核交易內重讀狀態用）：不過濾狀態，不在範圍時 REVIEW_STATE_CODE 為 NULL，由 Service 判斷 */
 	public static final String FIND_BY_ACCT = SELECT_BASE + """
 			 WHERE A.ACCT_ID = :acctId
@@ -273,6 +301,14 @@ public class ReviewDao {
 		Map<String, Object> params = new HashMap<>();
 		params.put("today", DaoSupport.ts(today));
 		return dbClient.query(itflowDb, FIND_TODO, params, ReviewItem.class);
+	}
+
+	/** J04 用：待複審且此參照鍵尚無 eventCode（REVIEW_DUE）通知紀錄的帳號；today＝基準日（綁 00:00） */
+	public List<ReviewItem> findDueUnnotified(String eventCode, LocalDate today) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("eventCode", eventCode);
+		params.put("today", DaoSupport.ts(today));
+		return dbClient.query(itflowDb, FIND_DUE_UNNOTIFIED, params, ReviewItem.class);
 	}
 
 	/** 查無回 null；reviewStateCode 為 null＝不在審查範圍 */
