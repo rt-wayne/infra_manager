@@ -17,6 +17,9 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-10-29
 // 變更說明: BACKLOG 第 148 項：FIND_STATS 帳號四張與緊急存取兩張各帶可選的個人過濾、巡檢不過濾；
 //           stats 依 ACC_EXPIRY_ALL／EMG_VIEW_ALL 決定綁 NULL 或有效身分工號、巡檢區依 INSP_VIEW 或任一看全部
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 第 3 單位：帳號明細走 acctDao.findDetail（綁今天）、原樣帶出 DAO 算的 reviewStateCode；lookup／歷史以外不呼叫 findDetail
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -209,6 +212,21 @@ class AccountAndHomeServiceTest {
 		when(fx.acctHistDao.findByAcct(a.getAcctId())).thenReturn(List.of(h));
 		assertThat(fx.accountService.history(id(KEVIN), a.getAcctId()).get(0).getSelfActionLabel())
 				.isEqualTo(AcctConst.SELF_LABEL_APPLICANT);
+	}
+
+	/** 第 158 項 R5（①A）：明細走 findDetail 並綁今天，DAO 算出的審查狀態原樣回傳；lookup/{id} 仍走 findById、不算狀態 */
+	@Test
+	void 帳號明細_走findDetail綁今天_帶出審查狀態() {
+		Acct a = fx.acct("AR20261001-001", "DB", AcctConst.AS_APPROVED);
+		a.setReviewStateCode(AcctConst.RVS_DUE);
+		Acct out = fx.accountService.detail(id(KEVIN), a.getAcctId());
+		assertThat(out.getReviewStateCode()).isEqualTo(AcctConst.RVS_DUE);
+		assertThat(out.getAllowedReqTypes()).contains("MODIFY");
+		verify(fx.acctDao).findDetail(a.getAcctId(), TODAY);
+		verify(fx.acctDao, never()).findById(a.getAcctId());
+
+		fx.accountService.lookupById(id(KEVIN), a.getAcctId(), a.getAcctName());
+		verify(fx.acctDao).findById(a.getAcctId());
 	}
 
 	// ------------------------------------------------------------

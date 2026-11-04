@@ -45,6 +45,11 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a 審查裁示 ①A：LOCK_FOR_REVIEW 鎖帳號主表那一列（FOR UPDATE，不設等待上限），
 //           定期審查簽核交易一開始先鎖，讓同帳號的簽核、標旗標、關卡 6 取消進行中一輪排隊執行；R3b 駁回、R4 關卡 6 沿用同一把鎖
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 第 3 單位（裁示 ①A）：帳號明細另一句 FIND_DETAIL／findDetail——以 FIND_BY_ID 當內層，外層套
+//           ReviewDao.REVIEW_STATE_EXPR 算 REVIEW_STATE_CODE（需綁 :today）並再接一次啟用中的分類（SELECT_BASE 的 AC 沒過濾 STATUS，
+//           不能直接給審查片段用）；只給 GET /accounts/{id} 用，findById 與其他查詢不變、不帶 :today
 // ============================================================
 
 import java.time.LocalDate;
@@ -99,6 +104,16 @@ public class AcctDao {
 	public static final String FIND_BY_ID = SELECT_BASE + """
 			 WHERE A.ACCT_ID = :acctId
 			""";
+
+	/**
+	 * 帳號明細（第 158 項 R5，裁示 ①A）：主表全欄外加審查狀態 REVIEW_STATE_CODE（不在範圍為 NULL）；需綁 :today（當天 00:00）。
+	 * 內層就是 FIND_BY_ID，外層別名仍叫 A 讓 ReviewDao 的片段原樣可用；分類要再 JOIN 一次（審查片段只認啟用中的分類，
+	 * 內層的 AC 沒過濾 STATUS、只拿來顯示分類名）。清單、我的帳號等其他查詢不帶審查狀態
+	 */
+	public static final String FIND_DETAIL = "SELECT A.*,\n"
+			+ "       " + ReviewDao.REVIEW_STATE_EXPR + " AS REVIEW_STATE_CODE\n"
+			+ "  FROM (\n" + FIND_BY_ID + "       ) A\n"
+			+ "  " + ReviewDao.JOIN_ASSET_CLASS + "\n";
 
 	// ---- 帳號列表篩選片段（spec §6.4）
 	static final String F_KEYWORD = """
@@ -330,6 +345,14 @@ public class AcctDao {
 		Map<String, Object> params = new HashMap<>();
 		params.put("acctId", acctId);
 		return DaoSupport.first(dbClient.query(itflowDb, FIND_BY_ID, params, Acct.class));
+	}
+
+	/** 帳號明細：同 findById 另帶審查狀態（以 today 計算）；GET /accounts/{id} 專用 */
+	public Acct findDetail(String acctId, LocalDate today) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("acctId", acctId);
+		params.put("today", DaoSupport.ts(today));
+		return DaoSupport.first(dbClient.query(itflowDb, FIND_DETAIL, params, Acct.class));
 	}
 
 	/** 列表篩選參數（keyword 已跳脫；expiring 1／0） */

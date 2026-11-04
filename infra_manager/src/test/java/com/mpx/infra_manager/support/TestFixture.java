@@ -68,6 +68,9 @@ package com.mpx.infra_manager.support;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R4：RequestService 建構子多傳 ReviewDao（關卡 6 生效取消進行中的審查輪）；reviewDao.cancelOpen 預設回 0（沒有進行中的輪）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 第 3 單位：acctDao.findDetail 樁同 findById（回 accts 內那筆；reviewStateCode 由各測試自行 set）
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -332,6 +335,7 @@ public class TestFixture {
 		when(attachmentService.check(any())).thenAnswer(inv -> inv.getArgument(0) == null ? null : PDF);
 
 		when(acctDao.findById(anyString())).thenAnswer(inv -> accts.get(inv.<String>getArgument(0)));
+		when(acctDao.findDetail(anyString(), any())).thenAnswer(inv -> accts.get(inv.<String>getArgument(0)));
 		when(acctDao.insertOnSubmit(any(), any(), any())).thenReturn(1);
 		when(acctDao.markAddRejected(any(), any(), any())).thenReturn(1);
 		when(acctDao.resubmitAdd(any(), any(), any())).thenReturn(1);

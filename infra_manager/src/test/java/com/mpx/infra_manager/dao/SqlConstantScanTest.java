@@ -121,6 +121,10 @@ package com.mpx.infra_manager.dao;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R4：ReviewDao.UPDATE_CANCEL 斷言（以帳號＋OPEN 當條件、不帶版本、寫取消三欄、不動簽核欄）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 第 3 單位：AcctDao.FIND_DETAIL 斷言（內層就是 FIND_BY_ID、外層套 ReviewDao 審查狀態片段與啟用中分類 JOIN、
+//           綁 :today）；FIND_BY_ID 與 SELECT_BASE 不得帶 :today（其他查詢不算狀態）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -619,6 +623,20 @@ class SqlConstantScanTest {
 				.contains("STATUS = 1").doesNotContain(":versionNo").doesNotContain("SIGN").doesNotContain("REJECT")
 				.doesNotContain("SYSDATE");
 		assertThat(AcctConst.RR_CANCELED).isEqualTo("CANCELED");
+	}
+
+	/** 第 158 項 R5（①A）：帳號明細另一句算審查狀態——內層就是 FIND_BY_ID、外層別名 A、再接一次啟用中分類；其他帳號查詢不帶 :today */
+	@Test
+	void 帳號明細SQL_外層套審查狀態片段_其他查詢不算狀態() {
+		assertThat(AcctDao.FIND_DETAIL).startsWith("SELECT A.*,").contains(ReviewDao.REVIEW_STATE_EXPR + " AS REVIEW_STATE_CODE")
+				.contains("FROM (\n" + AcctDao.FIND_BY_ID).contains(") A\n  " + ReviewDao.JOIN_ASSET_CLASS).contains(":acctId")
+				.contains(":today").doesNotContain("SYSDATE");
+		// 外層只接一次分類；內層 SELECT_BASE 的 AC 沒過濾 STATUS，審查片段必須用外層那個
+		assertThat(AcctDao.FIND_DETAIL.split("LEFT JOIN IM_ASSET_CLASS AC", -1)).hasSize(3);
+		assertThat(AcctDao.FIND_DETAIL.indexOf(ReviewDao.JOIN_ASSET_CLASS)).isGreaterThan(AcctDao.FIND_DETAIL.indexOf(") A"));
+		assertThat(AcctDao.FIND_BY_ID).doesNotContain(":today").doesNotContain("REVIEW_STATE_CODE");
+		assertThat(AcctDao.FIND_LIST).doesNotContain("REVIEW_STATE_CODE");
+		assertThat(AcctDao.FIND_MINE).doesNotContain(":today").doesNotContain("REVIEW_STATE_CODE");
 	}
 
 	@Test

@@ -20,6 +20,9 @@
 //           預設展開／收合與切換鈕（使用者 2026-10-14 要求）；
 //           釘住收合只藏不拆（收合中內容在 DOM、API 照常呼叫）、搜尋關鍵字收合後保留、
 //           aria-expanded 值（code-reviewer 建議）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 第 3 單位：帳號詳情「定期審查」列依後端 reviewStateCode 顯示狀態標籤與日期、空值不顯示
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -234,6 +237,29 @@ describe('帳號詳情彈窗：審查異常標記（S10）', () => {
     const w = await mountDetail({})
     expect(w.find('.review-flag').exists()).toBe(false)
     expect(w.find('.review-flag-info').exists()).toBe(false)
+    w.unmount()
+  })
+
+  // 第 158 項 R5（①A）：定期審查列由後端 reviewStateCode 決定，不再看 nextReviewDate 有沒有值
+  it('有審查狀態：定期審查列顯示狀態標籤（顏色同清單）與上次／下次審查日，日期空顯示「—」', async () => {
+    let w = await mountDetail({ reviewStateCode: 'DUE', lastReviewDate: '2026-04-15', nextReviewDate: '2026-10-12' })
+    expect(w.find('.review-state').text()).toBe('待複審')
+    expect(w.find('.review-state').classes()).toContain('tag-pending')
+    expect(w.find('.review-row .v').text()).toContain('上次 2026-04-15')
+    expect(w.find('.review-row .v').text()).toContain('下次 2026-10-12')
+    w.unmount()
+
+    w = await mountDetail({ reviewStateCode: 'OVERDUE', lastReviewDate: null, nextReviewDate: null })
+    expect(w.find('.review-state').text()).toBe('逾期未審')
+    expect(w.find('.review-state').classes()).toContain('tag-warn')
+    expect(w.find('.review-row .v').text()).toContain('上次 —')
+    expect(w.find('.review-row .v').text()).toContain('下次 —')
+    w.unmount()
+  })
+
+  it('不在審查範圍（reviewStateCode 空）：即使有審查日期也不顯示定期審查列', async () => {
+    const w = await mountDetail({ reviewStateCode: null, lastReviewDate: '2026-04-15', nextReviewDate: '2026-10-12' })
+    expect(w.find('.review-row').exists()).toBe(false)
     w.unmount()
   })
 })

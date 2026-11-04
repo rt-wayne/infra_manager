@@ -15,7 +15,11 @@
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a：AccountHist 加 emgId、reviewId（來源緊急存取單號／定期審查流水號；後端一直有回 emgId，型別補齊）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 第 3 單位（裁示 ①A）：Account 加 reviewStateCode（只有 GET /accounts/{id} 帶值；不在審查範圍為 null）
 // ============================================================
+import type { ReviewStateCode } from './review'
 
 /** 申請類型（IM_ACCT_REQ.REQ_TYPE_CODE） */
 export type ReqTypeCode = 'ADD' | 'MODIFY' | 'DISABLE' | 'ENABLE' | 'DELETE'
@@ -57,6 +61,8 @@ export interface Account {
   pendingVerify?: boolean
   /** 依 Table 6.5 前提且無在途時可發起的異動 */
   allowedReqTypes?: ReqTypeCode[]
+  /** 審查狀態（後端以當天計算；只有 /accounts/{id} 帶值，不在審查範圍為 null；第 158 項 R5） */
+  reviewStateCode?: ReviewStateCode | null
 }
 
 /** GET /accounts 回傳 */

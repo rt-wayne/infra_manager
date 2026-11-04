@@ -9,6 +9,10 @@
   AI版本  : Claude Fable 5 (claude-fable-5)
   修改日期: 2026-10-13
   變更說明: BACKLOG 第 46 項 S10：目前狀態加「審查異常」標籤，另列原因／標記日期／標記人（工號）
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: BACKLOG 第 158 項 R5 第 3 單位（裁示 ①A）：「定期審查」列改以後端 reviewStateCode 決定顯示（不在審查範圍不顯示，
+            原本看 nextReviewDate 有沒有值），內容為狀態標籤（顏色同定期審查清單）＋上次／下次審查日
 -->
 <template>
   <BaseModal :title="`帳號詳情 — ${acct?.acctName || acctId}`" :sub="`單號：${acctId}`" @close="emit('close')">
@@ -30,7 +34,13 @@
         </div>
       </div>
       <div v-if="isOn(acct.isReviewFlag)" class="kv"><div class="k">審查異常標記</div><div class="v review-flag-info">{{ reviewFlagText }}</div></div>
-      <div v-if="acct.nextReviewDate" class="kv"><div class="k">定期審查</div><div class="v">上次 {{ dateOnly(acct.lastReviewDate) || '—' }}　·　下次 {{ dateOnly(acct.nextReviewDate) }}</div></div>
+      <div v-if="acct.reviewStateCode" class="kv review-row">
+        <div class="k">定期審查</div>
+        <div class="v">
+          <span class="tag review-state" :class="reviewStateTagClass(acct.reviewStateCode)">{{ label(REVIEW_STATE_LABEL, acct.reviewStateCode) }}</span>
+          　上次 {{ dateOnly(acct.lastReviewDate) || '—' }}　·　下次 {{ dateOnly(acct.nextReviewDate) || '—' }}
+        </div>
+      </div>
     </template>
     <template #actions>
       <AcctOpButtons v-if="!readonly && acct && ops.length > 0" :acct-id="acct.acctId" :acct-name="acct.acctName" :ops="ops" :show-view="false" />
@@ -54,9 +64,11 @@ import {
   ACCT_STATE_LABEL,
   DOOR_CATG_ID,
   DOOR_SCOPE_LABEL,
+  REVIEW_STATE_LABEL,
   accountOps,
   isOn,
   label,
+  reviewStateTagClass,
   stateTagClass
 } from '../utils/labels'
 
