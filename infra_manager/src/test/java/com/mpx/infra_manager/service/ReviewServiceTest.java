@@ -27,6 +27,10 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R5 實測裁示：②A 同人判斷只比有效身分——「實際操作人相同」兩例改為放行（切換身分代簽可簽、可駁回）；
 //           ①A 歷史說明斷言改「Infra 主管」「資訊治理主管」「下輪兩位主管重簽」
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5b（裁示 ①B）：歷史說明在代簽時帶「（實際操作人：姓名）」——雙簽完成那筆（第二位是切換身分簽的）斷言
+//           改含實際操作人；加一筆第一位是代簽、第二位本人簽；駁回那筆加代駁與另一位代簽的文字；signerText 四種輸入
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -185,7 +189,9 @@ class ReviewServiceTest {
 		assertThat(h.getActBy()).isEqualTo(TESTER);
 		assertThat(h.getActAsId()).isEqualTo(TERRY);
 		assertThat(h.getIsSelfAction()).isZero();
-		assertThat(h.getResultDescr()).isEqualTo("定期審查駁回（Infra 主管）；駁回人 " + NAMES.get(TERRY) + "；原因：使用人已調單位；資訊治理主管尚未簽核");
+		// R5b ①B：TESTER 切換成 TERRY 代駁 → 駁回人帶實際操作人
+		assertThat(h.getResultDescr()).isEqualTo("定期審查駁回（Infra 主管）；駁回人 " + NAMES.get(TERRY) + "（實際操作人：" + NAMES.get(TESTER)
+				+ "）；原因：使用人已調單位；資訊治理主管尚未簽核");
 		assertThat(fx.txm.commits).isEqualTo(1);
 		assertThat(fx.txm.rollbacks).isZero();
 	}
@@ -411,9 +417,37 @@ class ReviewServiceTest {
 		assertThat(h.getActAsId()).isEqualTo(MOLLY);
 		assertThat(h.getActDate()).isEqualTo(NOW);
 		assertThat(h.getIsSelfAction()).isZero();
+		// R5b ①B：第二位（MOLLY）是 TESTER 切換身分代簽的 → 帶實際操作人；第一位 TERRY 本人簽 → 不帶
 		assertThat(h.getResultDescr()).startsWith("定期審查完成（雙簽）；Infra 主管 " + NAMES.get(TERRY) + " 於 2026-10-07 09:30:00")
-				.contains("；資訊治理主管 " + NAMES.get(MOLLY) + " 於 2026-10-07 10:30:00")
+				.contains("；資訊治理主管 " + NAMES.get(MOLLY) + "（實際操作人：" + NAMES.get(TESTER) + "） 於 2026-10-07 10:30:00")
 				.contains("；上次審查日改為 2026-10-07、下次應審查日 2027-04-05");
+	}
+
+	@Test
+	void 歷史說明_第一位是代簽第二位本人簽_只有第一位帶實際操作人_駁回同樣處理() {
+		// Infra 主管 TERRY 是 TESTER 代簽的；MOLLY 本人簽資訊治理主管
+		ReviewItem byProxy = infraSigned(3);
+		byProxy.setInfraSignActBy(TESTER);
+		byProxy.setInfraSignActByName(NAMES.get(TESTER));
+		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(byProxy);
+		svc.sign(id(MOLLY), ACCT, form("GOV", 3));
+		assertThat(fx.hists.get(0).getResultDescr())
+				.startsWith("定期審查完成（雙簽）；Infra 主管 " + NAMES.get(TERRY) + "（實際操作人：" + NAMES.get(TESTER) + "） 於 2026-10-07 09:30:00")
+				.contains("；資訊治理主管 " + NAMES.get(MOLLY) + " 於 2026-10-07 10:30:00");
+
+		// 駁回：MOLLY 由 TESTER 代駁、另一位 TERRY 也是代簽 → 兩個人名都帶
+		fx.hists.clear();
+		when(fx.reviewDao.findByAcct(ACCT, TODAY)).thenReturn(byProxy);
+		svc.reject(impersonate(TESTER, MOLLY), ACCT, rejectForm("GOV", "權限過大", 3));
+		assertThat(fx.hists.get(0).getResultDescr()).isEqualTo("定期審查駁回（資訊治理主管）；駁回人 " + NAMES.get(MOLLY)
+				+ "（實際操作人：" + NAMES.get(TESTER) + "）；原因：權限過大；Infra 主管已由 " + NAMES.get(TERRY) + "（實際操作人："
+				+ NAMES.get(TESTER) + "） 於 2026-10-07 09:30:00 簽核（本輪結束，下輪兩位主管重簽）");
+
+		// signerText：相同不帶、不同帶姓名、姓名查無用工號、舊資料沒有實際操作人只顯示有效身分
+		assertThat(ReviewService.signerText("甲", "A", "甲", "A")).isEqualTo("甲");
+		assertThat(ReviewService.signerText("甲", "A", "乙", "B")).isEqualTo("甲（實際操作人：乙）");
+		assertThat(ReviewService.signerText(null, "A", null, "B")).isEqualTo("A（實際操作人：B）");
+		assertThat(ReviewService.signerText("甲", "A", null, null)).isEqualTo("甲");
 	}
 
 	@Test

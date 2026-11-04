@@ -32,6 +32,10 @@
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R5 實測裁示（2026-11-04 ①A／②A）：REVIEW_HALF_LABEL 拿掉「半」改「Infra 主管」「資訊治理主管」；
 //           reviewActableHalves 同人判斷只比有效身分，不再比實際操作人（切換身分代簽不擋；後端 checkSameSigner 同步）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5b（裁示 ①B）：reviewSignerText——簽核人文字在實際操作人≠有效身分時走 personText 加「（實際操作人：姓名）」，
+//           清單兩位主管欄與彈窗簽核狀況共用
 // ============================================================
 import type { ReqTypeCode } from '../types/account'
 import type { Me } from '../types/common'
@@ -333,6 +337,17 @@ export function histActorText(h: { actByName?: string | null; actBy?: string | n
 export function personText(byName: string | null | undefined, asName: string | null | undefined): string {
   const by = byName || '—'
   return asName ? `${asName}（實際操作人：${by}）` : by
+}
+
+/**
+ * 定期審查簽核人文字（R5b ①B；清單兩位主管欄與彈窗共用）：還沒簽回 null；
+ * 有效身分姓名（查無用工號），實際操作人與有效身分不同（切換身分代簽）才加「（實際操作人：姓名）」；舊資料沒有實際操作人欄不加
+ */
+export function reviewSignerText(byName: string | null, by: string | null, actByName: string | null, actBy: string | null): string | null {
+  if (!by && !byName) return null
+  const eff = byName || by || ''
+  if (!actBy || actBy === by) return eff
+  return personText(actByName || actBy, eff)
 }
 
 /** U02：此案件先前已被複驗退回過，上次退回原因：{VERIFY_REJECT_REASON} */

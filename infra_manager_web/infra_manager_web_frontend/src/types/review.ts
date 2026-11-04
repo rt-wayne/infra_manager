@@ -4,6 +4,9 @@
 // 變更說明: 新增：定期審查型別（BACKLOG 第 158 項 R5；後端 GET /reviews、POST /reviews/{acctId}/sign|reject，PRD API 表「定期審查」）
 //           reviewStateCode 為後端查詢當下計算的帳號審查狀態（不存欄位）；reviewId 起十欄＝進行中那一輪（IM_ACCT_REVIEW OPEN 列），沒有就 null
 //           時間欄位一律 yyyy-MM-dd HH:mm:ss 字串
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5b（裁示 ①B）：加 infraSignActByName／govSignActByName（實際操作人姓名，代簽顯示用）
 // ============================================================
 
 /** 帳號審查狀態（計算值）：審查異常／逾期未審／待複審／正常 */
@@ -39,16 +42,19 @@ export interface ReviewItem {
   reviewFlagSourceCode: string | null
   reviewFlagDate: string | null
   reviewStateCode: ReviewStateCode
-  /** 以下十欄＝進行中那一輪；還沒有人簽時皆為 null */
+  /** 以下十二欄＝進行中那一輪；還沒有人簽時皆為 null */
   reviewId: number | null
   reviewVersionNo: number | null
   infraSignBy: string | null
   infraSignByName: string | null
+  /** 實際操作人（切換身分代簽時與 infraSignBy 不同）與其姓名 */
   infraSignActBy: string | null
+  infraSignActByName: string | null
   infraSignDate: string | null
   govSignBy: string | null
   govSignByName: string | null
   govSignActBy: string | null
+  govSignActByName: string | null
   govSignDate: string | null
 }
 

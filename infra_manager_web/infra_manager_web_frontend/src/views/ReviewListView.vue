@@ -17,6 +17,9 @@
   AI版本  : Claude Fable 5.1 (claude-fable-5-1)
   修改日期: 2026-11-04
   變更說明: R5 實測裁示（2026-11-04 ①A）：表頭「Infra 半」「治理半」改「Infra 主管」「資訊治理主管」（拿掉「半」）
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: R5b（裁示 ①B）：兩位主管欄的簽核人改走共用 reviewSignerText，切換身分代簽時顯示「姓名（實際操作人：姓名） 時間」
 -->
 
 <template>
@@ -65,8 +68,8 @@
               <td>{{ dateOnly(r.lastReviewDate) || '—' }}</td>
               <td>{{ dateOnly(r.nextReviewDate) || '—' }}</td>
               <td><span class="tag" :class="reviewStateTagClass(r.reviewStateCode)">{{ label(REVIEW_STATE_LABEL, r.reviewStateCode) }}</span></td>
-              <td class="half">{{ halfText(r.infraSignByName, r.infraSignBy, r.infraSignDate) }}</td>
-              <td class="half">{{ halfText(r.govSignByName, r.govSignBy, r.govSignDate) }}</td>
+              <td class="half">{{ halfText(r, 'INFRA') }}</td>
+              <td class="half">{{ halfText(r, 'GOV') }}</td>
               <td>
                 <span class="ops">
                   <button v-if="canReview(r)" type="button" class="btn-link op-review" @click="reviewing = r">審查</button>
@@ -97,9 +100,9 @@ import { listReviews } from '../api/review'
 import { usePaging } from '../composables/usePaging'
 import { useSession } from '../composables/useSession'
 import { useToast } from '../composables/useToast'
-import type { ReviewItem, ReviewQuery } from '../types/review'
+import type { ReviewHalf, ReviewItem, ReviewQuery } from '../types/review'
 import { dateOnly, toMinute } from '../utils/date'
-import { REVIEW_STATE_FILTER, REVIEW_STATE_LABEL, accountOps, isOn, label, reviewActableHalves, reviewStateTagClass } from '../utils/labels'
+import { REVIEW_STATE_FILTER, REVIEW_STATE_LABEL, accountOps, isOn, label, reviewActableHalves, reviewSignerText, reviewStateTagClass } from '../utils/labels'
 
 const { toast } = useToast()
 const { can, me } = useSession()
@@ -138,10 +141,13 @@ function goDisable(r: ReviewItem): void {
   void router.push({ path: '/requests/new', query })
 }
 
-/** 一半的簽核狀況：「姓名 2026-10-30 10:30」，還沒簽顯示「—」 */
-function halfText(name: string | null, by: string | null, date: string | null): string {
-  if (!by && !name) return '—'
-  return `${name || by} ${toMinute(date)}`.trim()
+/** 一位主管的簽核狀況：「姓名 2026-10-30 10:30」，代簽時「姓名（實際操作人：姓名） 時間」，還沒簽顯示「—」 */
+function halfText(r: ReviewItem, half: ReviewHalf): string {
+  const who = half === 'INFRA'
+    ? reviewSignerText(r.infraSignByName, r.infraSignBy, r.infraSignActByName, r.infraSignActBy)
+    : reviewSignerText(r.govSignByName, r.govSignBy, r.govSignActByName, r.govSignActBy)
+  if (!who) return '—'
+  return `${who} ${toMinute(half === 'INFRA' ? r.infraSignDate : r.govSignDate)}`.trim()
 }
 
 async function load(): Promise<void> {

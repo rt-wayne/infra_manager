@@ -9,6 +9,9 @@ package com.mpx.infra_manager.model;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R3a：加兩半的實際操作人 infraSignActBy／govSignActBy（裁示 ⑪A：同一實際操作人不得簽兩半）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5b（裁示 ①B）：加兩位實際操作人的姓名 infraSignActByName／govSignActByName，畫面與歷史在代簽時顯示
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -47,13 +50,15 @@ public class ReviewItem {
 	private Integer reviewVersionNo;
 	private String infraSignBy;
 	private String infraSignByName;
-	/** Infra 半的實際操作人（切換身分代簽時與 infraSignBy 不同） */
+	/** Infra 主管簽核的實際操作人（切換身分代簽時與 infraSignBy 不同） */
 	private String infraSignActBy;
+	private String infraSignActByName;
 	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
 	private LocalDateTime infraSignDate;
 	private String govSignBy;
 	private String govSignByName;
 	private String govSignActBy;
+	private String govSignActByName;
 	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
 	private LocalDateTime govSignDate;
 
@@ -265,6 +270,14 @@ public class ReviewItem {
 		this.infraSignActBy = infraSignActBy;
 	}
 
+	public String getInfraSignActByName() {
+		return infraSignActByName;
+	}
+
+	public void setInfraSignActByName(String infraSignActByName) {
+		this.infraSignActByName = infraSignActByName;
+	}
+
 	public LocalDateTime getInfraSignDate() {
 		return infraSignDate;
 	}
@@ -295,6 +308,14 @@ public class ReviewItem {
 
 	public void setGovSignActBy(String govSignActBy) {
 		this.govSignActBy = govSignActBy;
+	}
+
+	public String getGovSignActByName() {
+		return govSignActByName;
+	}
+
+	public void setGovSignActByName(String govSignActByName) {
+		this.govSignActByName = govSignActByName;
 	}
 
 	public LocalDateTime getGovSignDate() {

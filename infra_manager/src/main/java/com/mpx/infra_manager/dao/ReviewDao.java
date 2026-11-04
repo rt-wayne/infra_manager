@@ -26,6 +26,10 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-10-30
 // 變更說明: BACKLOG 第 158 項 R4（帳號異動連動，裁示 ⑤A）：UPDATE_CANCEL 把某帳號進行中的一輪改 CANCELED（以 ACCT_ID＋OPEN 當條件、
 //           不帶版本——是關卡 6 生效的系統動作，呼叫端已鎖帳號主表列；0 筆＝本來就沒有進行中的輪，正常）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5b（代簽可見標記，裁示 ①B）：SELECT_COLS 多回兩位實際操作人的姓名 INFRA_SIGN_ACT_BY_NAME／GOV_SIGN_ACT_BY_NAME
+//           （再接兩個同步表別名 UIA／UGA），前端在實際操作人≠有效身分時顯示「（實際操作人：姓名）」
 // ============================================================
 
 import java.time.LocalDate;
@@ -85,9 +89,13 @@ public class ReviewDao {
 			""" + "       " + REVIEW_STATE_EXPR + " AS REVIEW_STATE_CODE,\n" + """
 			       R.REVIEW_ID, R.VERSION_NO AS REVIEW_VERSION_NO, R.INFRA_SIGN_BY,
 			""" + "       " + EmpSql.nameExpr("UI", "R.INFRA_SIGN_BY") + " AS INFRA_SIGN_BY_NAME,\n" + """
-			       R.INFRA_SIGN_ACT_BY, R.INFRA_SIGN_DATE, R.GOV_SIGN_BY,
+			       R.INFRA_SIGN_ACT_BY,
+			""" + "       " + EmpSql.nameExpr("UIA", "R.INFRA_SIGN_ACT_BY") + " AS INFRA_SIGN_ACT_BY_NAME,\n" + """
+			       R.INFRA_SIGN_DATE, R.GOV_SIGN_BY,
 			""" + "       " + EmpSql.nameExpr("UG", "R.GOV_SIGN_BY") + " AS GOV_SIGN_BY_NAME,\n" + """
-			       R.GOV_SIGN_ACT_BY, R.GOV_SIGN_DATE""";
+			       R.GOV_SIGN_ACT_BY,
+			""" + "       " + EmpSql.nameExpr("UGA", "R.GOV_SIGN_ACT_BY") + " AS GOV_SIGN_ACT_BY_NAME,\n" + """
+			       R.GOV_SIGN_DATE""";
 
 	/** 帳號主表起手的 FROM／JOIN（不含 R）：類別、啟用中分類、三組姓名 */
 	private static final String FROM_ACCT = """
@@ -97,7 +105,9 @@ public class ReviewDao {
 
 	private static final String JOIN_NAMES = "  " + EmpSql.joinEmp("UA", "A.APPLY_BY") + "\n"
 			+ "  " + EmpSql.joinEmp("UI", "R.INFRA_SIGN_BY") + "\n"
-			+ "  " + EmpSql.joinEmp("UG", "R.GOV_SIGN_BY") + "\n";
+			+ "  " + EmpSql.joinEmp("UIA", "R.INFRA_SIGN_ACT_BY") + "\n"
+			+ "  " + EmpSql.joinEmp("UG", "R.GOV_SIGN_BY") + "\n"
+			+ "  " + EmpSql.joinEmp("UGA", "R.GOV_SIGN_ACT_BY") + "\n";
 
 	/** 清單與簽核重讀：R＝進行中那一輪（同帳號最多一筆，沒有就 NULL） */
 	static final String SELECT_BASE = SELECT_COLS + "\n" + FROM_ACCT

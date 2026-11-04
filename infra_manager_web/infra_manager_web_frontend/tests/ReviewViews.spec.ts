@@ -18,6 +18,10 @@
 // 修改日期: 2026-11-04
 // 變更說明: R5 實測裁示（2026-11-04 ①A／②A）：文案斷言改「Infra 主管」「資訊治理主管」「另一位主管」；同人判斷只比有效身分——
 //           「實際操作人是我」那兩例改成要顯示「審查」鈕／簽核鈕（切換身分代簽放行）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: R5b（裁示 ①B）：夾具加 infraSignActByName／govSignActByName；清單與彈窗各加一例——代簽顯示「姓名（實際操作人：姓名） 時間」、
+//           實際操作人相同不加、沒有姓名用工號
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -64,8 +68,8 @@ export function reviewItem(over: Partial<ReviewItem> = {}): ReviewItem {
     isReviewFlag: 0, reviewFlagReason: null, reviewFlagSourceCode: null, reviewFlagDate: null,
     reviewStateCode: 'OVERDUE',
     reviewId: null, reviewVersionNo: null,
-    infraSignBy: null, infraSignByName: null, infraSignActBy: null, infraSignDate: null,
-    govSignBy: null, govSignByName: null, govSignActBy: null, govSignDate: null,
+    infraSignBy: null, infraSignByName: null, infraSignActBy: null, infraSignActByName: null, infraSignDate: null,
+    govSignBy: null, govSignByName: null, govSignActBy: null, govSignActByName: null, govSignDate: null,
     ...over
   }
 }
@@ -125,6 +129,23 @@ describe('定期審查清單', () => {
     expect(door[2].find('.priv').text()).toBe('特權')
     expect(door[7].text()).toBe('Terry (陳泰瑞) 2026-10-30 09:15')
     expect(door[8].text()).toBe('—')
+    w.unmount()
+  })
+
+  it('代簽顯示（R5b ①B）：實際操作人≠有效身分加「（實際操作人：姓名）」、沒有姓名用工號；相同不加', async () => {
+    listMock.mockResolvedValue([
+      reviewItem({
+        reviewId: 9, reviewVersionNo: 2,
+        infraSignBy: '0000004', infraSignByName: 'Terry (陳泰瑞)', infraSignActBy: '0000099', infraSignActByName: 'Hank (黃志翰)', infraSignDate: '2026-10-30 09:15:00',
+        govSignBy: '0000005', govSignByName: 'Molly (莫莉)', govSignActBy: '0000098', govSignActByName: null, govSignDate: '2026-10-30 10:00:00'
+      }),
+      reviewItem({ reviewId: 10, reviewVersionNo: 1, infraSignBy: '0000004', infraSignByName: 'Terry (陳泰瑞)', infraSignActBy: '0000004', infraSignActByName: 'Terry (陳泰瑞)', infraSignDate: '2026-10-30 09:15:00' })
+    ])
+    const w = await mountList()
+    const rows = w.findAll('tbody tr')
+    expect(rows[0].findAll('td')[7].text()).toBe('Terry (陳泰瑞)（實際操作人：Hank (黃志翰)） 2026-10-30 09:15')
+    expect(rows[0].findAll('td')[8].text()).toBe('Molly (莫莉)（實際操作人：0000098） 2026-10-30 10:00')
+    expect(rows[1].findAll('td')[7].text()).toBe('Terry (陳泰瑞) 2026-10-30 09:15')
     w.unmount()
   })
 
@@ -310,6 +331,12 @@ describe('定期審查簽核彈窗', () => {
 
     ;({ w } = await mountModal(reviewItem({ ...govSigned(), reviewStateCode: 'DUE' })))
     expect(w.find('.half-gov .v').text()).toBe('Terry (陳泰瑞) 2026-10-30 09:15')
+    w.unmount()
+
+    // R5b ①B：資訊治理主管是 Hank 切換成 Terry 簽的 → 帶實際操作人
+    ;({ w } = await mountModal(reviewItem({ ...govSigned(), reviewStateCode: 'DUE', govSignActBy: '0000099', govSignActByName: 'Hank (黃志翰)' })))
+    expect(w.find('.half-gov .v').text()).toBe('Terry (陳泰瑞)（實際操作人：Hank (黃志翰)） 2026-10-30 09:15')
+    expect(w.find('.half-infra .v').text()).toBe('尚未簽核')
     expect(w.text()).not.toContain('第一次簽核時建立本輪紀錄')
     expect(w.find('.act-sign-infra').exists()).toBe(true)
     expect(w.find('.act-sign-gov').exists()).toBe(false)

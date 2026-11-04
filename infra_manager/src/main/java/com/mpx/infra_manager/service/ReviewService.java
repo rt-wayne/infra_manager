@@ -30,6 +30,10 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R5 實測裁示：②A checkSameSigner 只比有效身分、不再比實際操作人（切換身分代簽放行；⑪A 範圍縮小）；
 //           ①A 歷史說明文字拿掉「半」（「Infra 主管 X 於…；資訊治理主管 Y 於…」、「下輪兩位主管重簽」）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5b（裁示 ①B）：REVIEW_DONE／REVIEW_REJECT 歷史說明裡的簽核人與駁回人，實際操作人≠有效身分時
+//           加「（實際操作人：姓名）」（signerText；同前端 personText 的呈現）；沒切換身分時文字不變
 // ============================================================
 
 import java.time.Clock;
@@ -280,9 +284,12 @@ public class ReviewService {
 	 */
 	private static AcctHist doneHist(Identity id, ReviewItem item, long reviewId, boolean infra, LocalDateTime now,
 			LocalDate today, LocalDate next) {
-		String infraName = infra ? id.getUserName() : item.getInfraSignByName();
+		String me = signerText(id.getUserName(), id.getUserId(), id.getRealUserName(), id.getRealUserId());
+		String infraName = infra ? me
+				: signerText(item.getInfraSignByName(), item.getInfraSignBy(), item.getInfraSignActByName(), item.getInfraSignActBy());
 		LocalDateTime infraDate = infra ? now : item.getInfraSignDate();
-		String govName = infra ? item.getGovSignByName() : id.getUserName();
+		String govName = infra ? signerText(item.getGovSignByName(), item.getGovSignBy(), item.getGovSignActByName(), item.getGovSignActBy())
+				: me;
 		LocalDateTime govDate = infra ? item.getGovSignDate() : now;
 		StringBuilder sb = new StringBuilder();
 		sb.append("定期審查完成（雙簽）；").append(AcctConst.reviewHalfName(AcctConst.HALF_INFRA)).append(' ').append(infraName)
@@ -299,11 +306,13 @@ public class ReviewService {
 	 */
 	private static AcctHist rejectHist(Identity id, ReviewItem item, long reviewId, String half, String reason, LocalDateTime now) {
 		boolean infra = AcctConst.HALF_INFRA.equals(half);
-		String otherName = infra ? item.getGovSignByName() : item.getInfraSignByName();
+		String otherName = infra ? signerText(item.getGovSignByName(), item.getGovSignBy(), item.getGovSignActByName(), item.getGovSignActBy())
+				: signerText(item.getInfraSignByName(), item.getInfraSignBy(), item.getInfraSignActByName(), item.getInfraSignActBy());
 		LocalDateTime otherDate = infra ? item.getGovSignDate() : item.getInfraSignDate();
 		String otherHalf = AcctConst.reviewHalfName(infra ? AcctConst.HALF_GOV : AcctConst.HALF_INFRA);
 		StringBuilder sb = new StringBuilder();
-		sb.append("定期審查駁回（").append(AcctConst.reviewHalfName(half)).append("）；駁回人 ").append(id.getUserName());
+		sb.append("定期審查駁回（").append(AcctConst.reviewHalfName(half)).append("）；駁回人 ")
+				.append(signerText(id.getUserName(), id.getUserId(), id.getRealUserName(), id.getRealUserId()));
 		sb.append("；原因：").append(reason);
 		if (otherDate == null) {
 			sb.append("；").append(otherHalf).append("尚未簽核");
@@ -312,6 +321,18 @@ public class ReviewService {
 					.append(" 簽核（本輪結束，下輪兩位主管重簽）");
 		}
 		return reviewHist(id, item, reviewId, AcctConst.ACT_REVIEW_REJECT, infra, sb.toString(), now);
+	}
+
+	/**
+	 * 歷史說明裡的人名（R5b ①B）：有效身分姓名；實際操作人與有效身分不同（切換身分代簽）時加「（實際操作人：姓名）」，
+	 * 與前端 personText 同一呈現。姓名查無時以工號代替；舊資料沒有實際操作人欄就只顯示有效身分
+	 */
+	static String signerText(String byName, String by, String actByName, String actBy) {
+		String eff = byName != null ? byName : by;
+		if (actBy == null || actBy.equals(by)) {
+			return eff;
+		}
+		return eff + "（實際操作人：" + (actByName != null ? actByName : actBy) + "）";
 	}
 
 	/**

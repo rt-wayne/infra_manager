@@ -190,7 +190,7 @@
 - 軌跡：切換寫 IMPERSONATE、切回寫 IMPERSONATE_END（RESULT_CODE＝SUCCESS）；無權限者嘗試切換 → 403 並寫一筆 DENY。
 - 操作人顯示（三種位置格式不同）：
   - **帳號歷史**：「{實際操作人}（以 {代理身分} 身分）」，例「何嘉浤（以 許永成 身分）」（人名只有中文名，讀同步表；第 124 項前寫入的「英文名 (中文名)」快照已由腳本 R 改成中文名；緊急存取事件的結果文字是自由文字，舊紀錄裡寫的申請人、結案人維持「英文名 (中文名)」，腳本 R 不改）；排程事件顯示「系統排程」（`labels.ts` histActorText）。
-  - **巡檢填寫人、異常處理人**：「{代理身分}（實際操作人：{實際操作人}）」，例「李凱鈞（實際操作人：何嘉浤）」（`labels.ts` personText）。
+  - **巡檢填寫人、異常處理人、定期審查簽核人**：「{代理身分}（實際操作人：{實際操作人}）」，例「李凱鈞（實際操作人：何嘉浤）」（`labels.ts` personText；定期審查清單兩位主管欄與彈窗走 reviewSignerText，實際操作人與有效身分相同時不加括號；REVIEW_DONE／REVIEW_REJECT 歷史說明的簽核人、駁回人同寫法，後端 `ReviewService.signerText`）。
   - **通知本文、待辦**：申請人只顯示有效身分（申請單 APPLY_BY 本來就記有效身分），不帶實際操作人。
 
 | 欄位種類 | 記誰 | 欄位 |
@@ -569,17 +569,17 @@
   4. **DUE 待複審**：NEXT_REVIEW_DATE ≤ 今天＋30（含當天）；
   5. **NORMAL 正常**：其餘。
 - **誰能看**：有 REVIEW_LIST 的人（初始資料：INFRA_MGR、GOV_MGR、IT_HEAD）看全部，沒有就 403；不做「只看自己的」。有 REVIEW_LIST 的人同時取得「可看帳號」第六條（見「2. 權限與資料範圍」），能開有審查狀態的帳號明細與歷史。
-- **清單**：`GET /reviews`，預設列需要處理的三種（異常、逾期未審、待複審），stateCode 給 NORMAL 才列正常的；每列帶進行中那一輪（IM_ACCT_REVIEW 的 OPEN 列）的流水號、版本、兩位主管的簽核人（有效身分與實際操作人）與時間，還沒有人簽時皆為空。欄位與錯誤見「API 規格」。
+- **清單**：`GET /reviews`，預設列需要處理的三種（異常、逾期未審、待複審），stateCode 給 NORMAL 才列正常的；每列帶進行中那一輪（IM_ACCT_REVIEW 的 OPEN 列）的流水號、版本、兩位主管的簽核人（有效身分與實際操作人，各帶姓名）與時間，還沒有人簽時皆為空。欄位與錯誤見「API 規格」。
 - **用語**（2026-11-04 裁示 ①A）：兩個簽核身分在所有使用者看得到的文字一律稱「Infra 主管」（half＝INFRA）、「資訊治理主管」（half＝GOV），合稱「兩位主管」、對方稱「另一位主管」；不用「半」。程式識別名（half、HALF_INFRA、REJECT_HALF_CODE）沿用。
 - **簽核（雙簽）**：`POST /reviews/{acctId}/sign`，half＝INFRA（需 REVIEW_SIGN_INFRA）或 GOV（需 REVIEW_SIGN_GOV），不需要 REVIEW_LIST。
   - **只有待複審、逾期未審可以簽**（審查異常、正常、不在範圍都回 409「此帳號目前不在待複審或逾期未審狀態，不能簽核」）；狀態在交易內以簽核當天重算，不信任前端看到的。交易一開始先鎖該帳號主表那一列（FOR UPDATE、不設等待上限），同一帳號另一位主管的簽核、緊急存取標異常旗標、之後的關卡 6 取消本輪都排在它後面執行，不會出現「讀到舊狀態卻完成審查」或各建一輪；列鎖不影響一般讀取。
   - **本輪紀錄在第一次簽核時才建立**（IM_ACCT_REVIEW 一列：OPEN、DUE_DATE＝當時的下次應審查日、為空則當天、只填簽核那位主管的三欄）。還沒有進行中一輪時 versionNo 帶 0；兩人同時首簽，後到者撞唯一索引後改為對既有那一輪補另一位主管的簽核，不會建出兩輪。
   - **已有進行中一輪**：versionNo 須等於該輪版本（否則 409 E08）；同一身分已有人簽 → 409 E08；**同一人不得同時擔任兩位簽核主管**——另一位主管的簽核人（有效身分）是我 → 409「同一人不得同時以 Infra 主管與資訊治理主管身分簽核」。只比有效身分、不比實際操作人：A 本人簽了 Infra 主管，A 切換成 B 的身分再簽資訊治理主管會放行（2026-11-04 裁示 ②A，取代原 ⑪A「切換身分代簽也擋」）。每次簽核版本＋1。
-  - **兩位主管都簽完＝完成**：本輪改 DONE（記完成時間、新下次應審查日，版本再＋1）；主表上次審查日＝完成當天、下次應審查日＝完成當天＋180；帳號歷史一筆 REVIEW_DONE（來源 REVIEW、帶 REVIEW_ID；ACT_BY＝第二位簽核的實際操作人、ACT_AS＝代理身分、IS_SELF_ACTION＝兩位主管任一簽核人（有效身分）是該帳號原新增申請人，歷史畫面標「自行審查」（U12）；說明寫兩位主管的簽核人與時間、新日期）。只有一位主管簽核時不寫歷史、不寄信。主表更新 0 筆時整筆回滾、回 500。
+  - **兩位主管都簽完＝完成**：本輪改 DONE（記完成時間、新下次應審查日，版本再＋1）；主表上次審查日＝完成當天、下次應審查日＝完成當天＋180；帳號歷史一筆 REVIEW_DONE（來源 REVIEW、帶 REVIEW_ID；ACT_BY＝第二位簽核的實際操作人、ACT_AS＝代理身分、IS_SELF_ACTION＝兩位主管任一簽核人（有效身分）是該帳號原新增申請人，歷史畫面標「自行審查」（U12）；說明寫兩位主管的簽核人與時間、新日期，簽核人在實際操作人與有效身分不同時寫「{有效身分}（實際操作人：{姓名}）」、相同時只寫姓名——2026-11-04 裁示 ①B，讓一人切換身分完成雙簽在畫面與歷史都看得出來）。只有一位主管簽核時不寫歷史、不寄信。主表更新 0 筆時整筆回滾、回 500。
   - 驗證順序：簽核角色不是 INFRA／GOV 400 → 無對應權限 403 → 未帶 versionNo E02 → 查無帳號 404 → 不可簽 409 → 版本／同身分已簽／同人 409。
   - 完成後狀態自然回到「正常」（下次應審查日往後推），不另記「本輪已完成」。
 - **駁回**：`POST /reviews/{acctId}/reject`，half 與權限同簽核；reason 必填、500 字（按碼點）；versionNo 規則同簽核。
-  - **任一位主管駁回，整輪結束**：本輪改 REJECTED（記駁回身分、駁回人有效身分與實際操作人、時間、原因），另一位主管已完成的簽核留存、不帶到下一輪（下輪兩位主管重簽）。還沒有進行中一輪就直接建一列 REJECTED（靠同一把帳號列鎖，不會與同時的首簽各建一輪）。
+  - **任一位主管駁回，整輪結束**：本輪改 REJECTED（記駁回身分、駁回人有效身分與實際操作人、時間、原因），另一位主管已完成的簽核留存、不帶到下一輪（下輪兩位主管重簽）；歷史 REVIEW_REJECT 說明裡的駁回人與另一位主管簽核人同樣在代簽時帶「（實際操作人：{姓名}）」。還沒有進行中一輪就直接建一列 REJECTED（靠同一把帳號列鎖，不會與同時的首簽各建一輪）。
   - **擋的情況（409）**：帳號不在待複審／逾期未審；版本不符；被駁回的那個身分已有人簽（簽了就是簽了，同身分的主管不能再推翻）；另一位主管的簽核是我（有效身分）簽的（同一人不得以兩個身分出現在同一輪；只比有效身分，切換身分代駁放行，2026-11-04 ②A）。
   - **同交易**：帳號主表標審查異常旗標，來源 REVIEW、原因「定期審查駁回：{原因}」截 500 字（主表 0 筆時整筆回滾、回 500）；帳號歷史一筆 REVIEW_REJECT（來源 REVIEW、帶 REVIEW_ID；說明寫駁回身分、駁回人、原因、另一位主管的簽核狀況；IS_SELF_ACTION 判準同完成）。**不動審查日**：異常清除後回到依日期判斷（見「審查狀態」）。
   - **提交後寄駁回信** REVIEW_REJECT 給原新增申請人與所有 REVIEW_SIGN_GOV 持有人（同一人只寄一封）；寄信失敗不影響駁回結果。信件本文見「通知」定期審查駁回信本文。
@@ -649,7 +649,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | `/requests` | 帳號申請單列表 | ACC_SELF_SERVICE | 三區塊：① 對既有帳號提出異動（完整名稱輸入＋U05；查無 U06；在途不顯示操作）② 我的申請單（狀態篩選；已退件顯示原因與「重新送出」；標題列收合鈕，預設展開）③ 我曾申請新增的帳號（在途只有查看、歷史；標題列收合鈕，預設收合）。收合只藏內容不卸載（資料照常載入、篩選與頁碼保留），狀態不記住、每次進頁回預設 |
 | `/requests/new` | 帳號權限申請 | ACC_APPLY | 新增；異動（帶 reqType、acctId、acctName）；重送（帶 resubmit＝單號）；刪除顯示 U03 |
 | `/emergency` | 緊急存取 | 登入 | 關鍵字（單號、申請人、帳號或系統）、狀態（五種，加「未處理（含逾期）」；網址 `?state=` 為合法值時當預設，首頁卡導入用）、送出日期（預設全部，可選近 7／30／90 天或自訂區間）；無 EMG_VIEW_ALL 顯示「只顯示您送出的緊急存取單」；有 EMG_APPLY 才有「＋ 緊急存取申請」；「查看」開詳情 |
-| `/reviews` | 定期審查 | REVIEW_LIST | 關鍵字（帳號單號、帳號名稱、使用人、所屬系統）、狀態（預設「需處理（異常、逾期、待複審）」＝後端不帶 stateCode，另四種各一；網址 `?state=` 為合法值時當預設，首頁第四區導入用）；上方一行說明狀態如何計算；每列：帳號單號、類別、帳號名稱（門禁卡未發卡顯示「（門禁卡，待發卡）」，特權加紅標）與所屬系統、使用人、上次／下次審查日（只到日）、審查狀態標籤（異常紅、逾期橘、待複審黃、正常綠）、進行中那一輪 Infra 主管與資訊治理主管的簽核人與時間（到分；沒簽「—」）；操作欄：「審查」（有我可以簽核或駁回的身分才顯示——狀態待複審／逾期未審、該身分我有權限（REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV）且尚未有人簽、另一位主管的簽核人（有效身分）不是我（不比實際操作人，切換身分代簽放行）；與彈窗按鈕同一判斷，先簽完自己那部分的主管在清單上不會再看到「審查」；開簽核／駁回彈窗）、「停用申請」（審查異常列、我有 ACC_APPLY、帳號狀態可停用；帶 reqType＝DISABLE、acctId、acctName 進申請表單）。**簽核／駁回彈窗**：帳號摘要（類別、名稱、系統、使用人、上次／下次審查、原申請人、資產分類；掛旗標另列異常原因）與本輪兩位主管的簽核狀況（沒簽「尚未簽核」）；簽核鈕兩個身分各一「以 Infra 主管簽核」「以資訊治理主管簽核」，只在該身分是「我可以簽核或駁回的身分」（定義同上）時出現，按下先開確認框（寫明另一位主管的狀況、雙簽後日期往後推 180 天）；「駁回」在任一身分可由我駁回時出現（可駁回的身分＝可簽核的身分），原因必填 500 字（按碼點、去頭尾空白），兩個身分都可駁回時單選「駁回身分」、只有一個時預選不顯示；狀態可簽但沒有任何我可動作的身分時（例如直接開網址、或資料剛被別人簽過）顯示一行說明、沒有按鈕；versionNo 帶進行中那一輪版本、沒有一輪帶 0。簽核成功 toast 後關閉並重查清單；駁回成功彈窗留著、副標改「狀態：審查異常（已駁回）」並顯示「已駁回（身分）：原因」與「發起停用申請」鈕（需 ACC_APPLY 且帳號狀態可停用）→ 同上捷徑；409（版本不符、同身分已簽、同人兩個身分、狀態已變）照後端訊息 toast、關閉並重查；其他錯誤只 toast、彈窗留著；送出中忽略關閉 |
+| `/reviews` | 定期審查 | REVIEW_LIST | 關鍵字（帳號單號、帳號名稱、使用人、所屬系統）、狀態（預設「需處理（異常、逾期、待複審）」＝後端不帶 stateCode，另四種各一；網址 `?state=` 為合法值時當預設，首頁第四區導入用）；上方一行說明狀態如何計算；每列：帳號單號、類別、帳號名稱（門禁卡未發卡顯示「（門禁卡，待發卡）」，特權加紅標）與所屬系統、使用人、上次／下次審查日（只到日）、審查狀態標籤（異常紅、逾期橘、待複審黃、正常綠）、進行中那一輪 Infra 主管與資訊治理主管的簽核人與時間（到分；沒簽「—」；切換身分代簽時「{有效身分}（實際操作人：{姓名}） 時間」，姓名查無用工號）；操作欄：「審查」（有我可以簽核或駁回的身分才顯示——狀態待複審／逾期未審、該身分我有權限（REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV）且尚未有人簽、另一位主管的簽核人（有效身分）不是我（不比實際操作人，切換身分代簽放行）；與彈窗按鈕同一判斷，先簽完自己那部分的主管在清單上不會再看到「審查」；開簽核／駁回彈窗）、「停用申請」（審查異常列、我有 ACC_APPLY、帳號狀態可停用；帶 reqType＝DISABLE、acctId、acctName 進申請表單）。**簽核／駁回彈窗**：帳號摘要（類別、名稱、系統、使用人、上次／下次審查、原申請人、資產分類；掛旗標另列異常原因）與本輪兩位主管的簽核狀況（沒簽「尚未簽核」；代簽寫法同清單）；簽核鈕兩個身分各一「以 Infra 主管簽核」「以資訊治理主管簽核」，只在該身分是「我可以簽核或駁回的身分」（定義同上）時出現，按下先開確認框（寫明另一位主管的狀況、雙簽後日期往後推 180 天）；「駁回」在任一身分可由我駁回時出現（可駁回的身分＝可簽核的身分），原因必填 500 字（按碼點、去頭尾空白），兩個身分都可駁回時單選「駁回身分」、只有一個時預選不顯示；狀態可簽但沒有任何我可動作的身分時（例如直接開網址、或資料剛被別人簽過）顯示一行說明、沒有按鈕；versionNo 帶進行中那一輪版本、沒有一輪帶 0。簽核成功 toast 後關閉並重查清單；駁回成功彈窗留著、副標改「狀態：審查異常（已駁回）」並顯示「已駁回（身分）：原因」與「發起停用申請」鈕（需 ACC_APPLY 且帳號狀態可停用）→ 同上捷徑；409（版本不符、同身分已簽、同人兩個身分、狀態已變）照後端訊息 toast、關閉並重查；其他錯誤只 toast、彈窗留著；送出中忽略關閉 |
 | `/emergency/new` | 緊急存取申請 | EMG_APPLY | 上方固定「送出即生效⋯」；帳號類別列全部（不開放新增申請者加註「（停用）」）、預估時長下拉 1～24 小時、申請人唯讀（切換中顯示「{代理}（實際操作人：{實際}）」）；兩文字欄不限制輸入長度，字數按字元、去頭尾空白計算，超過上限計數變紅、送出時擋下；送出前確認框寫明立即生效、無法撤回與期限估計；成功 toast 單號並回清單；送出無回應或 5xx 時 toast 並在表單上方常駐「無法確認是否已送出⋯」與清單連結（可能已寫入，避免重複送出），4xx 顯示後端訊息 |
 | `/assets` | 資產分類說明 | 登入 | 15 碼表格 |
 | `/inspections` | 巡檢紀錄 | INSP_VIEW | 查詢；明細彈窗可標記處理（INSP_RESOLVE） |
@@ -1236,12 +1236,12 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 
 | 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
 |---|---|---|---|---|---|
-| GET | `/reviews` | REVIEW_LIST（看全部，沒有就 403，不做「只看自己」） | query：keyword、stateCode（ABNORMAL／OVERDUE／DUE／NORMAL；不給＝ABNORMAL＋OVERDUE＋DUE） | [acctId、catgId、catgName、acctName、sysName、assetClassId、assetClassName、isPriv、holderName、holderDept、accessLevelCode、acctStateCode、applyBy、applyByName、lastReviewDate、nextReviewDate、isReviewFlag、reviewFlagReason、reviewFlagSourceCode、reviewFlagDate、reviewStateCode、reviewId、reviewVersionNo、infraSignBy、infraSignByName、infraSignActBy、infraSignDate、govSignBy、govSignByName、govSignActBy、govSignDate（reviewId 起 10 欄＝進行中那一輪，沒有就 null）] | 403、400 欄位內容不正確（狀態） |
+| GET | `/reviews` | REVIEW_LIST（看全部，沒有就 403，不做「只看自己」） | query：keyword、stateCode（ABNORMAL／OVERDUE／DUE／NORMAL；不給＝ABNORMAL＋OVERDUE＋DUE） | [acctId、catgId、catgName、acctName、sysName、assetClassId、assetClassName、isPriv、holderName、holderDept、accessLevelCode、acctStateCode、applyBy、applyByName、lastReviewDate、nextReviewDate、isReviewFlag、reviewFlagReason、reviewFlagSourceCode、reviewFlagDate、reviewStateCode、reviewId、reviewVersionNo、infraSignBy、infraSignByName、infraSignActBy、infraSignActByName、infraSignDate、govSignBy、govSignByName、govSignActBy、govSignActByName、govSignDate（reviewId 起 12 欄＝進行中那一輪，沒有就 null）] | 403、400 欄位內容不正確（狀態） |
 
 | POST | `/reviews/{acctId}/sign` | half＝INFRA 需 REVIEW_SIGN_INFRA、GOV 需 REVIEW_SIGN_GOV | half（INFRA／GOV）、versionNo（進行中那一輪的版本；還沒有一輪時帶 0） | acctId、reviewId、reviewStateCode（OPEN＝還差另一位主管、DONE＝雙簽完成）、versionNo（動作後的版本） | 400 欄位內容不正確（簽核角色）、403、400 E02、404、409 此帳號目前不在待複審或逾期未審狀態，不能簽核、409 E08（版本不符、同一身分已簽、以為沒有一輪卻帶了版本）、409 同一人不得同時以 Infra 主管與資訊治理主管身分簽核、500 資料寫入未完成 |
 | POST | `/reviews/{acctId}/reject` | 同 sign | half、reason（必填、500 字）、versionNo（同 sign） | 同 sign，reviewStateCode＝REJECTED | 同 sign，另有 400 E02／E11 駁回原因；409 E08 多一種：被駁回的身分已有人簽 |
 
-清單的 reviewId～govSignDate 十欄（含 infraSignActBy／govSignActBy 兩個實際操作人）為進行中那一輪，沒有就 null。keyword 以 LIKE 比對 ACCT_ID、ACCT_NAME、HOLDER_NAME、SYS_NAME（跳脫同上）。不在審查範圍（reviewStateCode 為空）的帳號不會出現；排序：審查異常 → 逾期未審（下次應審查日最舊先、空值最前）→ 待複審 → 正常，同狀態依下次應審查日、單號。審查狀態定義見「15. 定期審查」。
+清單的 reviewId～govSignDate 十二欄（含 infraSignActBy／govSignActBy 兩個實際操作人與其姓名 infraSignActByName／govSignActByName，姓名讀同步表）為進行中那一輪，沒有就 null。keyword 以 LIKE 比對 ACCT_ID、ACCT_NAME、HOLDER_NAME、SYS_NAME（跳脫同上）。不在審查範圍（reviewStateCode 為空）的帳號不會出現；排序：審查異常 → 逾期未審（下次應審查日最舊先、空值最前）→ 待複審 → 正常，同狀態依下次應審查日、單號。審查狀態定義見「15. 定期審查」。
 
 **排程**
 

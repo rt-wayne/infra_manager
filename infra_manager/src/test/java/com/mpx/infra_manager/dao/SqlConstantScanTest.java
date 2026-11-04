@@ -559,7 +559,11 @@ class SqlConstantScanTest {
 	/** 第 158 項 R3a：簽核 SQL——首簽建輪、簽半樂觀鎖、雙簽完成；歷史帶 REVIEW_ID */
 	@Test
 	void 定期審查SQL_簽核_首簽建輪_簽半樂觀鎖_雙簽完成_歷史帶REVIEW_ID() {
-		assertThat(ReviewDao.SELECT_BASE).contains("R.INFRA_SIGN_ACT_BY").contains("R.GOV_SIGN_ACT_BY");
+		assertThat(ReviewDao.SELECT_BASE).contains("R.INFRA_SIGN_ACT_BY").contains("R.GOV_SIGN_ACT_BY")
+				// R5b ①B：兩位實際操作人的姓名也接同步表（清單與單輪查詢共用 SELECT_COLS，FIND_ROUND 同樣帶到）
+				.contains(" AS INFRA_SIGN_ACT_BY_NAME").contains(" AS GOV_SIGN_ACT_BY_NAME")
+				.contains(EmpSql.joinEmp("UIA", "R.INFRA_SIGN_ACT_BY")).contains(EmpSql.joinEmp("UGA", "R.GOV_SIGN_ACT_BY"));
+		assertThat(ReviewDao.FIND_ROUND).contains(" AS INFRA_SIGN_ACT_BY_NAME").contains(EmpSql.joinEmp("UGA", "R.GOV_SIGN_ACT_BY"));
 		assertThat(ReviewDao.FIND_BY_ACCT).contains(ReviewDao.REVIEW_STATE_EXPR).contains("WHERE A.ACCT_ID = :acctId")
 				.doesNotContain(":stateCode").doesNotContain(":keyword");
 		assertThat(ReviewDao.NEXT_REVIEW_ID).contains("SEQ_IM_ACCT_REVIEW.NEXTVAL AS CNT");

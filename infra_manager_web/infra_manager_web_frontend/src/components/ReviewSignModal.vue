@@ -20,6 +20,9 @@
   修改日期: 2026-11-04
   變更說明: R5 實測裁示（2026-11-04 ①A／②A）：文案拿掉「半」——兩個簽核身分改稱「Infra 主管」「資訊治理主管」（按鈕「以 Infra 主管簽核」、
             駁回單選「駁回身分」、說明與 toast 改「另一位主管」）；同人判斷只比有效身分，切換身分代簽不再擋（判斷在 reviewActableHalves）
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: R5b（裁示 ①B）：本輪簽核兩列改走共用 reviewSignerText，切換身分代簽時顯示「姓名（實際操作人：姓名） 時間」
 -->
 <template>
   <BaseModal :title="`定期審查 — ${item.acctId}`" :sub="subText" wide @close="closeMain">
@@ -44,11 +47,11 @@
     <div class="divider-lbl">本輪簽核</div>
     <div class="kv half-infra">
       <div class="k">{{ REVIEW_HALF_LABEL.INFRA }}</div>
-      <div class="v">{{ halfText(item.infraSignByName, item.infraSignBy, item.infraSignDate) }}</div>
+      <div class="v">{{ halfText('INFRA') }}</div>
     </div>
     <div class="kv half-gov">
       <div class="k">{{ REVIEW_HALF_LABEL.GOV }}</div>
-      <div class="v">{{ halfText(item.govSignByName, item.govSignBy, item.govSignDate) }}</div>
+      <div class="v">{{ halfText('GOV') }}</div>
     </div>
     <p v-if="!item.reviewId && signable" class="hint">還沒有人簽核；第一次簽核時建立本輪紀錄。</p>
     <p v-if="signable && !rejected && actable.length === 0" class="hint no-action">目前沒有您可以執行的簽核或駁回：您負責的簽核已完成，或另一位主管的簽核是以您目前的身分簽的；請等待另一位主管簽核。</p>
@@ -103,7 +106,7 @@ import { useSession } from '../composables/useSession'
 import { useToast } from '../composables/useToast'
 import type { ReviewHalf, ReviewItem } from '../types/review'
 import { dateOnly, toMinute } from '../utils/date'
-import { REVIEW_HALF_LABEL, REVIEW_SIGNABLE_STATES, REVIEW_STATE_LABEL, accountOps, isOn, label, reviewActableHalves } from '../utils/labels'
+import { REVIEW_HALF_LABEL, REVIEW_SIGNABLE_STATES, REVIEW_STATE_LABEL, accountOps, isOn, label, reviewActableHalves, reviewSignerText } from '../utils/labels'
 import { charLen } from '../utils/text'
 
 const REASON_MAX = 500
@@ -155,10 +158,14 @@ const rejectableHalves = actable
 /** 駁回後的停用捷徑：需 ACC_APPLY，且帳號目前狀態可發起停用（有在途申請與否由後端檢查） */
 const canDisable = computed(() => can('ACC_APPLY') && accountOps({ acctStateCode: props.item.acctStateCode }).includes('DISABLE'))
 
-/** 一位主管的簽核狀況：「姓名 2026-10-30 10:30」，還沒簽顯示「尚未簽核」 */
-function halfText(name: string | null, by: string | null, date: string | null): string {
-  if (!by && !name) return '尚未簽核'
-  return `${name || by} ${toMinute(date)}`.trim()
+/** 一位主管的簽核狀況：「姓名 2026-10-30 10:30」，代簽時「姓名（實際操作人：姓名） 時間」，還沒簽顯示「尚未簽核」 */
+function halfText(half: ReviewHalf): string {
+  const x = props.item
+  const who = half === 'INFRA'
+    ? reviewSignerText(x.infraSignByName, x.infraSignBy, x.infraSignActByName, x.infraSignActBy)
+    : reviewSignerText(x.govSignByName, x.govSignBy, x.govSignActByName, x.govSignActBy)
+  if (!who) return '尚未簽核'
+  return `${who} ${toMinute(half === 'INFRA' ? x.infraSignDate : x.govSignDate)}`.trim()
 }
 
 /** 送出中不關主彈窗（卸載後 emit 會被丟掉）；子彈窗開著時也不關（鍵盤 Tab 摸得到底下的關閉鈕） */
