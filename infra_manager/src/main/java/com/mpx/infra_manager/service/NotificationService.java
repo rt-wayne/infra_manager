@@ -73,6 +73,11 @@ package com.mpx.infra_manager.service;
 //           主旨「【定期審查】{帳號單號} 待複審（應審查日 yyyy-MM-dd）」（裁示 ①A），本文帳號 6 列＋上次／下次應審查日＋兩位主管本輪簽核狀況
 //           （代簽時加「（實際操作人：姓名）」，與 ReviewService.signerText 同口徑），信末提醒 REVIEW_DUE_FOOTER、連結待辦簽核（R6 後可在待辦直接簽）；
 //           參照 REVIEW／ACCT_ID_下次應審查日yyyymmdd（⑭A，reviewRefId 與 ReviewDao.REVIEW_REF_EXPR 同口徑）、CREATE_BY＝SYSTEM；回寫入筆數
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R7 第 2 單位（⑲A；裁示 ②B 主旨沿用「【帳號到期】」前綴、③A 收件人不變）：weeklySummary 多收逾期未審帳號清單，
+//           內文加第二區塊 reviewOverdueBlock（■ 逾期未審帳號：帳號單號、類別、帳號名稱、使用人、上次審查日、下次應審查日、逾期天數；
+//           從未審查（任一日期為空）顯示「從未審查」；0 筆 U13_REVIEW），主旨改「本週彙總：已逾期未處理 {n} 筆、逾期未審 {m} 筆」
 // ============================================================
 
 import java.time.Clock;
@@ -112,8 +117,12 @@ public class NotificationService {
 	static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 	static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	static final int ERR_MSG_MAX = 500;
-	/** J02 0 筆時的本文（spec §4.15 U13） */
+	/** J02 已逾期區塊 0 筆時的本文（spec §4.15 U13） */
 	static final String U13 = "目前沒有已逾期未處理的帳號";
+	/** J02 逾期未審區塊 0 筆時的本文（第 158 項 R7，⑲A） */
+	static final String U13_REVIEW = "目前沒有逾期未審的帳號";
+	/** 逾期未審區塊的「逾期天數」欄：上次或下次應審查日為空（⑥A 算逾期）時顯示 */
+	static final String NEVER_REVIEWED = "從未審查";
 	/** 不在寄送名單的 SKIP 寫入 ERR_MSG 的文字 */
 	static final String NOT_IN_ALLOW_LIST = "不在寄送名單";
 
@@ -542,12 +551,16 @@ public class NotificationService {
 		}
 	}
 
-	/** WEEKLY_SUMMARY：到期角色成員，每人一封；內文以區塊組成（第二階段加入逾期未審區塊不改結構） */
-	public int weeklySummary(String weekKey, List<Acct> expired, LocalDate today) {
+	/**
+	 * WEEKLY_SUMMARY：到期角色成員（GOV），每人一封；內文兩個區塊：已逾期未處理帳號、逾期未審帳號（R7 ⑲A）。
+	 * 主旨同時寫兩個筆數（裁示 ②B 沿用「【帳號到期】」前綴，收件匣舊信新信排在一起；③A 收件人不加簽核權限持有人）
+	 */
+	public int weeklySummary(String weekKey, List<Acct> expired, List<ReviewItem> overdueReview, LocalDate today) {
 		try {
 			List<String> blocks = new ArrayList<>();
 			blocks.add(expiredBlock(expired, today));
-			String subject = "【帳號到期】本週已逾期未處理帳號彙總（" + expired.size() + " 筆）";
+			blocks.add(reviewOverdueBlock(overdueReview, today));
+			String subject = "【帳號到期】本週彙總：已逾期未處理 " + expired.size() + " 筆、逾期未審 " + overdueReview.size() + " 筆";
 			return sendAll(AcctConst.EV_WEEKLY_SUMMARY, AcctConst.REF_WEEK, weekKey, inRole(AcctConst.MAIL_ROLE_EXPIRY), subject,
 					html.page(subject, String.join("", blocks), MailHtml.PATH_HOME), AcctConst.SYSTEM_USER).written();
 		} catch (RuntimeException e) {
@@ -570,6 +583,26 @@ public class NotificationService {
 					exp == null ? "" : exp.format(DATE), exp == null ? "" : String.valueOf(ChronoUnit.DAYS.between(exp, today))));
 		}
 		return head + MailHtml.rowsTable(List.of("單號", "類別", "帳號名稱", "使用人", "到期日", "逾期天數"), rows);
+	}
+
+	/**
+	 * 逾期未審區塊（HTML 片段，R7 ⑲A）：區塊標題＋多欄表；0 筆顯示 U13_REVIEW。
+	 * 逾期天數＝今天－下次應審查日；上次或下次為空（從未審查、⑥A 算逾期）顯示「從未審查」
+	 */
+	static String reviewOverdueBlock(List<ReviewItem> overdue, LocalDate today) {
+		String head = MailHtml.heading("■ 逾期未審帳號");
+		if (overdue.isEmpty()) {
+			return head + MailHtml.para(U13_REVIEW);
+		}
+		List<List<String>> rows = new ArrayList<>();
+		for (ReviewItem r : overdue) {
+			LocalDate last = r.getLastReviewDate() == null ? null : r.getLastReviewDate().toLocalDate();
+			LocalDate next = r.getNextReviewDate() == null ? null : r.getNextReviewDate().toLocalDate();
+			String days = last == null || next == null ? NEVER_REVIEWED : String.valueOf(ChronoUnit.DAYS.between(next, today));
+			rows.add(List.of(nvl(r.getAcctId(), ""), nvl(nvl(r.getCatgName(), r.getCatgId()), ""),
+					acctNameText(r.getCatgId(), r.getAcctName()), nvl(r.getHolderName(), ""), dateText(last), dateText(next), days));
+		}
+		return head + MailHtml.rowsTable(List.of("帳號單號", "類別", "帳號名稱", "使用人", "上次審查日", "下次應審查日", "逾期天數"), rows);
 	}
 
 	/**

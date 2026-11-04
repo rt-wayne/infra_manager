@@ -72,6 +72,11 @@ package com.mpx.infra_manager.service;
 //           查詢失敗整體 FAIL、手動 baseDate 收日期（BASE_DATE 寫 00:00）、排程觸發 RUN_BY 空、不碰 J01／J02／J03；
 //           通知測試——reviewDue 寄兩個簽核權限持有人去重、主旨含應審查日、本文 10 列（兩位主管簽核狀況：尚未簽核／已簽／代簽帶實際操作人）、
 //           提醒句、連結待辦簽核、紀錄 REVIEW_DUE／REVIEW／ACCT_ID_下次應審查日／SYSTEM；無收件人回 0；例外回 0 不外拋
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R7 第 2 單位（⑲A）：J02 測試改驗多查逾期未審、筆數＝兩區塊合計、本週已寄不查、不碰 J04；
+//           weeklySummary 改四參數，主旨「本週彙總：已逾期未處理 {n} 筆、逾期未審 {m} 筆」、0 筆兩段文案、
+//           HTML 測試加第二區塊（七欄、逾期天數、從未審查、門禁卡待發卡、值跳脫、區塊順序）
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -320,13 +325,21 @@ class JobAndNotifyTest {
 		JobRunResult sent = job.runManual(id(HANK), "J02", null);
 		assertThat(sent.getResultCode()).isEqualTo("SUCCESS");
 		assertThat(sent.getAffectedCnt()).isZero();
-		verify(fx.notificationService, never()).weeklySummary(any(), any(), any());
+		verify(fx.notificationService, never()).weeklySummary(any(), any(), any(), any());
+		verify(fx.reviewDao, never()).findOverdueForSummary(any());
 
 		when(fx.notifyLogDao.countByEventRef(AcctConst.EV_WEEKLY_SUMMARY, AcctConst.REF_WEEK, "20261005")).thenReturn(0L);
 		Acct e = fx.acct("AR20261001-001", "DB", AcctConst.AS_EXPIRED);
 		when(fx.acctDao.findExpiredAll()).thenReturn(List.of(e));
-		assertThat(job.runManual(id(HANK), "J02", null).getAffectedCnt()).isEqualTo(1);
-		verify(fx.notificationService).weeklySummary("20261005", List.of(e), TODAY);
+		// R7 ⑲A：逾期未審帳號以基準日查、一起交給同一封信；筆數＝兩個區塊合計
+		ReviewItem o1 = dueItem("AR20261001-002");
+		ReviewItem o2 = dueItem("AR20261001-003");
+		when(fx.reviewDao.findOverdueForSummary(TODAY)).thenReturn(List.of(o1, o2));
+		assertThat(job.runManual(id(HANK), "J02", null).getAffectedCnt()).isEqualTo(3);
+		verify(fx.notificationService).weeklySummary("20261005", List.of(e), List.of(o1, o2), TODAY);
+		// 不碰 J04 的查詢與寄信
+		verify(fx.reviewDao, never()).findDueUnnotified(any(), any());
+		verify(fx.notificationService, never()).reviewDue(any(), any());
 	}
 
 	@Test
@@ -412,7 +425,7 @@ class JobAndNotifyTest {
 		verify(fx.acctDao, never()).findToExpire(any());
 		verify(fx.acctDao, never()).findExpiredAll();
 		verify(fx.notifyLogDao, never()).countByEventRef(eq(AcctConst.EV_WEEKLY_SUMMARY), any(), any());
-		verify(fx.notificationService, never()).weeklySummary(any(), any(), any());
+		verify(fx.notificationService, never()).weeklySummary(any(), any(), any(), any());
 		verify(fx.notificationService, never()).expiryEvent(any(), any(), any());
 	}
 
@@ -651,7 +664,7 @@ class JobAndNotifyTest {
 		verify(fx.acctDao, never()).findExpiredAll();
 		verify(fx.emgDao, never()).findOverdueUnnotified(any(), any());
 		verify(fx.notifyLogDao, never()).countByEventRef(eq(AcctConst.EV_WEEKLY_SUMMARY), any(), any());
-		verify(fx.notificationService, never()).weeklySummary(any(), any(), any());
+		verify(fx.notificationService, never()).weeklySummary(any(), any(), any(), any());
 		verify(fx.notificationService, never()).expiryEvent(any(), any(), any());
 		verify(fx.notificationService, never()).emgOverdue(any(), any());
 	}
@@ -767,8 +780,11 @@ class JobAndNotifyTest {
 				.thenReturn(List.of(rcpt("0000003", "c@example.com"), rcpt("0000005", null)));
 		when(fx.permDao.findUsersInRoles(List.of("SYS_ADMIN"))).thenReturn(List.of(rcpt("0000009", "s@example.com")));
 
-		assertThat(n.weeklySummary("20261005", List.of(), TODAY)).isEqualTo(2);
-		verify(sender).send(eq("c@example.com"), eq("【帳號到期】本週已逾期未處理帳號彙總（0 筆）"), anyString());
+		ArgumentCaptor<String> weekly = ArgumentCaptor.forClass(String.class);
+		assertThat(n.weeklySummary("20261005", List.of(), List.of(), TODAY)).isEqualTo(2);
+		verify(sender).send(eq("c@example.com"), eq("【帳號到期】本週彙總：已逾期未處理 0 筆、逾期未審 0 筆"), weekly.capture());
+		// 兩個區塊 0 筆各有自己的文案（U13、U13_REVIEW）
+		assertThat(weekly.getValue()).contains("■ 已逾期未處理帳號", "目前沒有已逾期未處理的帳號", "■ 逾期未審帳號", "目前沒有逾期未審的帳號");
 		verify(fx.notifyLogDao).insert(eq("WEEKLY_SUMMARY"), eq("WEEK"), eq("20261005"), eq("0000005"), isNull(), eq("SKIP"),
 				isNull(), any(), eq(AcctConst.SYSTEM_USER));
 
@@ -952,12 +968,30 @@ class JobAndNotifyTest {
 				.contains("<a href=\"http://h/ctx/#/\"", "前往「機房與帳號權限管理系統」", "逾期天數", FOOTER)
 				.doesNotContainPattern(CELL_WITHOUT_FONT);
 
-		n.weeklySummary("20261005", List.of(a), TODAY);
-		verify(sender).send(eq("c@example.com"), eq("【帳號到期】本週已逾期未處理帳號彙總（1 筆）"), body.capture());
+		// R7 ⑲A：第二區塊逾期未審——一筆有日期（逾期 20 天）、一筆從未審查（兩個日期都空）；值一樣跳脫
+		ReviewItem o1 = dueItem("AR20261001-002");
+		o1.setCatgName("資料庫");
+		o1.setAcctName("<i>db</i>");
+		o1.setHolderName("王小明");
+		o1.setLastReviewDate(LocalDate.of(2026, 3, 20).atStartOfDay());
+		o1.setNextReviewDate(LocalDate.of(2026, 9, 17).atStartOfDay());
+		ReviewItem o2 = dueItem("AR20261001-003");
+		o2.setCatgId("DOOR");
+		o2.setAcctName(null);
+		o2.setLastReviewDate(null);
+		o2.setNextReviewDate(null);
+		n.weeklySummary("20261005", List.of(a), List.of(o1, o2), TODAY);
+		verify(sender).send(eq("c@example.com"), eq("【帳號到期】本週彙總：已逾期未處理 1 筆、逾期未審 2 筆"), body.capture());
 		assertThat(body.getValue()).contains("■ 已逾期未處理帳號", "<th", ">單號</th>", ">逾期天數</th>",
 				">AR20261001-001</td>", ">&lt;b&gt;x&lt;/b&gt;</td>", ">2026-10-06</td>", ">1</td>", "<a href=\"http://h/ctx/#/\"")
-				.doesNotContain("<b>")
+				.contains("■ 逾期未審帳號", ">帳號單號</th>", ">上次審查日</th>", ">下次應審查日</th>",
+						">AR20261001-002</td>", ">資料庫</td>", ">&lt;i&gt;db&lt;/i&gt;</td>", ">王小明</td>", ">2026-03-20</td>", ">2026-09-17</td>", ">20</td>",
+						">AR20261001-003</td>", ">（門禁卡，待發卡）</td>", ">從未審查</td>")
+				.doesNotContain("<b>").doesNotContain("<i>").doesNotContain("null").doesNotContain("半")
 				.doesNotContainPattern(CELL_WITHOUT_FONT);
+		// 已逾期區塊在前、逾期未審區塊在後
+		assertThat(body.getValue().indexOf("■ 已逾期未處理帳號")).isLessThan(body.getValue().indexOf("■ 逾期未審帳號"));
+		assertThat(NotificationService.reviewOverdueBlock(List.of(), TODAY)).contains("目前沒有逾期未審的帳號").doesNotContain("<table");
 
 		n.jobFail("J01", 77L, AcctConst.JR_FAIL, "Illegal<State>");
 		verify(sender).send(eq("c@example.com"), eq("【排程失敗】J01 執行失敗"), body.capture());

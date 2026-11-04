@@ -54,6 +54,10 @@ package com.mpx.infra_manager.service;
 // 變更說明: BACKLOG 第 158 項 R7：新增 J04 定期審查待複審通知（預設每日 00:20，infra.manager.job.j04.cron；日期型基準同 J01／J02）——
 //           查待複審（DUE）且本輪（參照鍵 ACCT_ID_下次應審查日）尚無 REVIEW_DUE 紀錄的帳號（⑱A），逐帳號寄給兩位主管權限持有人（⑰A、⑯A）；
 //           AFFECTED_CNT＝有寫入通知紀錄的帳號數，寄信失敗不算 PARTIAL（同 J01 第 2、3 步口徑），查詢失敗整體 FAIL；建構子加 ReviewDao
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R7 第 2 單位（⑲A）：J02 多查逾期未審帳號（ReviewDao.findOverdueForSummary）一併交給 weeklySummary，
+//           AFFECTED_CNT＝已逾期未處理帳號數＋逾期未審帳號數；本週已寄過仍為 0、收件人與防重寄不變
 // ============================================================
 
 import java.time.Clock;
@@ -433,11 +437,13 @@ public class JobService {
 			return new Outcome(AcctConst.JR_SUCCESS, 0, null);
 		}
 		List<Acct> expired = acctDao.findExpiredAll();
-		int written = notificationService.weeklySummary(key, expired, base);
+		// R7 ⑲A：逾期未審帳號（以基準日算審查狀態）併入同一封信；處理筆數＝兩個區塊的帳號數合計
+		List<ReviewItem> overdueReview = reviewDao.findOverdueForSummary(base);
+		int written = notificationService.weeklySummary(key, expired, overdueReview, base);
 		if (written == 0) {
 			log.warn("J02 無任何收件人（未寫入通知紀錄），週鍵={}；結果照常 SUCCESS，下次執行會再嘗試", key);
 		}
-		return new Outcome(AcctConst.JR_SUCCESS, expired.size(), null);
+		return new Outcome(AcctConst.JR_SUCCESS, expired.size() + overdueReview.size(), null);
 	}
 
 	/** 週鍵＝基準日所在週的週一（yyyymmdd） */

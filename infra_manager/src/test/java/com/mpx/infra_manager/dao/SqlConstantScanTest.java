@@ -127,7 +127,8 @@ package com.mpx.infra_manager.dao;
 //           綁 :today）；FIND_BY_ID 與 SELECT_BASE 不得帶 :today（其他查詢不算狀態）
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
-// 變更說明: BACKLOG 第 158 項 R7：ReviewDao.REVIEW_REF_EXPR 與 FIND_DUE_UNNOTIFIED 斷言（只取 DUE、NOT EXISTS 通知紀錄以 :eventCode＋REVIEW＋參照鍵比對）
+// 變更說明: BACKLOG 第 158 項 R7：ReviewDao.REVIEW_REF_EXPR 與 FIND_DUE_UNNOTIFIED 斷言（只取 DUE、NOT EXISTS 通知紀錄以 :eventCode＋REVIEW＋參照鍵比對）；
+//           第 2 單位加 FIND_OVERDUE_FOR_SUMMARY 斷言（只取 OVERDUE、NULLS FIRST、不帶通知紀錄條件）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -568,6 +569,10 @@ class SqlConstantScanTest {
 				.contains("N.REF_TYPE_CODE = 'REVIEW'").contains("N.REF_ID = " + ReviewDao.REVIEW_REF_EXPR)
 				.contains("ORDER BY X.NEXT_REVIEW_DATE, X.ACCT_ID").contains(":today").doesNotContain("X.REVIEW_STATE_CODE IN")
 				.doesNotContain(":stateCode").doesNotContain("SYSDATE");
+		// R7 J02 週彙總：只取逾期未審、逾期最久的先（空值最前）；不帶通知紀錄條件（防重寄在週鍵）
+		assertThat(ReviewDao.FIND_OVERDUE_FOR_SUMMARY).contains(ReviewDao.SELECT_BASE).contains("WHERE X.REVIEW_STATE_CODE = 'OVERDUE'")
+				.contains("ORDER BY X.NEXT_REVIEW_DATE NULLS FIRST, X.ACCT_ID").contains(":today").doesNotContain("IM_ACCT_NOTIFY_LOG")
+				.doesNotContain(":eventCode").doesNotContain(":stateCode");
 	}
 
 	/** 第 158 項 R3a：簽核 SQL——首簽建輪、簽半樂觀鎖、雙簽完成；歷史帶 REVIEW_ID */

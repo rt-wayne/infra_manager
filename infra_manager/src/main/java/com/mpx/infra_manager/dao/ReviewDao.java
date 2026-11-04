@@ -38,7 +38,8 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R7（J04 待複審通知）：REVIEW_REF_EXPR 通知參照鍵 ACCT_ID_下次應審查日yyyymmdd（⑭A，與
 //           NotificationService.reviewRefId 同口徑）；FIND_DUE_UNNOTIFIED／findDueUnnotified——待複審（DUE）且此參照鍵尚無任何
-//           :eventCode 通知紀錄的帳號（⑱A 只寄待複審，逾期未審由 J02 週彙總涵蓋），寫法比照 AcctDao.NOT_NOTIFIED
+//           :eventCode 通知紀錄的帳號（⑱A 只寄待複審，逾期未審由 J02 週彙總涵蓋），寫法比照 AcctDao.NOT_NOTIFIED；
+//           FIND_OVERDUE_FOR_SUMMARY／findOverdueForSummary——逾期未審（OVERDUE）全部帳號給 J02 週彙總「逾期未審」區塊（⑲A），逾期最久的先
 // ============================================================
 
 import java.time.LocalDate;
@@ -184,6 +185,15 @@ public class ReviewDao {
 			 ORDER BY X.NEXT_REVIEW_DATE, X.ACCT_ID
 			""";
 
+	/** J02 週彙總（R7，⑲A）：逾期未審（上次或下次為空、或下次 < 今天）的全部帳號，逾期最久的先（下次應審查日舊到新、空值最前）、單號 */
+	public static final String FIND_OVERDUE_FOR_SUMMARY = """
+			SELECT X.*
+			  FROM (""" + SELECT_BASE + """
+			       ) X
+			 WHERE X.REVIEW_STATE_CODE = 'OVERDUE'
+			 ORDER BY X.NEXT_REVIEW_DATE NULLS FIRST, X.ACCT_ID
+			""";
+
 	/** 單筆（簽核交易內重讀狀態用）：不過濾狀態，不在範圍時 REVIEW_STATE_CODE 為 NULL，由 Service 判斷 */
 	public static final String FIND_BY_ACCT = SELECT_BASE + """
 			 WHERE A.ACCT_ID = :acctId
@@ -309,6 +319,13 @@ public class ReviewDao {
 		params.put("eventCode", eventCode);
 		params.put("today", DaoSupport.ts(today));
 		return dbClient.query(itflowDb, FIND_DUE_UNNOTIFIED, params, ReviewItem.class);
+	}
+
+	/** J02 用：逾期未審的全部帳號；today＝基準日（綁 00:00） */
+	public List<ReviewItem> findOverdueForSummary(LocalDate today) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("today", DaoSupport.ts(today));
+		return dbClient.query(itflowDb, FIND_OVERDUE_FOR_SUMMARY, params, ReviewItem.class);
 	}
 
 	/** 查無回 null；reviewStateCode 為 null＝不在審查範圍 */
