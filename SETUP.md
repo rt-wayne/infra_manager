@@ -126,7 +126,7 @@ DB 直接改角色或執行人之前，先用下方唯讀查詢確認不會讓�
 
 **既有環境升級到角色權限維護介面**（角色指派、執行人對照、角色權限設定三個畫面）：以 RD_USER 執行 `db\infra_manager_89_role_admin.sql`（執行方式同上）。本檔只更新 IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM 四張表的 COMMENT、不動結構、不需 GRANT（AP_USER 對相關表本來就有四種權限，2026-10-19 於測試 DB 實查；正式環境執行後用檔尾第三句再核對一次，少了 INSERT 或 UPDATE 就要補 GRANT）；資料只改一個值：SYS_ADMIN 的角色說明拿掉「角色指派與執行人對照第一階段以 DB 維護」，且只在說明仍是初始舊字時才改。可重跑；全新環境用建表檔與初始資料檔建完不必跑（兩檔已同步）。檔尾四句查詢的期望值寫在該段註解。
 
-**既有環境升級到定期審查文案（拿掉「半」）**（第 158 項 R5，2026-11-04 裁示；已跑過定期權限審查腳本的測試、UAT、正式環境，與 R5 部署同一批執行）：以 RD_USER 執行 `db\infra_manager_158_review_wording.sql`（執行方式同上）。本檔只更新 IM_ACCT_REVIEW 的表說明與 9 個欄位 COMMENT、IM_ACCT_HIST.ACTION_CODE 的 COMMENT（兩個簽核身分改稱「Infra 主管」「資訊治理主管」，同人規則改寫成只比有效身分）、不動結構、不需 GRANT；資料只改兩筆權限名稱（REVIEW_SIGN_INFRA、REVIEW_SIGN_GOV 的 PERM_NAME，角色權限設定頁會顯示），且只在仍是初始舊字時才改。可重跑；全新環境用建表檔與初始資料檔建完不必跑（兩檔已同步）。檔尾三句查詢的期望值寫在該段註解。
+**既有環境升級到定期審查文案（拿掉「半」）**（第 158 項 R5，2026-11-04 裁示；已跑過定期權限審查腳本的測試、UAT、正式環境，與 R5 部署同一批執行）：以 RD_USER 執行 `db\infra_manager_158_review_wording.sql`（執行方式同上）。本檔只更新 IM_ACCT_REVIEW 的表說明與 8 個欄位 COMMENT、IM_ACCT_HIST.ACTION_CODE 的 COMMENT（兩個簽核身分改稱「Infra 主管」「資訊治理主管」，同人規則改寫成只比有效身分）、不動結構、不需 GRANT；資料只改兩筆權限名稱（REVIEW_SIGN_INFRA、REVIEW_SIGN_GOV 的 PERM_NAME，角色權限設定頁會顯示），且只在仍是初始舊字時才改。可重跑；全新環境用建表檔與初始資料檔建完不必跑（兩檔已同步）。檔尾三句查詢的期望值寫在該段註解。測試 DB 已於 2026-11-04 執行。
 
 **既有環境升級到第 124 項（登入改用 WPX）前置**：以 RD_USER 執行 `db\infra_manager_124_1_prep.sql`（執行方式同上）。本檔只把 `IM_ACCT_USER.USER_EN_NAME`（英文顯示名）改成可空，不動資料、不改 COMMENT、不需 GRANT；舊版程式照常寫英文名，不受影響，所以可以在新版部署前先跑。測試 DB `itflow_uat` 開發機與 UAT 共用，**只跑一次、兩邊同時生效**，跑完登入 UAT 確認照常。可重跑（已可空或欄位已刪除就印「略過」）。DDL 會自動提交，執行中若有人正在登入（交易未結束），會等它結束再改。檔尾兩句查詢的期望值寫在該段註解。全新環境不必跑（建表檔已是最終結構、沒有這一欄）。測試 DB 已於 2026-10-20 執行。
 

@@ -51,7 +51,7 @@
       <div class="v">{{ halfText(item.govSignByName, item.govSignBy, item.govSignDate) }}</div>
     </div>
     <p v-if="!item.reviewId && signable" class="hint">還沒有人簽核；第一次簽核時建立本輪紀錄。</p>
-    <p v-if="signable && !rejected && actable.length === 0" class="hint no-action">目前沒有您可以執行的簽核或駁回：您負責的簽核已完成，或另一位主管的簽核是您本人簽的；請等待另一位主管簽核。</p>
+    <p v-if="signable && !rejected && actable.length === 0" class="hint no-action">目前沒有您可以執行的簽核或駁回：您負責的簽核已完成，或另一位主管的簽核是以您目前的身分簽的；請等待另一位主管簽核。</p>
 
     <div v-if="rejected" class="note-box warn rejected-box">
       <b>已駁回（{{ REVIEW_HALF_LABEL[rejected.half] }}）</b>：{{ rejected.reason }}<br />

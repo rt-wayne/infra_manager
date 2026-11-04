@@ -5,8 +5,8 @@
 --       使用者 2026-11-04 裁示（第 158 項 R5 實測 ①A／②A）：定期審查所有使用者看得到的文字不再用「半」
 --       （「Infra 主管半」「治理半」「另一半」），兩個簽核身分一律稱「Infra 主管」「資訊治理主管」；
 --       同一人不得簽兩個身分的規則縮小為只比有效身分，切換身分代簽放行。
---       COMMENT：IM_ACCT_REVIEW 表說明與 REVIEW_STATE_CODE、兩組簽核三欄、REJECT_HALF_CODE 共 10 句（GOV_SIGN_BY 一併改寫
---       同人規則）；IM_ACCT_HIST.ACTION_CODE 一句（「第二半」「單半」改寫）。
+--       COMMENT：IM_ACCT_REVIEW 表說明 1 句＋REVIEW_STATE_CODE、兩組簽核三欄、REJECT_HALF_CODE 共 8 欄（合計 9 句；GOV_SIGN_BY
+--       一併改寫同人規則）；IM_ACCT_HIST.ACTION_CODE 一句（「第二半」「單半」改寫）。全檔 COMMENT 共 10 句。
 --       資料：IM_ACCT_PERM 的 REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 權限名稱「定期審查 Infra 半簽核」「定期審查治理半簽核」
 --       改為「定期審查 Infra 主管簽核」「定期審查資訊治理主管簽核」（角色權限設定頁會顯示）；只在仍是舊字時才改。
 -- 對象：已跑過 infra_manager_phase2_review.sql 的既有環境（測試、UAT、正式）。
@@ -50,7 +50,7 @@ COMMIT;
 
 -- ===== 執行後自我檢查（唯讀）
 -- 期望：第一句 1 列，COMMENTS 不含「半」；
---       第二句 10 列（IM_ACCT_REVIEW 9 欄＋IM_ACCT_HIST.ACTION_CODE），COMMENTS 皆不含「半」；
+--       第二句 9 列（IM_ACCT_REVIEW 8 欄＋IM_ACCT_HIST.ACTION_CODE），COMMENTS 皆不含「半」；
 --       第三句 2 列，PERM_NAME 為「定期審查 Infra 主管簽核」「定期審查資訊治理主管簽核」（若是別的字，代表有人改過，本檔不動它）。
 -- 以下解除遇錯即停：互動式 SQL*Plus 用 @ 執行本檔後，同一連線再打錯指令才不會直接結束 SQL*Plus。
 WHENEVER SQLERROR CONTINUE

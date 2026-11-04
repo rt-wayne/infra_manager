@@ -17,10 +17,10 @@
 | 158 | 定期權限審查（SA §5.10、J04；從第 14 項拆出）：審查狀態即時計算、Infra／治理雙簽、駁回標旗標、J04 待複審信、J02 加逾期未審、待辦、首頁第四區兩張卡、鈴鐺類別 2。21 項裁示 2026-10-30 全部依 architect 建議，分 R0～R10 共 12 段 | [backlog/158-定期審查.md](backlog/158-定期審查.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：R5 瀏覽器實測步驟 1～6 全過（2026-11-04）。實測後使用者裁示的修改（①A 文案拿掉「半」改「Infra 主管」「資訊治理主管」、②A 同人只比有效身分切換身分代簽放行、③A 改到底含 DB COMMENT）已改完、測試全過；重建重啟 8989 與殼 jar 後請使用者複測（表頭與按鈕文字、切換身分可簽第二位主管、駁回信列名）。複測通過 → 使用者以 RD_USER 在測試 DB 跑 `db/infra_manager_158_review_wording.sql` → R5 結案（計畫檔 R5 列改完成、交接改指向 R6）。R5 是正式環境最早部署點，部署前 UAT／正式先跑 R1 腳本與本次文案腳本（SETUP 第 6 節）
+- 下一步：**R5 已結案（2026-11-04）**。下一段是 R5b「代簽可見標記」（使用者裁示 ①B：清單兩位主管欄與彈窗簽核狀況在實際操作人與有效身分不同時加「（實際操作人：某某）」、REVIEW_DONE／REVIEW_REJECT 歷史說明一併帶上；比照緊急存取詳情既有呈現；約 1 回合），再接 R6 待辦整合。R5b 開工時把 HEAD 記進「本階段起點」。R5 是正式環境最早部署點，部署前 UAT／正式先跑 R1 腳本與文案腳本（SETUP 第 6 節）
 - 已改動（未 commit）：無
-- 本階段起點：R5 `fd82b3c`（R0 `05865e0`、R1 `f2219ec`、R2 `146e78a`、R3a `53eb425`、R3b `aa917ac`、R4 `9800824`）
-- 卡住／待確認：UAT／正式環境的 R1 腳本與 `infra_manager_158_review_wording.sql` 於 R5 部署前執行（SETUP 第 6 節已寫）；測試 DB 的文案腳本待使用者複測後執行
+- 本階段起點：（R5b 開工時填）；歷史：R5 `fd82b3c`、R4 `9800824`、R3b `aa917ac`、R3a `53eb425`、R2 `146e78a`、R1 `f2219ec`、R0 `05865e0`
+- 卡住／待確認：UAT／正式環境的 R1 腳本與 `infra_manager_158_review_wording.sql` 於 R5 部署前執行（SETUP 第 6 節已寫）
 
 ## 已拍板待實作
 
@@ -51,7 +51,7 @@
 | 160 | `ReviewServiceTest.有審查狀態_與ReviewRule範圍同口徑` 其實是 Java 比 Java（`PermissionService.hasReviewState` 內部就呼叫 `ReviewRule.matches`），名實不符；Java↔SQL 審查範圍對齊目前只靠 `SqlConstantScanTest` 字串斷言。建議：測試改名為「只看 APPROVED、旗標與刪除」；下次測試 DB 實跑時補兩筆（APPROVED、非 DOOR、非特權、分類 IS_REVIEW_TRIGGER＝1 但分類 STATUS＝0；ASSET_CLASS_ID 為空）確認不出現在 `/reviews` 且只有 INFRA_MGR 的人開明細回 403。第 158 項 R2 code-reviewer S1 | 2026-10-30 | — |
 | 161 | 所有清單 API（`/accounts`、`/requests`、`/emergencies`、`/reviews`…）的 keyword 只修剪與 LIKE 跳脫、沒有長度上限（`security.md`「字串輸入要限制長度」）；既有共同寫法，非單一 API 問題。第 158 項 R2 code-reviewer S5 | 2026-10-30 | — |
 | 162 | 前端 `permGroups.ts` 的分組順序（帳號 → 簽核 → 巡檢 → 緊急存取 → 定期審查 → 系統管理）沒有測試鎖住，`AdminViews.spec.ts` 的 `groupPerms` 案例只涵蓋 SYS 與未知模組；補一筆含 EMG、REVIEW、SYS 的案例。第 158 項 R2 code-reviewer S6 | 2026-10-30 | — |
-| 163 | `ReviewServiceTest` 簽核測試缺口：markDone 回 0 → 409；首簽撞 IND_02 重讀後仍無一輪 → 409；重讀後另一半是同一人 → 409；治理半先簽、Infra 後簽時 `doneHist` 文字；交易次數斷言（比照 `EmergencyServiceTest` 的 `fx.txm.commits`／`rollbacks`，撞索引改走 UPDATE 那筆最該鎖 commits＝1、rollbacks＝0）；「500 整筆回滾不留歷史」那筆沒驗 rollbacks＝1；「已有一輪_…_同人兩半409」名稱含同人兩半但內容沒測。第 158 項 R3a code-reviewer S1。R3b code-reviewer S2 併入：駁回缺 404 案例；「已有一輪」那條路沒驗先鎖再讀；②A 只測實際操作人相同、沒測有效身分相同（簽核那邊也要查）；「自己簽了 Infra 半又以 Infra 半駁回」走 UPDATE 0 筆 → E08 沒案例 | 2026-10-30 | — |
+| 163 | `ReviewServiceTest` 簽核測試缺口：markDone 回 0 → 409；首簽撞 IND_02 重讀後仍無一輪 → 409；重讀後另一半是同一人 → 409；治理半先簽、Infra 後簽時 `doneHist` 文字；交易次數斷言（比照 `EmergencyServiceTest` 的 `fx.txm.commits`／`rollbacks`，撞索引改走 UPDATE 那筆最該鎖 commits＝1、rollbacks＝0）；「500 整筆回滾不留歷史」那筆沒驗 rollbacks＝1；「已有一輪_版本不符409_同半重複簽409_同人兩半409」名稱含同人兩半但內容沒測（同人案例在另一筆「同人簽兩個身分_有效身分相同409_只有實際操作人相同放行」）。第 158 項 R3a code-reviewer S1。R3b code-reviewer S2 併入：駁回缺 404 案例；「已有一輪」那條路沒驗先鎖再讀；「自己簽了 Infra 主管又以 Infra 主管駁回」走 UPDATE 0 筆 → E08 沒案例。（2026-11-04 R5 補審 S4：原「②A 只測實際操作人相同、沒測有效身分相同」一句已補且規則反轉，刪除） | 2026-10-30 | — |
 | 164 | 定期審查簽核與駁回的四種 409（版本不符、同半已簽、以為沒有一輪卻帶版本、被駁回的那一半已有人簽）沿用 E08「此申請已由他人處理，請重新整理」，使用者操作的是定期審查不是申請，且第四種重新整理後再按結果一樣（`item` 已讀到該半 SIGN_BY，Java 端送 UPDATE 前就判斷得出，可改專屬文案；UPDATE 條件仍保留當並行最後防線）；R5 做畫面時另訂文案或前端改寫。第 158 項 R3a code-reviewer S3、R3b S3 | 2026-10-30 | — |
 | 165 | `JobAndNotifyTest` 定期審查駁回通知第二筆標題寫「未知事件不外拋」，但沒有 `findRound(89L)` 的樁，`reviewEvent` 在查無該輪就 return，`default -> throw IllegalArgumentException` 加 catch 那條路沒跑過；補樁即可。第 158 項 R3b code-reviewer S1 | 2026-10-30 | — |
 | 166 | `RoleAdminDao.FIND_IN_FLIGHT_REVIEW`（守門的在途定期審查）只看 OPEN＋該半未簽，沒 JOIN 帳號主表：帳號在有進行中一輪時被緊急存取標旗標（或 R4 前被停用／刪除）後沒人簽得成，卻仍算在途、擋下移除 REVIEW_SIGN_* 最後一位持有人（多擋不少擋）。R4 時評估改成只算狀態 DUE／OVERDUE 的帳號，或 PRD 註明「含已不可簽的進行中輪」。第 158 項 R3b code-reviewer S4。R5 code-reviewer S7 補：R5 畫面對「掛旗標（審查異常）但仍有 OPEN 輪」的帳號，清單兩半欄照列簽核人、沒有任何操作鈕、彈窗也沒鈕，這是現況不是錯；守門要不要排除這種輪仍未決，R5 未處理 | 2026-10-30 | — |
