@@ -95,6 +95,10 @@ package com.mpx.infra_manager.common;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R7（排程與通知）：通知事件 EV_REVIEW_DUE（待複審信，REF_ID＝ACCT_ID_下次應審查日yyyymmdd，⑭A）；
 //           排程代碼 JOB_J04（待複審通知，日期型）並納入 JOB_CODES
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R10 審查裁示 ①B：新增 MAIL_ROLE_REVIEW_REJECT（GOV）——駁回信收件人依 SA §5.10 改為原新增申請人＋
+//           資訊治理角色成員（與每週彙總信同一查法），不再是 REVIEW_SIGN_GOV 權限持有人
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -220,7 +224,7 @@ public final class AcctConst {
 	public static final String EV_EMG_SUBMIT = "EMG_SUBMIT";
 	public static final String EV_EMG_OVERDUE = "EMG_OVERDUE";
 	public static final String EV_EMG_RETURN = "EMG_RETURN";
-	/** 定期審查駁回（第 158 項 R3b）：寄原新增申請人＋所有 REVIEW_SIGN_GOV 持有人；REF_ID＝REVIEW_ID */
+	/** 定期審查駁回（第 158 項 R3b；R10 ①B 改收件人）：寄原新增申請人＋資訊治理角色（MAIL_ROLE_REVIEW_REJECT）成員；REF_ID＝REVIEW_ID */
 	public static final String EV_REVIEW_REJECT = "REVIEW_REJECT";
 	/**
 	 * 定期審查待複審（第 158 項 R7，排程 J04）：寄所有 REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 持有人（⑯A）；
@@ -286,6 +290,8 @@ public final class AcctConst {
 	public static final String ROLE_GENERAL = "GENERAL";
 	/** 到期前 7 天、轉已逾期、每週彙總信的收件角色（SA 7.3；spec §4.12 變更單 #2）；只用來查收件人，不判斷權限 */
 	public static final String MAIL_ROLE_EXPIRY = "GOV";
+	/** 定期審查駁回信的收件角色（SA §5.10「原申請人、資訊治理（GOV）」；第 158 項 R10 ①B）；只用來查收件人，不判斷權限 */
+	public static final String MAIL_ROLE_REVIEW_REJECT = "GOV";
 	/** 排程失敗信的收件角色（SA 7.3；spec §4.12 變更單 #2）；只用來查收件人，不判斷權限 */
 	public static final String MAIL_ROLE_JOB_FAIL = "SYS_ADMIN";
 

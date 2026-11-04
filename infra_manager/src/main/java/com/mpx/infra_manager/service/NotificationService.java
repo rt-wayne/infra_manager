@@ -82,6 +82,11 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R7 結案併修（審查 S2、S4）：reviewDue 拿掉沒用到的 today 參數；逾期天數欄改「上次為空→從未審查、
 //           上次有值下次為空→未排定（NEXT_UNSET）」，不再把上次有值的列標成從未審查
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R10 審查裁示 ①B：reviewEvent 的 REVIEW_REJECT 收件人由「REVIEW_SIGN_GOV 權限持有人」改為
+//           「資訊治理角色成員」（inRole(MAIL_ROLE_REVIEW_REJECT)，與 weeklySummary 同一查法；SA §5.10 寫原申請人、資訊治理（GOV））；
+//           原新增申請人照舊、同一人去重
 // ============================================================
 
 import java.time.Clock;
@@ -419,9 +424,9 @@ public class NotificationService {
 			String body;
 			switch (event) {
 			case AcctConst.EV_REVIEW_REJECT -> {
-				// 原新增申請人＋所有治理半簽核權限持有人（⑯A 慣例）；sendAll 依工號去重
+				// 原新增申請人＋資訊治理角色成員（SA §5.10；R10 ①B，與每週彙總信同一查法）；sendAll 依工號去重
 				rcpts = new ArrayList<>(single(r.getApplyBy()));
-				rcpts.addAll(withPerm(AcctConst.PERM_REVIEW_SIGN_GOV));
+				rcpts.addAll(inRole(AcctConst.MAIL_ROLE_REVIEW_REJECT));
 				subject = "【定期審查】" + r.getAcctId() + " 審查駁回";
 				body = reviewRejectBody(r);
 			}

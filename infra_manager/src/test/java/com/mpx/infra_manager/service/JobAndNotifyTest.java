@@ -82,6 +82,10 @@ package com.mpx.infra_manager.service;
 // 變更說明: BACKLOG 第 158 項 R7 結案併修（審查 S2、S3、S4）：reviewDue 改單參數；J04「同基準重跑不重寄」改名為「查詢回空時不寄」並註明
 //           防重寄由 SQL 斷言與實機負責；加 overdueItem 夾具（J02 兩處改用，不再拿待複審資料充當逾期未審）；新增 J02 查逾期未審失敗
 //           整體 FAIL、週鍵沒寫下次再寄；HTML 第二區塊加「上次有值下次空→未排定」「上次空下次已過→從未審查」兩列
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R10 審查裁示 ①B：駁回信收件人案例改 mock findUsersInRoles(GOV)（MAIL_ROLE_REVIEW_REJECT），
+//           並驗證不再查 REVIEW_SIGN_GOV 權限持有人
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -1199,17 +1203,20 @@ class JobAndNotifyTest {
 	}
 
 	@Test
-	void 定期審查_駁回通知寄原申請人與治理半權限持有人去重_主旨審查駁回_本文含駁回欄與另一半已簽_值跳脫_連結定期審查_紀錄REVIEW_REJECT() {
+	void 定期審查_駁回通知寄原申請人與資訊治理角色成員去重_不查簽核權限持有人_主旨審查駁回_本文含駁回欄與另一半已簽_值跳脫_連結定期審查_紀錄REVIEW_REJECT() {
 		MailSender sender = mock(MailSender.class);
 		NotificationService n = notifier(sender, SEND_ALL);
 		ReviewRound r = rejectedRound(88L);
 		when(fx.reviewDao.findRound(eq(88L), any())).thenReturn(r);
 		when(fx.permDao.findActiveUser(KEVIN)).thenReturn(rcpt(KEVIN, "k@example.com"));
-		// 治理半持有人含原申請人 KEVIN 本人（去重後只寄一封）與 GARY
-		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_REVIEW_SIGN_GOV))
+		// 資訊治理角色成員（GOV，R10 ①B）含原申請人 KEVIN 本人（去重後只寄一封）與 GARY
+		when(fx.permDao.findUsersInRoles(List.of(AcctConst.MAIL_ROLE_REVIEW_REJECT)))
 				.thenReturn(List.of(rcpt(GARY, "g@example.com"), rcpt(KEVIN, "k@example.com")));
 
 		n.reviewEvent(AcctConst.EV_REVIEW_REJECT, 88L, HANK);
+		// 收件人改走角色（與每週彙總信同一查法），不再查 REVIEW_SIGN_GOV 權限持有人
+		verify(fx.permDao).findUsersInRoles(List.of("GOV"));
+		verify(fx.permDao, never()).findUsersWithPerm(any());
 		ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
 		verify(sender).send(eq("k@example.com"), eq("【定期審查】AR20261001-001 審查駁回"), body.capture());
 		verify(sender).send(eq("g@example.com"), eq("【定期審查】AR20261001-001 審查駁回"), any());

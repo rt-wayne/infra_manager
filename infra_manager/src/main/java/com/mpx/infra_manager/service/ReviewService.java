@@ -25,7 +25,7 @@ package com.mpx.infra_manager.service;
 //           順序：400 → 403 → E02／E11 → 交易內：鎖帳號列 → 404 → 409 不可簽 → 沒有一輪：v 須 0、直接 INSERT 一列 REJECTED →
 //           有一輪：版本相符、②A 另一半簽核人不是我（沿用 ⑪A）→ UPDATE 成 REJECTED（①A 被駁回那一半已有人簽＝0 筆＝409）→
 //           主表標旗標來源 REVIEW（原因「定期審查駁回：…」截 500；0 筆 500 回滾）→ 歷史 REVIEW_REJECT（㉑A）；
-//           提交後寄 REVIEW_REJECT（原申請人＋REVIEW_SIGN_GOV 持有人）。駁回不動審查日（④B），狀態自然變成審查異常
+//           提交後寄 REVIEW_REJECT（原申請人＋資訊治理角色成員，R10 ①B 起；收件人由 NotificationService 決定）。駁回不動審查日（④B），狀態自然變成審查異常
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R5 實測裁示：②A checkSameSigner 只比有效身分、不再比實際操作人（切換身分代簽放行；⑪A 範圍縮小）；
