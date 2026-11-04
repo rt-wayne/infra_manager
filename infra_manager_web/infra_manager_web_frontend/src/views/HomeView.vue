@@ -26,6 +26,11 @@
   修改日期: 2026-10-30
   變更說明: BACKLOG 第 154、155 項：橘色數字改深橘 #92400e（原 --orange 在淡底上對比不到 3:1）；
             緊急存取區淡底改中性暖灰、淡橘警示底加深一階，警示時底色看得出變化
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: BACKLOG 第 158 項 R8（⑳B 第四區、⑬A 看全部）：新增「📋 定期審查」區兩張卡——逾期未定期審查（淡橘警示）、審查異常待處理（淡紅警示）；
+            不是看全部（reviewAll）時標題加「我的」；點擊：有 REVIEW_LIST → 定期審查清單帶 ?state=OVERDUE／ABNORMAL，否則 → 無權限頁
+            （比照「30 天內到期」）；主色藍綠
 -->
 <template>
   <main>
@@ -48,6 +53,17 @@
         </div>
         <div :class="['stat-card', 'click', 'card-emg-returned', alertClass(stats?.emgReturned, 'red')]" title="點擊查看已退回清單" @click="onEmgClick(EMG_RETURNED)">
           <div class="num red">{{ n(stats?.emgReturned) }}</div><div class="lbl">{{ emgPrefix }}緊急存取異常待追蹤</div>
+        </div>
+      </div>
+    </div>
+    <div class="module-card sec sec-review">
+      <h2>📋 定期審查</h2>
+      <div class="stat-row">
+        <div :class="['stat-card', 'click', 'card-review-overdue', alertClass(stats?.reviewOverdue, 'warn')]" title="點擊查看逾期未審清單" @click="onReviewClick('OVERDUE')">
+          <div class="num warn">{{ n(stats?.reviewOverdue) }}</div><div class="lbl">{{ reviewPrefix }}逾期未定期審查</div>
+        </div>
+        <div :class="['stat-card', 'click', 'card-review-abnormal', alertClass(stats?.reviewAbnormal, 'red')]" title="點擊查看審查異常清單" @click="onReviewClick('ABNORMAL')">
+          <div class="num red">{{ n(stats?.reviewAbnormal) }}</div><div class="lbl">{{ reviewPrefix }}審查異常待處理</div>
         </div>
       </div>
     </div>
@@ -83,6 +99,7 @@ const stats = ref<HomeStats | null>(null)
 /** 不是看全部時標題加「我的」，跟主管看到的全系統數字區分；載入前與失敗時沒有旗標，不加字 */
 const acctPrefix = computed(() => (stats.value && !stats.value.acctAll ? '我的' : ''))
 const emgPrefix = computed(() => (stats.value && !stats.value.emgAll ? '我的' : ''))
+const reviewPrefix = computed(() => (stats.value && !stats.value.reviewAll ? '我的' : ''))
 
 function n(v: number | null | undefined): string {
   return typeof v === 'number' ? String(v) : '—'
@@ -106,6 +123,15 @@ function onEmgClick(state: string): void {
   void router.push({ path: '/emergency', query: { state } })
 }
 
+/** 定期審查清單只給 REVIEW_LIST（看全部的人卡片數＝清單套該狀態的筆數）；沒有的人卡片只算自己的、沒有清單可進 → 無權限頁 */
+function onReviewClick(state: 'OVERDUE' | 'ABNORMAL'): void {
+  if (can('REVIEW_LIST')) {
+    void router.push({ path: '/reviews', query: { state } })
+  } else {
+    void router.push('/no-access')
+  }
+}
+
 onMounted(async () => {
   try {
     stats.value = await getHomeStats()
@@ -121,6 +147,8 @@ onMounted(async () => {
 /* 緊急存取主色用深紫：橘紅底會吃掉 🚨 符號；淡底用中性暖灰，警示的淡橘底才分得出來 */
 .sec-emg { --sec: #6b3fa0; --sec-bg: #faf6f3; --sec-line: #ddd0ec; }
 .sec-insp { --sec: #2e8b57; --sec-bg: #edf8f1; --sec-line: #c3e6cf; }
+/* 定期審查主色藍綠（R8），與帳號藍、巡檢綠都分得開 */
+.sec-review { --sec: #0e7490; --sec-bg: #ecf7f9; --sec-line: #bfe3ea; }
 
 .sec { padding-top: 0; overflow: hidden; box-shadow: 0 1px 4px rgba(27, 42, 74, 0.08); border-color: var(--sec-line); }
 /* 標題列貼齊卡片上緣與左右（抵銷 .module-card 的左右內距 18px） */

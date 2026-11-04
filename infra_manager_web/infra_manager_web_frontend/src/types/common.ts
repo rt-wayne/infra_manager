@@ -23,6 +23,9 @@
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R6（待辦整合；裁示 ①A）：ActionKind 加 REVIEW；Todo 加 acctId、reviewId、half、review（審查列內嵌整筆 ReviewItem）；
 //           申請單欄位（reqTypeCode、stageId、submitDate 等）在審查列為 null，型別跟著放寬
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R8：HomeStats 加 reviewOverdue、reviewAbnormal、reviewAll（首頁第四區定期審查兩張卡）
 // ============================================================
 import type { ReviewHalf, ReviewItem } from './review'
 
@@ -118,9 +121,14 @@ export interface HomeStats {
   emgUndecided: number
   /** 緊急存取異常待追蹤（已退回、尚未結案） */
   emgReturned: number
+  /** 定期審查（第 158 項 R8）：逾期未定期審查（審查狀態逾期未審）；reviewAll 為 true 看全部（REVIEW_LIST），否則只算我原新增申請的帳號 */
+  reviewOverdue: number
+  /** 審查異常待處理（審查狀態審查異常；與逾期互斥、不分旗標來源） */
+  reviewAbnormal: number
   acctAll: boolean
   emgAll: boolean
   inspVisible: boolean
+  reviewAll: boolean
 }
 
 /** GET /home/expiring 一列（鈴鐺；含已逾期，daysLeft 已過為負數） */

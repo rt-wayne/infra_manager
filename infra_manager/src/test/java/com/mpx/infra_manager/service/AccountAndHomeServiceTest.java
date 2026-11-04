@@ -24,6 +24,10 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R6：待辦的定期審查列——有 REVIEW_SIGN_INFRA 的看到 Infra 未簽的、簽過的不列、另一位簽核人（有效身分）是我的不列、
 //           另一位是我代簽的（實際操作人是我、有效身分不是）照列、雙簽核權限者同帳號兩列、沒權限的人不查 findTodo；審查列接在申請單後面；欄位與標題
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R8：FIND_STATS 定期審查兩張卡用 ReviewDao.REVIEW_STATE_EXPR＋JOIN_ASSET_CLASS、帶 REVIEW_MINE_COND、不過濾帳號狀態；
+//           stats 依 REVIEW_LIST 決定第四個參數綁 NULL 或工號、回 reviewAll，只有 REVIEW_LIST 不讓巡檢區顯示、數字原樣帶出
 // ============================================================
 
 import static com.mpx.infra_manager.service.RequestServiceTest.assertStatus;
@@ -137,47 +141,71 @@ class AccountAndHomeServiceTest {
 				.contains(AcctDao.EXPIRING_COND + " AND " + com.mpx.infra_manager.dao.HomeDao.ACCT_MINE_COND)
 				.doesNotContain("NULLAND").doesNotContain("'DELETED'AND").doesNotContain("'REVIEW'AND");
 		String insp = stats.substring(stats.indexOf("AS ACCT_PRIV"), stats.indexOf("AS INSP_EXCPT_THIS_MONTH"));
-		assertThat(insp).doesNotContain(":acctApplyBy").doesNotContain(":emgApplyBy");
+		assertThat(insp).doesNotContain(":acctApplyBy").doesNotContain(":emgApplyBy").doesNotContain(":reviewApplyBy");
 		assertThat(com.mpx.infra_manager.dao.HomeDao.FIND_EXPIRING).contains(AcctDao.EXPIRING_COND);
+		// R8：定期審查兩張卡——狀態用清單同一句 REVIEW_STATE_EXPR、同一個資產分類 JOIN、各帶個人過濾；不另抄狀態判斷、不過濾帳號狀態
+		String review = stats.substring(stats.indexOf("AS EMG_RETURNED"));
+		assertThat(review).contains("AS REVIEW_OVERDUE").contains("AS REVIEW_ABNORMAL")
+				.contains(com.mpx.infra_manager.dao.ReviewDao.REVIEW_STATE_EXPR + " = 'OVERDUE' AND " + com.mpx.infra_manager.dao.HomeDao.REVIEW_MINE_COND)
+				.contains(com.mpx.infra_manager.dao.ReviewDao.REVIEW_STATE_EXPR + " = 'ABNORMAL' AND " + com.mpx.infra_manager.dao.HomeDao.REVIEW_MINE_COND)
+				.doesNotContain("A.STATUS").doesNotContain("ACCT_STATE_CODE = 'APPROVED' AND A.")
+				.satisfies(r -> assertThat(r.split(com.mpx.infra_manager.dao.ReviewDao.JOIN_ASSET_CLASS, -1)).hasSize(3))
+				.satisfies(r -> assertThat(r.split(com.mpx.infra_manager.dao.HomeDao.REVIEW_MINE_COND, -1)).hasSize(3));
+		assertThat(stats.split(com.mpx.infra_manager.dao.HomeDao.REVIEW_MINE_COND, -1)).hasSize(3);
 	}
 
 	@Test
 	void 首頁卡片_依權限決定看全部或只看自己_巡檢區依權限顯示() {
-		when(fx.homeDao.findStats(any(), any(), any())).thenAnswer(inv -> {
+		when(fx.homeDao.findStats(any(), any(), any(), any())).thenAnswer(inv -> {
 			com.mpx.infra_manager.model.HomeStats s = new com.mpx.infra_manager.model.HomeStats();
 			s.setInspThisMonth(7L);
 			s.setInspExcptThisMonth(2L);
+			s.setReviewOverdue(3L);
+			s.setReviewAbnormal(1L);
 			return s;
 		});
-		// 一般人（只有 GENERAL）：帳號與緊急存取都綁自己的工號；沒有 INSP_VIEW → 巡檢數字清空、區塊不顯示
+		// 一般人（只有 GENERAL）：帳號、緊急存取、定期審查都綁自己的工號；沒有 INSP_VIEW → 巡檢數字清空、區塊不顯示
 		com.mpx.infra_manager.model.HomeStats tester = fx.homeService.stats(id(TESTER));
-		verify(fx.homeDao).findStats(TODAY, TESTER, TESTER);
+		verify(fx.homeDao).findStats(TODAY, TESTER, TESTER, TESTER);
 		assertThat(tester.isAcctAll()).isFalse();
 		assertThat(tester.isEmgAll()).isFalse();
+		assertThat(tester.isReviewAll()).isFalse();
 		assertThat(tester.isInspVisible()).isFalse();
 		assertThat(tester.getInspThisMonth()).isNull();
 		assertThat(tester.getInspExcptThisMonth()).isNull();
-		// 巡檢人員（KEVIN：GOV＋INSP_STAFF）：帳號與緊急存取仍只看自己，巡檢區看全部
+		// 定期審查數字原樣帶出（一般人也有「我的」兩張卡，不像巡檢區整區隱藏）
+		assertThat(tester.getReviewOverdue()).isEqualTo(3L);
+		assertThat(tester.getReviewAbnormal()).isEqualTo(1L);
+		// 巡檢人員（KEVIN：GOV＋INSP_STAFF）：帳號、緊急存取、定期審查仍只看自己，巡檢區看全部
 		com.mpx.infra_manager.model.HomeStats kevin = fx.homeService.stats(id(KEVIN));
-		verify(fx.homeDao).findStats(TODAY, KEVIN, KEVIN);
+		verify(fx.homeDao).findStats(TODAY, KEVIN, KEVIN, KEVIN);
 		assertThat(kevin.isInspVisible()).isTrue();
+		assertThat(kevin.isReviewAll()).isFalse();
 		assertThat(kevin.getInspThisMonth()).isEqualTo(7L);
-		// 資訊主管（GARY：IT_HEAD）：兩區都看全部（綁 NULL）
+		// 資訊主管（GARY：IT_HEAD，有 REVIEW_LIST）：三區都看全部（綁 NULL）
 		com.mpx.infra_manager.model.HomeStats gary = fx.homeService.stats(id(GARY));
-		verify(fx.homeDao).findStats(TODAY, null, null);
+		verify(fx.homeDao).findStats(TODAY, null, null, null);
 		assertThat(gary.isAcctAll()).isTrue();
 		assertThat(gary.isEmgAll()).isTrue();
+		assertThat(gary.isReviewAll()).isTrue();
 		assertThat(gary.isInspVisible()).isTrue();
-		// 主管沒有 INSP_VIEW 也看得到巡檢區（裁示 ③A）；只有其中一個「看全部」時另一區照樣只看自己
+		// 主管沒有 INSP_VIEW 也看得到巡檢區（裁示 ③A）；只有其中一個「看全部」時另兩區照樣只看自己
 		com.mpx.infra_manager.model.HomeStats mgr = fx.homeService.stats(TestFixture.idWith(MICHAEL, java.util.Set.of("ACC_EXPIRY_ALL"), List.of()));
-		verify(fx.homeDao).findStats(TODAY, null, MICHAEL);
+		verify(fx.homeDao).findStats(TODAY, null, MICHAEL, MICHAEL);
 		assertThat(mgr.isAcctAll()).isTrue();
 		assertThat(mgr.isEmgAll()).isFalse();
+		assertThat(mgr.isReviewAll()).isFalse();
 		assertThat(mgr.isInspVisible()).isTrue();
 		assertThat(mgr.getInspExcptThisMonth()).isEqualTo(2L);
+		// 只有 REVIEW_LIST（R8 ⑬A）：定期審查看全部，帳號與緊急存取仍只看自己；REVIEW_LIST 不讓巡檢區顯示
+		com.mpx.infra_manager.model.HomeStats reviewer = fx.homeService.stats(TestFixture.idWith(MICHAEL, java.util.Set.of("REVIEW_LIST"), List.of()));
+		verify(fx.homeDao).findStats(TODAY, MICHAEL, MICHAEL, null);
+		assertThat(reviewer.isReviewAll()).isTrue();
+		assertThat(reviewer.isAcctAll()).isFalse();
+		assertThat(reviewer.isInspVisible()).isFalse();
 		// 切換身分：以代理身分（有效身分）為「我」
 		fx.homeService.stats(TestFixture.impersonate(TestFixture.HANK, TESTER));
-		verify(fx.homeDao, org.mockito.Mockito.times(2)).findStats(TODAY, TESTER, TESTER);
+		verify(fx.homeDao, org.mockito.Mockito.times(2)).findStats(TODAY, TESTER, TESTER, TESTER);
 	}
 
 	@Test

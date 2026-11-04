@@ -27,6 +27,10 @@ package com.mpx.infra_manager.service;
 //           待複審與逾期未審、該身分還沒簽、另一位主管的簽核人（有效身分）不是我的帳號各成一列（一個帳號＋身分一列），
 //           內嵌整筆 ReviewItem 給前端開簽核彈窗；申請單列照舊排前面，審查列接在後面（逾期最久的先）。
 //           過濾條件與 ReviewService.checkSameSigner、前端 reviewActableHalves 同口徑
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R8（⑬A）：卡片加定期審查兩張——有 REVIEW_LIST 看全部、否則只算我（有效身分）原新增申請的帳號，回 reviewAll 旗標；
+//           巡檢區顯示條件不納入 REVIEW_LIST
 // ============================================================
 
 import java.time.Clock;
@@ -81,11 +85,15 @@ public class HomeService {
 	public HomeStats stats(Identity id) {
 		boolean acctAll = perm.can(id, AcctConst.PERM_ACC_EXPIRY_ALL);
 		boolean emgAll = perm.can(id, AcctConst.PERM_EMG_VIEW_ALL);
-		// 巡檢區：有巡檢權限的人，或任一區看全部的主管（主管沒有 INSP_VIEW 也要維持原本看得到）
+		// 定期審查區（R8 ⑬A）：有 REVIEW_LIST 的人看全部（點卡進清單筆數才一致），其他人只算我原新增申請的帳號
+		boolean reviewAll = perm.can(id, AcctConst.PERM_REVIEW_LIST);
+		// 巡檢區：有巡檢權限的人，或帳號／緊急存取任一區看全部的主管（主管沒有 INSP_VIEW 也要維持原本看得到）；REVIEW_LIST 不納入
 		boolean inspVisible = acctAll || emgAll || perm.can(id, AcctConst.PERM_INSP_VIEW);
-		HomeStats s = homeDao.findStats(LocalDate.now(clock), acctAll ? null : id.getUserId(), emgAll ? null : id.getUserId());
+		HomeStats s = homeDao.findStats(LocalDate.now(clock), acctAll ? null : id.getUserId(), emgAll ? null : id.getUserId(),
+				reviewAll ? null : id.getUserId());
 		s.setAcctAll(acctAll);
 		s.setEmgAll(emgAll);
+		s.setReviewAll(reviewAll);
 		s.setInspVisible(inspVisible);
 		if (!inspVisible) {
 			s.setInspThisMonth(null);

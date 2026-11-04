@@ -14,6 +14,9 @@ package com.mpx.infra_manager.model;
 // 修改日期: 2026-10-29
 // 變更說明: BACKLOG 第 148 項：加三個範圍旗標讓前端決定標題與區塊——acctAll（帳號四張看全部還是只看我申請的）、
 //           emgAll（緊急存取兩張看全部還是只看我申請的）、inspVisible（看不到巡檢區塊時兩個巡檢數字為 null）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R8：加 reviewOverdue（逾期未定期審查）、reviewAbnormal（審查異常待處理）與旗標 reviewAll（有 REVIEW_LIST 看全部）
 // ============================================================
 
 public class HomeStats {
@@ -26,9 +29,36 @@ public class HomeStats {
 	private Long inspExcptThisMonth;
 	private Long emgUndecided;
 	private Long emgReturned;
+	private Long reviewOverdue;
+	private Long reviewAbnormal;
 	private boolean acctAll;
 	private boolean emgAll;
 	private boolean inspVisible;
+	private boolean reviewAll;
+
+	public Long getReviewOverdue() {
+		return reviewOverdue;
+	}
+
+	public void setReviewOverdue(Long reviewOverdue) {
+		this.reviewOverdue = reviewOverdue;
+	}
+
+	public Long getReviewAbnormal() {
+		return reviewAbnormal;
+	}
+
+	public void setReviewAbnormal(Long reviewAbnormal) {
+		this.reviewAbnormal = reviewAbnormal;
+	}
+
+	public boolean isReviewAll() {
+		return reviewAll;
+	}
+
+	public void setReviewAll(boolean reviewAll) {
+		this.reviewAll = reviewAll;
+	}
 
 	public boolean isAcctAll() {
 		return acctAll;

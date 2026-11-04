@@ -30,6 +30,10 @@ package com.mpx.infra_manager.dao;
 // 修改日期: 2026-10-29
 // 變更說明: BACKLOG 第 148 項：首頁卡片依個人過濾——帳號四張以 :acctApplyBy（原新增申請人）、緊急存取兩張以 :emgApplyBy（申請人）
 //           各自可選過濾（綁 NULL 時看全部，由 Service 依 ACC_EXPIRY_ALL／EMG_VIEW_ALL 決定）；巡檢兩張不過濾
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R8（⑳B 第四區、⑬A 看全部）：卡片加兩張——逾期未定期審查（審查狀態 OVERDUE）、審查異常待處理（ABNORMAL），
+//           狀態直接引用 ReviewDao.REVIEW_STATE_EXPR（與清單同一句、同 FROM），以 :reviewApplyBy 可選過濾（綁 NULL 看全部，Service 依 REVIEW_LIST 決定）
 // ============================================================
 
 import java.time.LocalDate;
@@ -51,9 +55,17 @@ public class HomeDao {
 	public static final String ACCT_MINE_COND = "(:acctApplyBy IS NULL OR A.APPLY_BY = :acctApplyBy)";
 	/** 緊急存取兩張卡的個人過濾：綁 NULL 看全部，否則只算申請人是我的單（同緊急存取清單口徑） */
 	public static final String EMG_MINE_COND = "(:emgApplyBy IS NULL OR E.APPLY_BY = :emgApplyBy)";
+	/** 定期審查兩張卡的個人過濾（R8 ⑬A）：綁 NULL 看全部，否則只算原新增申請人是我的帳號（與帳號四張同口徑） */
+	public static final String REVIEW_MINE_COND = "(:reviewApplyBy IS NULL OR A.APPLY_BY = :reviewApplyBy)";
+	/**
+	 * 定期審查兩張卡的 FROM（R8）：與 ReviewDao 清單同一個主表與資產分類 JOIN，REVIEW_STATE_EXPR 才算得出同樣的狀態；
+	 * 不過濾帳號狀態（狀態片段自己會把不在審查範圍的算成 NULL），看全部的人卡片數＝清單套該狀態篩選的筆數
+	 */
+	private static final String REVIEW_FROM = "FROM IM_ACCT A " + ReviewDao.JOIN_ASSET_CLASS;
 
 	/**
-	 * 首頁卡片（共用計算函式，第二階段統計頁可沿用）：帳號四張、巡檢兩張、緊急存取兩張；帳號與緊急存取可依個人過濾。
+	 * 首頁卡片（共用計算函式，第二階段統計頁可沿用）：帳號四張、巡檢兩張、緊急存取兩張、定期審查兩張（R8）；
+	 * 帳號、緊急存取、定期審查可依個人過濾。
 	 * 片段之間一律用一般字串 " AND " 串接：text block 只有一行時前後空白會被整個剝掉，曾拼出 NULLAND（第 148 項審查必1）
 	 */
 	public static final String FIND_STATS = """
@@ -79,7 +91,15 @@ public class HomeDao {
 			       ) AS EMG_UNDECIDED,
 			       (SELECT COUNT(*) FROM IM_EMG_ACCESS E WHERE
 			""" + EmgDao.RETURNED_COND + " AND " + EMG_MINE_COND + """
-			       ) AS EMG_RETURNED
+			       ) AS EMG_RETURNED,
+			       (SELECT COUNT(*)
+			""" + "          " + REVIEW_FROM + "\n" + "         WHERE " + ReviewDao.REVIEW_STATE_EXPR + " = 'OVERDUE'"
+			+ " AND " + REVIEW_MINE_COND + """
+			       ) AS REVIEW_OVERDUE,
+			       (SELECT COUNT(*)
+			""" + "          " + REVIEW_FROM + "\n" + "         WHERE " + ReviewDao.REVIEW_STATE_EXPR + " = 'ABNORMAL'"
+			+ " AND " + REVIEW_MINE_COND + """
+			       ) AS REVIEW_ABNORMAL
 			  FROM DUAL
 			""";
 
@@ -104,8 +124,9 @@ public class HomeDao {
 	/**
 	 * @param acctApplyBy 帳號四張只算此人原新增申請的帳號；null 看全部
 	 * @param emgApplyBy  緊急存取兩張只算此人申請的單；null 看全部
+	 * @param reviewApplyBy 定期審查兩張只算此人原新增申請的帳號；null 看全部（R8）
 	 */
-	public HomeStats findStats(LocalDate today, String acctApplyBy, String emgApplyBy) {
+	public HomeStats findStats(LocalDate today, String acctApplyBy, String emgApplyBy, String reviewApplyBy) {
 		LocalDate monthStart = today.withDayOfMonth(1);
 		Map<String, Object> params = new HashMap<>();
 		params.put("today", DaoSupport.ts(today));
@@ -113,6 +134,7 @@ public class HomeDao {
 		params.put("nextMonthStart", DaoSupport.ts(monthStart.plusMonths(1)));
 		params.put("acctApplyBy", acctApplyBy);
 		params.put("emgApplyBy", emgApplyBy);
+		params.put("reviewApplyBy", reviewApplyBy);
 		List<HomeStats> rows = dbClient.query(itflowDb, FIND_STATS, params, HomeStats.class);
 		return rows.isEmpty() ? new HomeStats() : rows.get(0);
 	}
