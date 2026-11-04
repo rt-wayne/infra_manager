@@ -77,7 +77,8 @@ public class ReviewDao {
 
 	/**
 	 * 共用欄位（R2／R3b）：帳號主表要顯示的欄位＋類別名、分類名、原申請人姓名、審查狀態，加某一輪（R）的流水號、版本、
-	 * 兩半簽核人與時間（前端顯示「Infra 已簽／治理未簽」）；姓名一律 LEFT JOIN 同步表 PX_SYNC_EMP。
+	 * 兩位主管的簽核人（有效身分）與實際操作人、各自姓名、簽核時間（R5b：實際操作人姓名給代簽顯示用）；
+	 * 姓名一律 LEFT JOIN 同步表 PX_SYNC_EMP（JOIN 段在 JOIN_NAMES）。
 	 * R 接哪一輪由 SELECT_BASE（進行中那一輪）或 FIND_ROUND（指定 REVIEW_ID）決定
 	 */
 	static final String SELECT_COLS = """
@@ -97,12 +98,13 @@ public class ReviewDao {
 			""" + "       " + EmpSql.nameExpr("UGA", "R.GOV_SIGN_ACT_BY") + " AS GOV_SIGN_ACT_BY_NAME,\n" + """
 			       R.GOV_SIGN_DATE""";
 
-	/** 帳號主表起手的 FROM／JOIN（不含 R）：類別、啟用中分類、三組姓名 */
+	/** 帳號主表起手的 FROM／JOIN（不含 R）：類別、啟用中分類（姓名 JOIN 在 JOIN_NAMES，要接在 R 之後） */
 	private static final String FROM_ACCT = """
 			  FROM IM_ACCT A
 			  LEFT JOIN IM_ACCT_CATG C ON C.CATG_ID = A.CATG_ID
 			""" + "  " + JOIN_ASSET_CLASS + "\n";
 
+	/** 五組姓名 JOIN：UA 原申請人、UI／UIA Infra 主管的有效身分／實際操作人、UG／UGA 資訊治理主管的有效身分／實際操作人（都 LEFT JOIN，查無不掉列） */
 	private static final String JOIN_NAMES = "  " + EmpSql.joinEmp("UA", "A.APPLY_BY") + "\n"
 			+ "  " + EmpSql.joinEmp("UI", "R.INFRA_SIGN_BY") + "\n"
 			+ "  " + EmpSql.joinEmp("UIA", "R.INFRA_SIGN_ACT_BY") + "\n"
