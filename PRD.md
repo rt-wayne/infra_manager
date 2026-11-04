@@ -41,6 +41,8 @@
 | 19 | 定期審查駁回信（REVIEW_REJECT）內容 SA 未定 | 寄原新增申請人＋REVIEW_SIGN_GOV 持有人；本文與信末提醒見「通知」；連結「定期審查」頁 |
 | 20 | §4.7：重新啟用與修改同規則，「新內容符合且（舊內容不符合或上次審查日為空）」才重寫審查日期 | 重新啟用改成同新增：新內容符合就重寫（上次＝生效日、下次＋180）。理由：停用期間沒人審，重新啟用視同重新起算，否則停用一年再啟用會立刻落入逾期未審。使用者 2026-10-30 裁示（第 158 項 ⑫B） |
 | 21 | §5.10：待複審通知以簽核紀錄的 notified_at（已通知時間）欄位記錄「本輪已寄」 | 不建此欄。改沿用通知紀錄表 IM_ACCT_NOTIFY_LOG：事件 REVIEW_DUE、參照鍵＝`帳號單號_下次應審查日yyyymmdd`，排程 J04 以「同參照鍵已有任何一筆」判斷本輪已寄（第 8 節 J04）。理由：排程寄信不必先建本輪簽核紀錄（本輪可能還沒人簽），防重寄口徑與 J01、J03 一致、重寄也走同一套刪紀錄流程（SETUP 第 6 節第 10 段）。使用者 2026-10-30 裁示（第 158 項 ⑭A） |
+| 22 | §5.10：帳號刪除時取消進行中的審查輪 | 修改、重新啟用、停用、刪除四種申請在關卡 6 第一次回報生效時都取消進行中的輪（CANCELED，記申請單號）；轉已逾期（EXPIRE）不取消。理由：已簽的那一半簽的是異動前的內容，異動生效後簽核不成立，下輪兩位主管重簽（見「15. 定期審查」帳號異動時取消進行中的一輪）。使用者 2026-10-30 裁示（第 158 項 ⑤A） |
+| 23 | §5.10：逾期未審帳號併入每週彙總信（J02）時「新增區塊、不改結構」 | 內文確為兩個區塊串接，但主旨改成「【帳號到期】本週彙總：已逾期未處理 {n} 筆、逾期未審 {m} 筆」、AFFECTED_CNT＝兩區塊合計、0 筆文案 U13 補第二句（見第 8 節 J02、第 9 節）。理由：主旨只寫到期筆數會與內文對不上。使用者 2026-10-30 裁示（第 158 項 ⑲A）、2026-11-04 裁示主旨 ②B 沿用「【帳號到期】」前綴 |
 
 ### 系統不提供的功能
 
@@ -130,7 +132,7 @@
 | SYS_IMPERSONATE＝切換身分 | SYS | 1 |
 | SYS_JOB_RUN＝手動觸發排程 | SYS | 1 |
 | ACC_EXPORT＝帳號權限清單匯出（帳號列表「匯出 Excel」） | ACCT | 1（同碼的「批次匯出帳號歷史」仍為階段 2，見 BACKLOG 第 14 項） |
-| REVIEW_LIST、REVIEW_SIGN_INFRA、REVIEW_SIGN_GOV＝定期審查清單／Infra 主管簽核／資訊治理主管簽核 | REVIEW | 1（三個權限碼的判斷點見「15. 定期審查」：REVIEW_LIST 看清單、REVIEW_SIGN_* 簽核／駁回與待辦審查列；功能分批施工中，進度見 BACKLOG 第 158 項） |
+| REVIEW_LIST、REVIEW_SIGN_INFRA、REVIEW_SIGN_GOV＝定期審查清單／Infra 主管簽核／資訊治理主管簽核 | REVIEW | 1（三個權限碼的判斷點見「15. 定期審查」：REVIEW_LIST 看清單、REVIEW_SIGN_* 簽核／駁回與待辦審查列） |
 | EMG_APPLY、EMG_VIEW_ALL、EMG_DECIDE＝緊急存取申請／看全部／補核准退回結案 | EMG | 1（見「14. 緊急存取」） |
 | STATS_VIEW＝統計頁 | STATS | 2 |
 | INSP_EXPORT＝巡檢紀錄匯出 | INSP | 2 |
@@ -576,7 +578,7 @@
 
 #### 15. 定期審查（SA §5.10）
 
-**本功能分批施工中，進度見 `BACKLOG.md` 第 158 項**；本節只寫已上線的部分：審查狀態定義、清單 API、兩位主管簽核與完成、駁回與駁回信、名單維護守門、帳號異動時取消進行中一輪、清單頁與簽核／駁回彈窗（含駁回後停用捷徑；見「畫面說明」`/reviews`）、帳號明細的審查狀態（`GET /accounts/{id}` 多回 reviewStateCode，同一句狀態片段計算；帳號明細彈窗「定期審查」列顯示）、待辦整合（有簽核權限的人在待辦簽核頁看到自己那個身分的待簽帳號，見「11. 首頁、鈴鐺、待辦」待辦簽核段）、待複審通知（排程 J04 每日把進入待複審的帳號各寄一封給兩位主管權限持有人、每輪一次，見第 8 節 J04 與第 9 節）、每週彙總信的「逾期未審帳號」區塊（排程 J02，逾期未審帳號每週再列、主旨帶兩個筆數，見第 8 節 J02）、首頁第四區「定期審查」兩張卡（逾期未定期審查、審查異常待處理；有 REVIEW_LIST 看全部並可點進清單，見「11. 首頁、鈴鐺、待辦」首頁十張卡片段）、頁首鈴鐺類別「定期審查異常未處理」（`GET /home/review-abnormal`，與審查異常卡同口徑，見「11. 首頁、鈴鐺、待辦」頁首鈴鐺段）。
+**功能總覽**：審查狀態即時計算（本節）；清單 `GET /reviews` 與清單頁、簽核／駁回彈窗、駁回後停用捷徑（見「畫面說明」`/reviews`）；兩位主管簽核與完成、駁回與駁回信、名單維護守門、帳號異動時取消進行中一輪（本節）；帳號明細的審查狀態（`GET /accounts/{id}` 多回 reviewStateCode，同一句狀態片段計算；帳號明細彈窗「定期審查」列顯示）；待辦整合（有簽核權限的人在待辦簽核頁看到自己那個身分的待簽帳號，見「11. 首頁、鈴鐺、待辦」待辦簽核段）；待複審通知（排程 J04 每日把進入待複審的帳號各寄一封給兩位主管權限持有人、每輪一次，見第 8 節 J04 與第 9 節）；每週彙總信的「逾期未審帳號」區塊（排程 J02，逾期未審帳號每週再列、主旨帶兩個筆數，見第 8 節 J02）；首頁第四區「定期審查」兩張卡與頁首鈴鐺類別「定期審查異常未處理」（見「11. 首頁、鈴鐺、待辦」）。資料表 IM_ACCT_REVIEW 見「資料結構」；既有環境升級腳本與部署前置見 `SETUP.md` 第 1 節。設計裁示紀錄（21 項與 R5 後補充裁示、被否決的選項）保留在 `backlog/158-定期審查.md`。
 
 - **審查範圍**：帳號狀態為 APPROVED（生效中），且符合任一——資產分類的 IS_REVIEW_TRIGGER＝1（只看啟用中的分類，分類停用或查無視同不符）、類別為門禁卡（DOOR）、IS_PRIV＝1。與「6. 7 關簽核」的審查日期寫入條件、關卡 5 免簽判斷是同一個判斷（程式共用 `ReviewRule.matches`；SQL 片段 `ReviewDao.REVIEW_SCOPE_COND` 對齊，有測試鎖住）。已逾期（EXPIRED）、停用、刪除、審核中的帳號都不在範圍。
 - **審查狀態**（不存欄位，每次查詢以當天日期即時計算，SQL 片段 `ReviewDao.REVIEW_STATE_EXPR`；清單、簽核、帳號明細、待辦、首頁卡、排程、鈴鐺都用同一句），依序判斷：
@@ -777,7 +779,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 ### 資料結構
 
-24 張表、50 個索引（PK 24＋一般 26）、6 個 SEQUENCE；不建實體 FK，參照由程式維護。建表 SQL 明定表空間（DBA 指定）：表放 `FLOW_DATA`、索引（含主鍵索引）放 `FLOW_INDX`；測試 DB 的表空間未比對（已建好、不會重建）。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（24 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04、IND_IM_ACCT_REVIEW_02 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對）；定期審查簽核紀錄表（IM_ACCT_REVIEW）、序列 SEQ_IM_ACCT_REVIEW 與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_review.sql`（可重跑；含表與序列的 PUBLIC synonym 與授權給 AP_USER：表授 SELECT／INSERT／UPDATE、序列授 SELECT；新環境建完表仍須跑；同一批既有欄位 COMMENT 在緊急存取腳本、建表檔、本腳本同句（IM_ACCT_HIST.ACTION_CODE 那句另含下述文案腳本，四檔同句），重跑任一檔結果相同；測試 DB 已於 2026-10-30 執行並核對檔尾七句；UAT 與正式尚未執行，時機見 `BACKLOG.md` 第 158 項）；定期審查文案拿掉「半」的升級腳本 `db/infra_manager_158_review_wording.sql`（只改 IM_ACCT_REVIEW 表說明與 8 欄、IM_ACCT_HIST.ACTION_CODE 的 COMMENT，與 REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 兩筆權限名稱，仍是初始舊字時才改；不動結構、不需 GRANT；可重跑；建表檔與初始資料檔同步，新環境不必跑；測試 DB 已於 2026-11-04 執行；UAT 與正式與 R5 部署同批執行）；第一階段 21 張表與 5 個序列的 PUBLIC synonym 與授權給 AP_USER 在 `db/infra_manager_grant.sql`（可重跑；21 張表各授 SELECT／INSERT／UPDATE／DELETE，照抄測試 DB 現況，程式本身沒有任何 DELETE；序列各授 SELECT；新環境依建表、初始資料、緊急存取腳本、本檔的順序執行）；系統管理相關四張表（IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM，說明由畫面維護與軌跡內容）的 COMMENT 另有既有環境升級腳本 `db/infra_manager_89_role_admin.sql`（改 COMMENT、不動結構、不需 GRANT——AP_USER 對相關表已有四種權限；資料只改 SYS_ADMIN 角色說明一個值，仍是初始舊字時才改；可重跑；建表檔與初始資料檔同步，新環境不必跑）；第 124 項（登入改用 WPX、人員資料讀同步表）有三支既有環境升級腳本：`db/infra_manager_124_1_prep.sql`（腳本 S1，英文名欄改可空，測試 DB 已執行）、`db/infra_manager_124_2_name_snapshot.sql`（腳本 R，8 處「英文名 (中文名)」人名快照改中文名）、`db/infra_manager_124_3_drop_cols.sql`（腳本 D，刪 `IM_ACCT_USER` 9 個舊欄並重寫 COMMENT），測試 DB 已於 2026-10-27 依序執行 R、D 並核對，建表檔與初始資料檔已是最終結構、新環境三支都不必跑；正式環境的初始人員匯入 `db/infra_manager_prod_users.sql`（使用者帳號列、角色指派含第一位系統管理員、開放新增類別 HOST／DB／DOOR 的關卡 6 執行人，名單取自測試 DB 2026-10-28 的啟用中指派、依使用者裁示調整；含實際工號，**不進版控**、只存在專案負責人本機，取代初始資料檔檔尾的初始管理者範本；可重跑、不留系統管理軌跡），命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
+24 張表、50 個索引（PK 24＋一般 26）、6 個 SEQUENCE；不建實體 FK，參照由程式維護。建表 SQL 明定表空間（DBA 指定）：表放 `FLOW_DATA`、索引（含主鍵索引）放 `FLOW_INDX`；測試 DB 的表空間未比對（已建好、不會重建）。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（24 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04、IND_IM_ACCT_REVIEW_02 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對）；定期審查簽核紀錄表（IM_ACCT_REVIEW）、序列 SEQ_IM_ACCT_REVIEW 與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_review.sql`（可重跑；含表與序列的 PUBLIC synonym 與授權給 AP_USER：表授 SELECT／INSERT／UPDATE、序列授 SELECT；新環境建完表仍須跑；同一批既有欄位 COMMENT 在緊急存取腳本、建表檔、本腳本同句（IM_ACCT_HIST.ACTION_CODE 那句另含下述文案腳本，四檔同句），重跑任一檔結果相同；測試 DB 已於 2026-10-30 執行並核對檔尾七句；UAT 與正式在部署含定期審查功能的版本之前執行，步驟見 `SETUP.md` 第 1 節）；定期審查文案拿掉「半」的升級腳本 `db/infra_manager_158_review_wording.sql`（只改 IM_ACCT_REVIEW 表說明與 8 欄、IM_ACCT_HIST.ACTION_CODE 的 COMMENT，與 REVIEW_SIGN_INFRA／REVIEW_SIGN_GOV 兩筆權限名稱，仍是初始舊字時才改；不動結構、不需 GRANT；可重跑；建表檔與初始資料檔同步，新環境不必跑；測試 DB 已於 2026-11-04 執行；UAT 與正式與 R5 部署同批執行）；第一階段 21 張表與 5 個序列的 PUBLIC synonym 與授權給 AP_USER 在 `db/infra_manager_grant.sql`（可重跑；21 張表各授 SELECT／INSERT／UPDATE／DELETE，照抄測試 DB 現況，程式本身沒有任何 DELETE；序列各授 SELECT；新環境依建表、初始資料、緊急存取腳本、本檔的順序執行）；系統管理相關四張表（IM_ACCT_ADMIN_LOG、IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_ROLE_PERM，說明由畫面維護與軌跡內容）的 COMMENT 另有既有環境升級腳本 `db/infra_manager_89_role_admin.sql`（改 COMMENT、不動結構、不需 GRANT——AP_USER 對相關表已有四種權限；資料只改 SYS_ADMIN 角色說明一個值，仍是初始舊字時才改；可重跑；建表檔與初始資料檔同步，新環境不必跑）；第 124 項（登入改用 WPX、人員資料讀同步表）有三支既有環境升級腳本：`db/infra_manager_124_1_prep.sql`（腳本 S1，英文名欄改可空，測試 DB 已執行）、`db/infra_manager_124_2_name_snapshot.sql`（腳本 R，8 處「英文名 (中文名)」人名快照改中文名）、`db/infra_manager_124_3_drop_cols.sql`（腳本 D，刪 `IM_ACCT_USER` 9 個舊欄並重寫 COMMENT），測試 DB 已於 2026-10-27 依序執行 R、D 並核對，建表檔與初始資料檔已是最終結構、新環境三支都不必跑；正式環境的初始人員匯入 `db/infra_manager_prod_users.sql`（使用者帳號列、角色指派含第一位系統管理員、開放新增類別 HOST／DB／DOOR 的關卡 6 執行人，名單取自測試 DB 2026-10-28 的啟用中指派、依使用者裁示調整；含實際工號，**不進版控**、只存在專案負責人本機，取代初始資料檔檔尾的初始管理者範本；可重跑、不留系統管理軌跡），命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
 
 **慣例**
 
@@ -871,7 +873,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | SOURCE_CODE | VARCHAR2(10) | ✓ | APPLY；MIGRATE 為預留值；預設 'APPLY' |
 | APPLY_BY | VARCHAR2(30) | | 原新增申請人（之後異動不覆蓋） |
 | LAST_REVIEW_DATE | DATE | | 上次審查日（關卡 6 寫入規則見「7. 關卡 6 生效與主表同步」審查日期：新增、重新啟用在新內容符合審查條件時寫，修改另有條件；定期審查雙簽完成時改為完成日） |
-| NEXT_REVIEW_DATE | DATE | | 下次應審查日＝上次＋180 天（DB COMMENT 寫明審查狀態的即時計算規則，程式面於第 158 項 R2 上線） |
+| NEXT_REVIEW_DATE | DATE | | 下次應審查日＝上次＋180 天（DB COMMENT 寫明審查狀態的即時計算規則，程式面見「15. 定期審查」） |
 | IS_REVIEW_FLAG | NUMBER(1) | ✓ | 審查異常標記（1＝有異常），預設 0 |
 | REVIEW_FLAG_REASON | VARCHAR2(500 CHAR) | | 審查異常原因 |
 | REVIEW_FLAG_SOURCE_CODE | VARCHAR2(10) | | 異常來源：EMG＝緊急存取、REVIEW＝定期審查駁回（單一旗標，後標記者覆蓋） |
@@ -1041,7 +1043,7 @@ END
 
 **IM_EMG_AFFECT_ACCT 緊急存取受影響帳號**（只增不改；STATUS 固定 1；回報與結案登記各自成列、互不覆蓋）：EMG_ID（PK）VARCHAR2(20)；AFFECT_TYPE_CODE（PK）VARCHAR2(10)（REPORT＝申請人回報、CLOSE＝異常結案登記）；ACCT_ID（PK）VARCHAR2(20)；AFFECT_DESCR VARCHAR2(500 CHAR)（該帳號的異動說明；REPORT 與 CLOSE 皆選填）；RECORD_BY VARCHAR2(30) 必（有效身分）；RECORD_DATE DATE 必。索引 IND_IM_EMG_AFFECT_ACCT_01（ACCT_ID）。
 
-**IM_ACCT_REVIEW 定期審查簽核紀錄**（每帳號每輪一筆；SEQ_IM_ACCT_REVIEW；STATUS 固定 1。程式寫入：首簽建 OPEN 列、每位主管簽核更新對應三欄並 VERSION_NO＋1、雙簽完成改 DONE 寫 DONE_DATE／NEXT_DUE_DATE、駁回改 REJECTED 寫 REJECT_* 五欄（還沒有一輪時直接建 REJECTED 列）、關卡 6 第一次回報生效改 CANCELED 寫 CANCEL_* 三欄。定期審查功能分批施工中，進度見 `BACKLOG.md` 第 158 項）
+**IM_ACCT_REVIEW 定期審查簽核紀錄**（每帳號每輪一筆；SEQ_IM_ACCT_REVIEW；STATUS 固定 1。程式寫入：首簽建 OPEN 列、每位主管簽核更新對應三欄並 VERSION_NO＋1、雙簽完成改 DONE 寫 DONE_DATE／NEXT_DUE_DATE、駁回改 REJECTED 寫 REJECT_* 五欄（還沒有一輪時直接建 REJECTED 列）、關卡 6 第一次回報生效改 CANCELED 寫 CANCEL_* 三欄）
 
 | 欄 | 型別 | 必 | 說明 |
 |---|---|---|---|
@@ -1251,7 +1253,7 @@ keyword 以 LIKE 比對 INSP_ID、INSP_BY_NAME、ACT_AS_NAME（跳脫 `\ % _`，
 
 keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）。狀態由 DECIDE_CODE、CLOSE_DATE、DUE_DATE 與查詢當下時間計算（時間以參數綁定，不用 SYSDATE）。
 
-**定期審查**（3 支，經殼 jar `ReviewController` 轉送；功能分批施工中，進度見 `BACKLOG.md` 第 158 項）
+**定期審查**（3 支，經殼 jar `ReviewController` 轉送）
 
 | 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
 |---|---|---|---|---|---|
