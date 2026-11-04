@@ -20,6 +20,9 @@ package com.mpx.infra_manager_web.controller;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 3：AdminController 補 2 條（角色權限矩陣、角色權限存檔），50 → 52 案
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5：加 ReviewController 3 條（清單、簽核、駁回），52 → 55 案
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -67,7 +70,8 @@ class ControllerRoutingTest {
 		BackendForwarder fw = new BackendForwarder(restTemplate, BACKEND);
 		mvc = MockMvcBuilders.standaloneSetup(new AuthController(fw), new HomeController(fw),
 				new AccountController(fw), new RequestController(fw), new AttachmentController(fw),
-				new InspectionController(fw), new JobController(fw), new EmergencyController(fw), new AdminController(fw))
+				new InspectionController(fw), new JobController(fw), new EmergencyController(fw), new AdminController(fw),
+				new ReviewController(fw))
 				.build();
 	}
 
@@ -131,7 +135,11 @@ class ControllerRoutingTest {
 				Arguments.of("POST", "/admin/executors/HOST/members", "/admin/executors/HOST/members"),
 				Arguments.of("POST", "/admin/executors/HOST/members/0000006/revoke", "/admin/executors/HOST/members/0000006/revoke"),
 				Arguments.of("GET", "/admin/role-perms", "/admin/role-perms"),
-				Arguments.of("POST", "/admin/roles/GOV/perms", "/admin/roles/GOV/perms"));
+				Arguments.of("POST", "/admin/roles/GOV/perms", "/admin/roles/GOV/perms"),
+				// ReviewController（BACKLOG 第 158 項）
+				Arguments.of("GET", "/reviews?keyword=erp&stateCode=DUE", "/reviews?keyword=erp&stateCode=DUE"),
+				Arguments.of("POST", "/reviews/AR1/sign", "/reviews/AR1/sign"),
+				Arguments.of("POST", "/reviews/AR1/reject", "/reviews/AR1/reject"));
 	}
 
 	@ParameterizedTest(name = "{0} {1}")

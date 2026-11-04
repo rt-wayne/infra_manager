@@ -736,7 +736,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 
 **前端主要程式**（`infra_manager_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/infra_manager_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage，key `infra_manager_web.token`、`infra_manager_web.identityChanged`；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\accountExport.ts`（帳號列表匯出與共用儲存格文字）、`utils\perms.ts`、`utils\codes.ts`。
 
-**殼 jar**：`BackendForwarder` 共用轉送（去掉長度類 header；log 不記 Authorization 與本文）；8 個 Controller 路徑與後端一一對應（含 `AdminController` 系統管理 9 支），只呼叫 BackendForwarder；`config\SecurityHeadersConfig` 以過濾器為所有回應加安全標頭。
+**殼 jar**：`BackendForwarder` 共用轉送（去掉長度類 header；log 不記 Authorization 與本文）；9 個 Controller 路徑與後端一一對應（含 `AdminController` 系統管理 9 支、`ReviewController` 定期審查 3 支），只呼叫 BackendForwarder；**後端每加一支 API，殼 jar 要同步加轉送路徑並補進 `ControllerRoutingTest`，否則前端打過去是殼 jar 的 404、不會到後端也不留 log**（第 158 項 R5 實測教訓）；`config\SecurityHeadersConfig` 以過濾器為所有回應加安全標頭。
 
 **各模組交易內容**
 
@@ -1231,7 +1231,7 @@ keyword 以 LIKE 比對 INSP_ID、INSP_BY_NAME、ACT_AS_NAME（跳脫 `\ % _`，
 
 keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）。狀態由 DECIDE_CODE、CLOSE_DATE、DUE_DATE 與查詢當下時間計算（時間以參數綁定，不用 SYSDATE）。
 
-**定期審查**（功能分批施工中，進度見 `BACKLOG.md` 第 158 項）
+**定期審查**（3 支，經殼 jar `ReviewController` 轉送；功能分批施工中，進度見 `BACKLOG.md` 第 158 項）
 
 | 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
 |---|---|---|---|---|---|
