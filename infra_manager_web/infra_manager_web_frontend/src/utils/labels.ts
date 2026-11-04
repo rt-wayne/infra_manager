@@ -24,8 +24,15 @@
 // 變更說明: BACKLOG 第 158 項 R5：定期審查狀態 REVIEW_STATE_LABEL／REVIEW_STATE_FILTER（預設「需處理」＝異常＋逾期＋待複審，
 //           後端 stateCode 不帶）、半邊名稱 REVIEW_HALF_LABEL、reviewStateTagClass（異常紅 tag-flag、逾期橘、待複審黃、正常綠；
 //           不併進 stateTagClass，因為 OVERDUE 在緊急存取是紅色）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R5 審查 M1／S1：reviewActableHalves——「我可簽核或駁回的半邊」抽成共用函式，清單「審查」鈕與彈窗按鈕
+//           都用它（原本兩邊各自判斷，先簽完自己那一半的主管會點到沒有任何按鈕的彈窗）；同人兩半（⑪A）也在前端先擋
 // ============================================================
 import type { ReqTypeCode } from '../types/account'
+import type { Me } from '../types/common'
+import type { ReviewHalf, ReviewItem } from '../types/review'
+import type { PermCode } from './perms'
 
 /** 門禁卡類別代碼（IM_ACCT_CATG.CATG_ID） */
 export const DOOR_CATG_ID = 'DOOR'
@@ -168,6 +175,27 @@ export const REVIEW_STATE_FILTER: { value: string; label: string }[] = [
 export const REVIEW_HALF_LABEL: Record<string, string> = {
   INFRA: 'Infra 主管半',
   GOV: '資訊治理主管半'
+}
+
+/** 定期審查可簽核／駁回的狀態（與後端 AcctConst.REVIEW_SIGNABLE_STATES 一致） */
+export const REVIEW_SIGNABLE_STATES: readonly string[] = ['DUE', 'OVERDUE']
+
+/**
+ * 定期審查：我可以簽核或駁回的半邊（清單「審查」鈕與彈窗的簽核鈕、可駁回半邊共用，兩邊不再各自判斷）。
+ * 條件與後端同口徑：狀態為待複審／逾期未審；該半我有權限且尚未有人簽；另一半的簽核人（有效身分）不是我的有效身分、
+ * 實際操作人也不是我的實際操作人（⑪A 同一人不得簽兩半，切換身分代簽也擋；後端 ReviewService.checkSameSigner 同樣驗）。
+ * 被駁回的那一半已有人簽就不能駁回（R3b ①A），所以可駁回的半邊＝可簽核的半邊
+ */
+export function reviewActableHalves(r: ReviewItem, can: (code: PermCode) => boolean, me: Me | null): ReviewHalf[] {
+  if (!REVIEW_SIGNABLE_STATES.includes(r.reviewStateCode ?? '')) return []
+  const halves: { half: ReviewHalf; perm: PermCode; signBy: string | null; otherBy: string | null; otherActBy: string | null }[] = [
+    { half: 'INFRA', perm: 'REVIEW_SIGN_INFRA', signBy: r.infraSignBy, otherBy: r.govSignBy, otherActBy: r.govSignActBy },
+    { half: 'GOV', perm: 'REVIEW_SIGN_GOV', signBy: r.govSignBy, otherBy: r.infraSignBy, otherActBy: r.infraSignActBy }
+  ]
+  return halves
+    .filter(h => can(h.perm) && !h.signBy)
+    .filter(h => !me || !((h.otherBy && h.otherBy === me.userId) || (h.otherActBy && h.otherActBy === me.realUserId)))
+    .map(h => h.half)
 }
 
 /** 定期審查狀態 → tag 樣式（獨立一組：OVERDUE 在這裡是橘色、在緊急存取是紅色） */

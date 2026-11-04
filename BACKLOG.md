@@ -17,7 +17,7 @@
 | 158 | 定期權限審查（SA §5.10、J04；從第 14 項拆出）：審查狀態即時計算、Infra／治理雙簽、駁回標旗標、J04 待複審信、J02 加逾期未審、待辦、首頁第四區兩張卡、鈴鐺類別 2。21 項裁示 2026-10-30 全部依 architect 建議，分 R0～R10 共 12 段 | [backlog/158-定期審查.md](backlog/158-定期審查.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：R5 三個單位（清單頁、簽核／駁回彈窗與停用捷徑、帳號明細審查狀態）全部已 commit；接著平行派 code-reviewer（範圍 `fd82b3c` 起）與 test-runner（前端 vitest＋型別檢查、後端全套），必須修正修完即 R5 結案，計畫檔 R5 列改完成、交接改指向 R6。R5 是正式環境最早部署點，部署前 UAT／正式先跑 R1 腳本。遺留：`GET /api/v1/reviews` 未登入回 401 要等使用者以新 jar 重啟 8989 後補驗
+- 下一步：R5 審查 M1（清單審查鈕與彈窗共用判斷）已修並 commit、測試全過；剩瀏覽器實測（使用者裁示由 Claude 重啟 8989 與殼 jar 後做：兩人各簽一半 → 完成、駁回 → 帳號列表紅標與寄信、補驗 R2 遺留的 `GET /api/v1/reviews` 未登入 401）。實測通過即 R5 結案：計畫檔 R5 列改完成、交接改指向 R6。R5 是正式環境最早部署點，部署前 UAT／正式先跑 R1 腳本。遺留：`GET /api/v1/reviews` 未登入回 401 要等使用者以新 jar 重啟 8989 後補驗
 - 已改動（未 commit）：無
 - 本階段起點：R5 `fd82b3c`（R0 `05865e0`、R1 `f2219ec`、R2 `146e78a`、R3a `53eb425`、R3b `aa917ac`、R4 `9800824`）
 - 卡住／待確認：UAT／正式環境的 R1 腳本於 R5 部署前執行（SETUP 第 6 節已寫）
@@ -54,7 +54,8 @@
 | 163 | `ReviewServiceTest` 簽核測試缺口：markDone 回 0 → 409；首簽撞 IND_02 重讀後仍無一輪 → 409；重讀後另一半是同一人 → 409；治理半先簽、Infra 後簽時 `doneHist` 文字；交易次數斷言（比照 `EmergencyServiceTest` 的 `fx.txm.commits`／`rollbacks`，撞索引改走 UPDATE 那筆最該鎖 commits＝1、rollbacks＝0）；「500 整筆回滾不留歷史」那筆沒驗 rollbacks＝1；「已有一輪_…_同人兩半409」名稱含同人兩半但內容沒測。第 158 項 R3a code-reviewer S1。R3b code-reviewer S2 併入：駁回缺 404 案例；「已有一輪」那條路沒驗先鎖再讀；②A 只測實際操作人相同、沒測有效身分相同（簽核那邊也要查）；「自己簽了 Infra 半又以 Infra 半駁回」走 UPDATE 0 筆 → E08 沒案例 | 2026-10-30 | — |
 | 164 | 定期審查簽核與駁回的四種 409（版本不符、同半已簽、以為沒有一輪卻帶版本、被駁回的那一半已有人簽）沿用 E08「此申請已由他人處理，請重新整理」，使用者操作的是定期審查不是申請，且第四種重新整理後再按結果一樣（`item` 已讀到該半 SIGN_BY，Java 端送 UPDATE 前就判斷得出，可改專屬文案；UPDATE 條件仍保留當並行最後防線）；R5 做畫面時另訂文案或前端改寫。第 158 項 R3a code-reviewer S3、R3b S3 | 2026-10-30 | — |
 | 165 | `JobAndNotifyTest` 定期審查駁回通知第二筆標題寫「未知事件不外拋」，但沒有 `findRound(89L)` 的樁，`reviewEvent` 在查無該輪就 return，`default -> throw IllegalArgumentException` 加 catch 那條路沒跑過；補樁即可。第 158 項 R3b code-reviewer S1 | 2026-10-30 | — |
-| 166 | `RoleAdminDao.FIND_IN_FLIGHT_REVIEW`（守門的在途定期審查）只看 OPEN＋該半未簽，沒 JOIN 帳號主表：帳號在有進行中一輪時被緊急存取標旗標（或 R4 前被停用／刪除）後沒人簽得成，卻仍算在途、擋下移除 REVIEW_SIGN_* 最後一位持有人（多擋不少擋）。R4 時評估改成只算狀態 DUE／OVERDUE 的帳號，或 PRD 註明「含已不可簽的進行中輪」。第 158 項 R3b code-reviewer S4 | 2026-10-30 | — |
+| 166 | `RoleAdminDao.FIND_IN_FLIGHT_REVIEW`（守門的在途定期審查）只看 OPEN＋該半未簽，沒 JOIN 帳號主表：帳號在有進行中一輪時被緊急存取標旗標（或 R4 前被停用／刪除）後沒人簽得成，卻仍算在途、擋下移除 REVIEW_SIGN_* 最後一位持有人（多擋不少擋）。R4 時評估改成只算狀態 DUE／OVERDUE 的帳號，或 PRD 註明「含已不可簽的進行中輪」。第 158 項 R3b code-reviewer S4。R5 code-reviewer S7 補：R5 畫面對「掛旗標（審查異常）但仍有 OPEN 輪」的帳號，清單兩半欄照列簽核人、沒有任何操作鈕、彈窗也沒鈕，這是現況不是錯；守門要不要排除這種輪仍未決，R5 未處理 | 2026-10-30 | — |
+| 168 | 定期審查的「停用申請」捷徑（清單審查異常列、駁回後彈窗）只以 `accountOps({acctStateCode})` 判斷、沒看在途申請：駁回後申請人提出修改／停用 → 在途期間旗標不清、仍是審查異常，捷徑照樣出現，使用者填完表單送出才被後端擋。改法：`ReviewDao.SELECT_COLS` 照抄 `AcctDao.SELECT_BASE` 的 IN_FLIGHT 純量子查詢、`ReviewItem` 加 inFlight、兩處改 `accountOps({acctStateCode, inFlight})`（要動後端）。第 158 項 R5 code-reviewer S2 | 2026-11-04 | — |
 | 167 | `RequestServiceTest.assertLockApplyCancel`（關卡 6 回報「鎖帳號列 → 覆寫主表 → 取消審查輪」的共用檢查）的中間步驟是呼叫端傳進來的普通 `verify`，不在 InOrder 裡，重新啟用、停用、刪除三筆只能證明鎖在取消之前，證明不了覆寫主表夾在中間；改成 `Consumer<InOrder>` 參數，修改那筆內聯的四行一併改用此函式消重複。第 158 項 R4 code-reviewer S1 | 2026-10-30 | — |
 | 16 | 原始規格書缺件：子 README 與 `.example` 註解（範本已於 2026-10-14 刪除）引用 `spec_im_acct_insp_v2.0.md`、變更單 #1～#4，但 repo 與使用者手上都沒有；PRD 不引用 | 2026-10-10 | — |
 | 17 | `infra_manager_web\README.md` 第 2 節「兩包結構」表仍是範本初始描述：說 Controller 目錄只有 `package-info.java`、`src\types\` 與 `src\views\` 只有 `.gitkeep`、router 的 routes 是空陣列，實際都已有程式（4 個型別檔、10 個畫面、14 個 path） | 2026-10-10 | — |

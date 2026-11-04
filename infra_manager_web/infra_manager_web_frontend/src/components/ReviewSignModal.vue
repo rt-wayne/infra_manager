@@ -11,6 +11,11 @@
             裁示③A：駁回成功後彈窗留著，改顯示「已駁回」區塊與「發起停用申請」鈕（需 ACC_APPLY 且帳號狀態可停用）→ /requests/new?reqType=DISABLE
             409（版本不符、同半已簽、同人兩半、狀態已變）照後端訊息 toast、emit changed 並關閉讓清單重查；其他錯誤只 toast、彈窗留著
             送出中忽略主、子彈窗關閉（同緊急存取詳情彈窗：避免卸載後 emit 被丟掉）
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: R5 審查 M1／S1：簽核鈕與可駁回半邊改用共用 reviewActableHalves（與清單「審查」鈕同一判斷；另一半是我簽的也在前端先擋，
+            避免按了必 409 又關窗丟掉原因）；沒有任何可動作半邊時顯示一行說明。S5 駁回後副標改「審查異常（已駁回）」；
+            S6 駁回原因字數改算去頭尾空白後（與後端、其他彈窗一致）
 -->
 <template>
   <BaseModal :title="`定期審查 — ${item.acctId}`" :sub="subText" wide @close="closeMain">
@@ -42,6 +47,7 @@
       <div class="v">{{ halfText(item.govSignByName, item.govSignBy, item.govSignDate) }}</div>
     </div>
     <p v-if="!item.reviewId && signable" class="hint">還沒有人簽核；第一次簽核時建立本輪紀錄。</p>
+    <p v-if="signable && !rejected && actable.length === 0" class="hint no-action">目前沒有您可以簽核或駁回的半邊：您能簽的那一半已簽核，或另一半是您簽的；請等待另一位主管簽核。</p>
 
     <div v-if="rejected" class="note-box warn rejected-box">
       <b>已駁回（{{ REVIEW_HALF_LABEL[rejected.half] }}）</b>：{{ rejected.reason }}<br />
@@ -93,8 +99,7 @@ import { useSession } from '../composables/useSession'
 import { useToast } from '../composables/useToast'
 import type { ReviewHalf, ReviewItem } from '../types/review'
 import { dateOnly, toMinute } from '../utils/date'
-import { REVIEW_HALF_LABEL, REVIEW_STATE_LABEL, accountOps, isOn, label } from '../utils/labels'
-import type { PermCode } from '../utils/perms'
+import { REVIEW_HALF_LABEL, REVIEW_SIGNABLE_STATES, REVIEW_STATE_LABEL, accountOps, isOn, label, reviewActableHalves } from '../utils/labels'
 import { charLen } from '../utils/text'
 
 const REASON_MAX = 500
@@ -106,7 +111,7 @@ const props = defineProps<{ item: ReviewItem }>()
 /** changed：簽核或駁回成功（含 409 後），讓清單重查 */
 const emit = defineEmits<{ close: []; changed: [] }>()
 const { toast } = useToast()
-const { can } = useSession()
+const { can, me } = useSession()
 const router = useRouter()
 
 const busy = ref(false)
@@ -118,32 +123,31 @@ const rejectReason = ref('')
 /** 駁回成功後的結果（裁示③A：彈窗留著顯示已駁回與停用捷徑） */
 const rejected = ref<{ half: ReviewHalf; reason: string } | null>(null)
 
-const subText = computed(() => `狀態：${label(REVIEW_STATE_LABEL, props.item.reviewStateCode)}`)
+/** 駁回後留窗期間 props 不會更新，副標改寫成駁回後的狀態（S5） */
+const subText = computed(() => (rejected.value ? '狀態：審查異常（已駁回）' : `狀態：${label(REVIEW_STATE_LABEL, props.item.reviewStateCode)}`))
 const holderText = computed(() => {
   const x = props.item
   if (!x.holderName) return '—'
   return x.holderDept ? `${x.holderName}（${x.holderDept}）` : x.holderName
 })
-/** 只有待複審、逾期未審可以簽核或駁回（後端交易內會以當天重算，這裡只決定按鈕要不要出現） */
-const signable = computed(() => props.item.reviewStateCode === 'DUE' || props.item.reviewStateCode === 'OVERDUE')
+/** 只有待複審、逾期未審可以簽核或駁回（後端交易內會以當天重算，這裡只決定按鈕與說明要不要出現） */
+const signable = computed(() => REVIEW_SIGNABLE_STATES.includes(props.item.reviewStateCode ?? ''))
 /** versionNo 一律帶，沒有進行中一輪帶 0（R3a 補充裁示①B） */
 const versionNo = computed(() => props.item.reviewVersionNo ?? 0)
+/** 我可簽核或駁回的半邊（與清單「審查」鈕同一函式；權限、該半未簽、同人兩半都在裡面） */
+const actable = computed(() => reviewActableHalves(props.item, can, me.value))
 
 function signedBy(half: ReviewHalf): string | null {
   return half === 'INFRA' ? props.item.infraSignBy : props.item.govSignBy
 }
-function permOf(half: ReviewHalf): PermCode {
-  return half === 'INFRA' ? 'REVIEW_SIGN_INFRA' : 'REVIEW_SIGN_GOV'
-}
-/** 我有該半權限、該半尚未簽、狀態可簽才顯示該半的簽核鈕；同人兩半（⑪A）由後端擋 */
 function canSign(half: ReviewHalf): boolean {
-  return signable.value && can(permOf(half)) && !signedBy(half)
+  return actable.value.includes(half)
 }
 function otherSigned(half: ReviewHalf): boolean {
   return !!signedBy(half === 'INFRA' ? 'GOV' : 'INFRA')
 }
-/** 可由我駁回的半邊：條件同簽核（被駁回的那一半已有人簽就不能駁回，R3b 裁示①A） */
-const rejectableHalves = computed<ReviewHalf[]>(() => (['INFRA', 'GOV'] as ReviewHalf[]).filter(canSign))
+/** 可由我駁回的半邊＝可簽核的半邊（被駁回的那一半已有人簽就不能駁回，R3b 裁示①A） */
+const rejectableHalves = actable
 /** 駁回後的停用捷徑：需 ACC_APPLY，且帳號目前狀態可發起停用（有在途申請與否由後端檢查） */
 const canDisable = computed(() => can('ACC_APPLY') && accountOps({ acctStateCode: props.item.acctStateCode }).includes('DISABLE'))
 
@@ -216,7 +220,7 @@ async function doReject(): Promise<void> {
     toast(MSG_REASON, 'amber')
     return
   }
-  if (charLen(rejectReason.value) > REASON_MAX) {
+  if (charLen(text) > REASON_MAX) {
     toast(MSG_REASON_LEN, 'amber')
     return
   }

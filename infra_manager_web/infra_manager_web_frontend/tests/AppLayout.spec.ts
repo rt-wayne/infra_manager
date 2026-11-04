@@ -22,9 +22,6 @@
 // 變更說明: BACKLOG 第 46 項 S3：只有 GENERAL 時「緊急存取」照常顯示並連 /emergency
 // AI版本  : Claude Fable 5 (claude-fable-5)
 // 修改日期: 2026-10-13
-// 變更說明: BACKLOG 第 158 項 R5：只有 GENERAL 不顯示「定期審查」；有 REVIEW_LIST 顯示在「緊急存取」之後並連 /reviews
-// AI版本  : Claude Fable 5 (claude-fable-5)
-// 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S9（SA §7.2）：鈴鐺分類化三案——徽章合計與兩節標題、有 EMG_VIEW_ALL 點類別 3
 //           導清單（已退回篩選）、無 EMG_VIEW_ALL（原申請人）點類別 3 開明細彈窗、兩類都空的提示；
 //           既有到期案不動（R7 回歸：類別 1 行為不變）
@@ -40,6 +37,10 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-19
 // 變更說明: BACKLOG 第 89 項階段 6：只有 SYS_EXECUTOR 時改為顯示區塊、只有「執行人對照」；兩碼都有時三項都顯示
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-30
+// 變更說明: BACKLOG 第 158 項 R5：只有 GENERAL 不顯示「定期審查」；有 REVIEW_LIST 顯示在「緊急存取」之後並連 /reviews
+//           （2026-11-04 R5 審查 S4：本紀錄原誤插在第 46 項 S3 與 S9 之間、版本日期沿用了上一筆，移到這裡並更正）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'

@@ -9,6 +9,11 @@
 // 變更說明: 第 158 項 R5 第 2 單位：清單操作欄「審查」「停用申請」出現條件與捷徑 query、開彈窗與 changed 重查；
 //           ReviewSignModal：摘要與兩半狀態、簽核鈕依權限與該半是否已簽、駁回半邊單選只在兩半都可選時顯示、
 //           簽核確認框與 versionNo、雙簽完成提示、駁回原因必填與字數、駁回成功留窗顯示已駁回＋停用捷徑、409 關窗重查、500 留窗
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: R5 審查 M1／S1／S3／S5：「審查」鈕與彈窗按鈕改共用判斷——我能簽的半已簽、或另一半是我（有效身分或實際操作人）簽的，
+//           清單不顯示「審查」、彈窗顯示說明且無按鈕；只有治理半可駁回時預選治理半且不顯示單選；駁回後副標改審查異常；
+//           「點審查開彈窗」那筆原本開的是沒有按鈕的彈窗（Infra 半已簽卻用 Infra 權限），改用治理半權限
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -160,17 +165,39 @@ describe('定期審查清單', () => {
     w.unmount()
   })
 
-  it('操作欄：只有 REVIEW_LIST 時沒有「審查」；有任一簽核權限時待複審／逾期列有、異常列沒有', async () => {
+  it('操作欄：只有 REVIEW_LIST 時沒有「審查」；有簽核權限時待複審／逾期列有、異常列沒有；我能簽的半已簽、或另一半是我簽的就沒有', async () => {
     let w = await mountList()
     expect(w.find('.op-review').exists()).toBe(false)
     w.unmount()
 
     useSession().me.value = makeMe({ permissions: ['REVIEW_LIST', 'REVIEW_SIGN_GOV'] })
     w = await mountList()
-    const rows = w.findAll('tbody tr')
+    let rows = w.findAll('tbody tr')
     expect(rows[0].find('.op-review').exists()).toBe(true)
     expect(rows[1].find('.op-review').exists()).toBe(true)
     expect(rows[2].find('.op-review').exists()).toBe(false)
+    w.unmount()
+
+    // 第 2 列 Infra 半已由 Terry 簽：只有 Infra 權限的人沒有可做的事（M1）
+    useSession().me.value = makeMe({ permissions: ['REVIEW_LIST', 'REVIEW_SIGN_INFRA'] })
+    w = await mountList()
+    rows = w.findAll('tbody tr')
+    expect(rows[0].find('.op-review').exists()).toBe(true)
+    expect(rows[1].find('.op-review').exists()).toBe(false)
+    w.unmount()
+
+    // 另一半是我（有效身分 0000001）簽的、或實際操作人是我：兩種權限都有也不顯示（S1，⑪A）
+    listMock.mockResolvedValue([
+      reviewItem({ acctId: 'A1', reviewStateCode: 'DUE', reviewId: 1, reviewVersionNo: 1, govSignBy: '0000001', govSignActBy: '0000001' }),
+      reviewItem({ acctId: 'A2', reviewStateCode: 'DUE', reviewId: 2, reviewVersionNo: 1, infraSignBy: '0000009', infraSignActBy: '0000001' }),
+      reviewItem({ acctId: 'A3', reviewStateCode: 'DUE', reviewId: 3, reviewVersionNo: 1, infraSignBy: '0000009', infraSignActBy: '0000009' })
+    ])
+    useSession().me.value = makeMe({ permissions: ['REVIEW_LIST', 'REVIEW_SIGN_INFRA', 'REVIEW_SIGN_GOV'] })
+    w = await mountList()
+    rows = w.findAll('tbody tr')
+    expect(rows[0].find('.op-review').exists()).toBe(false)
+    expect(rows[1].find('.op-review').exists()).toBe(false)
+    expect(rows[2].find('.op-review').exists()).toBe(true)
     w.unmount()
   })
 
@@ -200,8 +227,8 @@ describe('定期審查清單', () => {
     w.unmount()
   })
 
-  it('點「審查」開彈窗帶該列；彈窗 changed 重查清單、close 關閉', async () => {
-    useSession().me.value = makeMe({ permissions: ['REVIEW_LIST', 'REVIEW_SIGN_INFRA'] })
+  it('點「審查」開彈窗帶該列（治理半權限、該列治理半未簽，彈窗有簽核鈕）；彈窗 changed 重查清單、close 關閉', async () => {
+    useSession().me.value = makeMe({ permissions: ['REVIEW_LIST', 'REVIEW_SIGN_GOV'] })
     const w = await mountList()
     expect(w.findComponent(ReviewSignModal).exists()).toBe(false)
     await w.findAll('tbody tr')[1].find('.op-review').trigger('click')
@@ -209,6 +236,8 @@ describe('定期審查清單', () => {
     expect(modal.exists()).toBe(true)
     expect(modal.props('item').acctId).toBe('AR20261007-002')
     expect(modal.find('h3').text()).toBe('定期審查 — AR20261007-002')
+    expect(modal.find('.act-sign-gov').exists()).toBe(true)
+    expect(modal.find('.no-action').exists()).toBe(false)
 
     modal.vm.$emit('changed')
     await flushPromises()
@@ -285,18 +314,60 @@ describe('定期審查簽核彈窗', () => {
     w.unmount()
   })
 
-  it('我的那一半已簽、或狀態不是待複審／逾期未審：沒有簽核與駁回鈕', async () => {
+  it('我的那一半已簽：沒有簽核與駁回鈕、顯示說明（M1）；狀態不是待複審／逾期未審：沒有鈕也沒有說明', async () => {
     let { w } = await mountModal(reviewItem({
       reviewId: 7, reviewVersionNo: 1, infraSignBy: '0000001', infraSignByName: 'Kevin (李凱鈞)', infraSignActBy: '0000001', infraSignDate: '2026-10-30 09:15:00'
     }))
     expect(w.find('.act-sign-infra').exists()).toBe(false)
     expect(w.find('.act-reject').exists()).toBe(false)
+    expect(w.find('.no-action').text()).toContain('沒有您可以簽核或駁回的半邊')
     w.unmount()
 
     ;({ w } = await mountModal(reviewItem({ reviewStateCode: 'ABNORMAL', isReviewFlag: 1, reviewFlagReason: '定期審查駁回：權限過大' })))
     expect(w.find('.flag-reason .v').text()).toBe('定期審查駁回：權限過大')
     expect(w.find('.act-sign-infra').exists()).toBe(false)
     expect(w.find('.act-reject').exists()).toBe(false)
+    expect(w.find('.no-action').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('另一半是我簽的（有效身分相同、或實際操作人相同）：兩種權限都有也沒有簽核與駁回鈕（S1，⑪A 前端先擋）', async () => {
+    useSession().me.value = makeMe({ userId: '0000002', realUserId: '0000001', permissions: ['REVIEW_LIST', 'REVIEW_SIGN_INFRA', 'REVIEW_SIGN_GOV'] })
+    // 切換成 0000002 操作：治理半的有效身分是 0000002 → Infra 半不能簽；治理半已簽 → 治理半也不能
+    let { w } = await mountModal(reviewItem({ reviewStateCode: 'DUE', reviewId: 7, reviewVersionNo: 1, govSignBy: '0000002', govSignActBy: '0000009' }))
+    expect(w.find('.act-sign-infra').exists()).toBe(false)
+    expect(w.find('.act-sign-gov').exists()).toBe(false)
+    expect(w.find('.act-reject').exists()).toBe(false)
+    expect(w.find('.no-action').exists()).toBe(true)
+    w.unmount()
+
+    // 治理半的實際操作人是我本人（0000001）→ 同樣擋
+    ;({ w } = await mountModal(reviewItem({ reviewStateCode: 'DUE', reviewId: 7, reviewVersionNo: 1, govSignBy: '0000009', govSignActBy: '0000001' })))
+    expect(w.find('.act-sign-infra').exists()).toBe(false)
+    expect(w.find('.no-action').exists()).toBe(true)
+    w.unmount()
+
+    // 治理半是別人簽的 → Infra 半可簽
+    ;({ w } = await mountModal(reviewItem({ reviewStateCode: 'DUE', reviewId: 7, reviewVersionNo: 1, govSignBy: '0000009', govSignActBy: '0000009' })))
+    expect(w.find('.act-sign-infra').exists()).toBe(true)
+    expect(w.find('.act-sign-gov').exists()).toBe(false)
+    expect(w.find('.no-action').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('只有治理半權限：駁回不顯示單選、預選治理半、送出半邊是 GOV（S3，②A）', async () => {
+    useSession().me.value = makeMe({ permissions: ['REVIEW_LIST', 'REVIEW_SIGN_GOV'] })
+    rejectMock.mockResolvedValue({ acctId: 'AR20261007-001', reviewId: 8, reviewStateCode: 'REJECTED', versionNo: 1 })
+    const { w } = await mountModal(reviewItem())
+    expect(w.find('.act-sign-infra').exists()).toBe(false)
+    expect(w.find('.act-sign-gov').exists()).toBe(true)
+    await w.find('.act-reject').trigger('click')
+    expect(w.find('input[name=review-reject-half]').exists()).toBe(false)
+    expect(w.find('.reject-half-hint').text()).toBe('以「資訊治理主管半」駁回')
+    await w.find('#review-reject-reason').setValue('使用人已調職')
+    await w.find('.confirm-reject').trigger('click')
+    await flushPromises()
+    expect(rejectMock).toHaveBeenCalledWith('AR20261007-001', 'GOV', 0, '使用人已調職')
     w.unmount()
   })
 
@@ -347,6 +418,7 @@ describe('定期審查簽核彈窗', () => {
     expect(lastToastMsg()).toBe('AR20261007-001 已駁回，帳號已標記審查異常')
     expect(w.find('.confirm-reject').exists()).toBe(false)
     expect(w.find('.rejected-box').text()).toContain('已駁回（資訊治理主管半）：權限過大')
+    expect(w.find('.sub').text()).toBe('狀態：審查異常（已駁回）')
     expect(w.find('.act-sign-infra').exists()).toBe(false)
     expect(w.find('.act-reject').exists()).toBe(false)
     expect(w.emitted('changed')).toHaveLength(1)
@@ -356,6 +428,18 @@ describe('定期審查簽核彈窗', () => {
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/requests/new')
     expect(router.currentRoute.value.query).toEqual({ reqType: 'DISABLE', acctId: 'AR20261007-001', acctName: 'erp_admin' })
+    w.unmount()
+  })
+
+  it('駁回原因字數算去頭尾空白後（S6，與後端一致）：500 個字加頭尾空白可送、送出的是修剪後的原因', async () => {
+    rejectMock.mockResolvedValue({ acctId: 'AR20261007-001', reviewId: 8, reviewStateCode: 'REJECTED', versionNo: 1 })
+    const { w } = await mountModal(reviewItem())
+    await w.find('.act-reject').trigger('click')
+    await w.find('#review-reject-reason').setValue(`  ${'😀'.repeat(500)}  `)
+    await w.find('.confirm-reject').trigger('click')
+    await flushPromises()
+    expect(rejectMock).toHaveBeenCalledWith('AR20261007-001', 'INFRA', 0, '😀'.repeat(500))
+    expect(w.find('.rejected-box').exists()).toBe(true)
     w.unmount()
   })
 

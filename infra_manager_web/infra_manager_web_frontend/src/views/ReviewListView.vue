@@ -10,6 +10,10 @@
   修改日期: 2026-11-04
   變更說明: 第 158 項 R5 第 2 單位：操作欄加「審查」（狀態待複審／逾期未審且我有任一簽核權限；開 ReviewSignModal，成功後重查清單）
             與「停用申請」（裁示③A：審查異常列、需 ACC_APPLY 且帳號狀態可停用 → /requests/new?reqType=DISABLE）
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-11-04
+  變更說明: R5 審查 M1：「審查」鈕改用共用 reviewActableHalves（有我可簽核或駁回的半邊才顯示；原本只看狀態與權限，
+            先簽完自己那一半的主管每筆都會點到沒有按鈕的彈窗）
 -->
 
 <template>
@@ -92,10 +96,10 @@ import { useSession } from '../composables/useSession'
 import { useToast } from '../composables/useToast'
 import type { ReviewItem, ReviewQuery } from '../types/review'
 import { dateOnly, toMinute } from '../utils/date'
-import { REVIEW_STATE_FILTER, REVIEW_STATE_LABEL, accountOps, isOn, label, reviewStateTagClass } from '../utils/labels'
+import { REVIEW_STATE_FILTER, REVIEW_STATE_LABEL, accountOps, isOn, label, reviewActableHalves, reviewStateTagClass } from '../utils/labels'
 
 const { toast } = useToast()
-const { can } = useSession()
+const { can, me } = useSession()
 const route = useRoute()
 const router = useRouter()
 
@@ -114,9 +118,9 @@ const { page, totalPages, pageRows } = usePaging(rows)
 /** 正在審查的那一列（開簽核／駁回彈窗） */
 const reviewing = ref<ReviewItem | null>(null)
 
-/** 「審查」鈕：狀態待複審／逾期未審，且我有任一半的簽核權限（該半簽過沒、同人兩半由彈窗與後端判斷） */
+/** 「審查」鈕：有我可以簽核或駁回的半邊才顯示（狀態、權限、該半未簽、同人兩半都在共用函式裡，與彈窗同一判斷） */
 function canReview(r: ReviewItem): boolean {
-  return (r.reviewStateCode === 'DUE' || r.reviewStateCode === 'OVERDUE') && (can('REVIEW_SIGN_INFRA') || can('REVIEW_SIGN_GOV'))
+  return reviewActableHalves(r, can, me.value).length > 0
 }
 
 /** 「停用申請」捷徑（裁示③A）：審查異常列、我有 ACC_APPLY、帳號目前狀態可發起停用（在途申請由後端檢查） */
