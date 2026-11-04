@@ -78,6 +78,10 @@ package com.mpx.infra_manager.service;
 // 變更說明: BACKLOG 第 158 項 R7 第 2 單位（⑲A；裁示 ②B 主旨沿用「【帳號到期】」前綴、③A 收件人不變）：weeklySummary 多收逾期未審帳號清單，
 //           內文加第二區塊 reviewOverdueBlock（■ 逾期未審帳號：帳號單號、類別、帳號名稱、使用人、上次審查日、下次應審查日、逾期天數；
 //           從未審查（任一日期為空）顯示「從未審查」；0 筆 U13_REVIEW），主旨改「本週彙總：已逾期未處理 {n} 筆、逾期未審 {m} 筆」
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R7 結案併修（審查 S2、S4）：reviewDue 拿掉沒用到的 today 參數；逾期天數欄改「上次為空→從未審查、
+//           上次有值下次為空→未排定（NEXT_UNSET）」，不再把上次有值的列標成從未審查
 // ============================================================
 
 import java.time.Clock;
@@ -121,8 +125,10 @@ public class NotificationService {
 	static final String U13 = "目前沒有已逾期未處理的帳號";
 	/** J02 逾期未審區塊 0 筆時的本文（第 158 項 R7，⑲A） */
 	static final String U13_REVIEW = "目前沒有逾期未審的帳號";
-	/** 逾期未審區塊的「逾期天數」欄：上次或下次應審查日為空（⑥A 算逾期）時顯示 */
+	/** 逾期未審區塊的「逾期天數」欄：上次審查日為空（從未審查，⑥A 算逾期）時顯示 */
 	static final String NEVER_REVIEWED = "從未審查";
+	/** 逾期未審區塊的「逾期天數」欄：上次審查日有值、下次應審查日卻為空（只有人工改資料會出現，⑥A 算逾期）時顯示 */
+	static final String NEXT_UNSET = "未排定";
 	/** 不在寄送名單的 SKIP 寫入 ERR_MSG 的文字 */
 	static final String NOT_IN_ALLOW_LIST = "不在寄送名單";
 
@@ -464,7 +470,7 @@ public class NotificationService {
 	 *
 	 * @return 寫入的通知紀錄筆數（SKIP／FAIL 也算寫入；0＝沒有收件人、紀錄全部寫入失敗或例外）
 	 */
-	public int reviewDue(ReviewItem r, LocalDate today) {
+	public int reviewDue(ReviewItem r) {
 		try {
 			List<Recipient> rcpts = new ArrayList<>(withPerm(AcctConst.PERM_REVIEW_SIGN_INFRA));
 			rcpts.addAll(withPerm(AcctConst.PERM_REVIEW_SIGN_GOV));
@@ -587,7 +593,8 @@ public class NotificationService {
 
 	/**
 	 * 逾期未審區塊（HTML 片段，R7 ⑲A）：區塊標題＋多欄表；0 筆顯示 U13_REVIEW。
-	 * 逾期天數＝今天－下次應審查日；上次或下次為空（從未審查、⑥A 算逾期）顯示「從未審查」
+	 * 逾期天數＝今天－下次應審查日；上次審查日為空顯示「從未審查」（不論下次有沒有值），上次有值但下次為空顯示「未排定」
+	 * （兩個日期程式一律一起寫，單邊為空只有人工改資料才會出現；R7 審查 S4 避免同一列「上次審查日有值」卻寫「從未審查」）
 	 */
 	static String reviewOverdueBlock(List<ReviewItem> overdue, LocalDate today) {
 		String head = MailHtml.heading("■ 逾期未審帳號");
@@ -598,7 +605,8 @@ public class NotificationService {
 		for (ReviewItem r : overdue) {
 			LocalDate last = r.getLastReviewDate() == null ? null : r.getLastReviewDate().toLocalDate();
 			LocalDate next = r.getNextReviewDate() == null ? null : r.getNextReviewDate().toLocalDate();
-			String days = last == null || next == null ? NEVER_REVIEWED : String.valueOf(ChronoUnit.DAYS.between(next, today));
+			String days = last == null ? NEVER_REVIEWED
+					: next == null ? NEXT_UNSET : String.valueOf(ChronoUnit.DAYS.between(next, today));
 			rows.add(List.of(nvl(r.getAcctId(), ""), nvl(nvl(r.getCatgName(), r.getCatgId()), ""),
 					acctNameText(r.getCatgId(), r.getAcctName()), nvl(r.getHolderName(), ""), dateText(last), dateText(next), days));
 		}

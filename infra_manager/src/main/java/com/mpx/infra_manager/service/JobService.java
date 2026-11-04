@@ -58,6 +58,9 @@ package com.mpx.infra_manager.service;
 // 修改日期: 2026-11-04
 // 變更說明: BACKLOG 第 158 項 R7 第 2 單位（⑲A）：J02 多查逾期未審帳號（ReviewDao.findOverdueForSummary）一併交給 weeklySummary，
 //           AFFECTED_CNT＝已逾期未處理帳號數＋逾期未審帳號數；本週已寄過仍為 0、收件人與防重寄不變
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-11-04
+// 變更說明: BACKLOG 第 158 項 R7 結案併修（審查 S1、S2）：j04 寫入 0 筆的帳號記 WARN（比照 J02 無收件人）；reviewDue 拿掉沒用到的 today 參數
 // ============================================================
 
 import java.time.Clock;
@@ -498,13 +501,17 @@ public class JobService {
 	 * 以 today 為基準日，找待複審（今天 ≤ 下次應審查日 ≤ 今天＋30）且本輪尚無 REVIEW_DUE 紀錄的帳號（⑱A；參照鍵 ACCT_ID_下次應審查日，⑭A），
 	 * 逐帳號寄一封（⑰A）給兩位主管權限持有人（⑯A）。AFFECTED_CNT＝有寫入通知紀錄的帳號數（SKIP／FAIL 紀錄也算寫入，之後不重寄）；
 	 * 沒寫入任何紀錄（無收件人、途中例外）的帳號不計、不算失敗，下次掃描會再列出——與 J01 第 2、3 步同口徑，不像 J03 記 PARTIAL。
-	 * 逾期未審的帳號不在這裡寄，由 J02 週彙總的「逾期未審」區塊涵蓋；查詢本身失敗由 run 的外層 catch 記 FAIL
+	 * 逾期未審的帳號不在這裡寄，由 J02 週彙總的「逾期未審」區塊涵蓋；查詢本身失敗由 run 的外層 catch 記 FAIL。
+	 * 寫入 0 筆（兩個簽核權限都沒人持有、或途中例外）只記 WARN（R7 審查 S1）——結果仍 SUCCESS、不寄排程失敗信；
+	 * 要不要比照 J03 記 PARTIAL 見 BACKLOG 第 22 項
 	 */
 	Outcome j04(LocalDate today) {
 		int affected = 0;
 		for (ReviewItem r : reviewDao.findDueUnnotified(AcctConst.EV_REVIEW_DUE, today)) {
-			if (notificationService.reviewDue(r, today) > 0) {
+			if (notificationService.reviewDue(r) > 0) {
 				affected++;
+			} else {
+				log.warn("J04 待複審信未寫入任何通知紀錄（無收件人或途中例外），帳號={}；結果照常 SUCCESS，下次執行會再嘗試", r.getAcctId());
 			}
 		}
 		return new Outcome(AcctConst.JR_SUCCESS, affected, null);
