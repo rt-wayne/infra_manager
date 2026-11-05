@@ -1010,7 +1010,7 @@ END
 
 索引 IND_IM_ACCT_NOTIFY_LOG_01（EVENT_CODE, REF_ID, RCPT_USER_ID）。
 
-**IM_ACCT_JOB_RUN 排程執行紀錄**（SEQ_IM_ACCT_JOB_RUN；STATUS 固定 1）：RUN_ID（PK）NUMBER(12)；JOB_CODE VARCHAR2(10) 必（J01＝到期處理、J02＝每週彙總、J03＝緊急存取逾期通知、J04＝定期審查待複審通知）；RUN_BY VARCHAR2(30)（手動觸發者；排程為空）；BASE_DATE DATE 必（採用的今天；J03 為基準時間點，到秒）；START_DATE DATE 必；END_DATE DATE；RESULT_CODE VARCHAR2(10) 必（RUNNING、SUCCESS、PARTIAL、FAIL）；AFFECTED_CNT NUMBER(6) 必（預設 0；J01＝轉逾期筆數＋寄出轉逾期信的帳號數＋寄出到期前 7 天信的帳號數、J02＝彙總信兩個區塊列出的帳號數合計（已逾期未處理＋逾期未審；本週已寄過則為 0）、J03＝本次寫入逾期通知紀錄的單數，每張算 1 不論收件人幾位；J04＝本次寫入待複審通知紀錄的帳號數，每個帳號算 1 不論收件人幾位）；ERR_MSG VARCHAR2(1000 CHAR)（失敗筆的帳號或單號與例外類別）。索引 IND_IM_ACCT_JOB_RUN_01（JOB_CODE, START_DATE）。
+**IM_ACCT_JOB_RUN 排程執行紀錄**（SEQ_IM_ACCT_JOB_RUN；STATUS 固定 1）：RUN_ID（PK）NUMBER(12)；JOB_CODE VARCHAR2(10) 必（J01＝到期處理、J02＝每週彙總、J03＝緊急存取逾期通知、J04＝定期審查待複審通知）；RUN_BY VARCHAR2(30)（手動觸發者；排程為空）；BASE_DATE DATE 必（採用的今天；J03 為基準時間點，到秒）；START_DATE DATE 必；END_DATE DATE；RESULT_CODE VARCHAR2(10) 必（RUNNING、SUCCESS、PARTIAL、FAIL）；AFFECTED_CNT NUMBER(6) 必（預設 0；J01＝轉逾期筆數＋本次寫入轉逾期通知紀錄的帳號數＋本次寫入到期前 7 天通知紀錄的帳號數（略過、寄失敗也算，與第 8 節 J01 同口徑）、J02＝彙總信兩個區塊列出的帳號數合計（已逾期未處理＋逾期未審；本週已寄過則為 0）、J03＝本次寫入逾期通知紀錄的單數，每張算 1 不論收件人幾位；J04＝本次寫入待複審通知紀錄的帳號數，每個帳號算 1 不論收件人幾位）；ERR_MSG VARCHAR2(1000 CHAR)（失敗筆的帳號或單號與例外類別）。索引 IND_IM_ACCT_JOB_RUN_01（JOB_CODE, START_DATE）。
 
 **IM_EMG_ACCESS 緊急存取單**（送出即生效、補核准期限＝送出＋24 小時；狀態不存欄位，由 DECIDE_CODE、CLOSE_DATE、DUE_DATE 計算）
 

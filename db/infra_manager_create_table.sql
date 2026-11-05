@@ -607,7 +607,7 @@ COMMENT ON TABLE IM_ACCT_CATG IS '帳號類別。帳號申請表單的 8 種類�
 COMMENT ON TABLE IM_ACCT_HIST IS '帳號歷史事件。帳號從申請到異動的所有事件，依 ACT_DATE、HIST_ID 排序顯示；只增不改，程式不提供更新、刪除路徑。切換身分期間同時記實際操作人與代理身分。資料來源：各流程與系統排程寫入。主鍵：HIST_ID（序列 SEQ_IM_ACCT_HIST）。保留：永久';
 COMMENT ON TABLE IM_ACCT_JOB_RUN IS '排程執行紀錄。每次排程或手動觸發一筆。資料來源：排程、手動觸發 API。主鍵：RUN_ID（序列 SEQ_IM_ACCT_JOB_RUN）。保留：永久';
 COMMENT ON TABLE IM_ACCT_LOGIN_TOKEN IS '登入 token。每次登入一列，DB 只存 token 的 SHA-256；同一人可多個 token 並存；切換身分狀態記於 ACT_AS_USER_ID。登入時間即 CREATE_DATE。資料來源：登入 API。主鍵：TOKEN_HASH。保留：過期列不自動清除（第一階段由 DB 維護）';
-COMMENT ON TABLE IM_ACCT_NOTIFY_LOG IS '通知紀錄。每位收件人每封信一筆；排程類通知以 EVENT_CODE＋REF_ID＋RCPT_USER_ID 判斷是否已寄過（EMG_OVERDUE 例外：只看 EVENT_CODE＋REF_ID，每案一次）。資料來源：通知寄送。主鍵：NOTIFY_ID（序列 SEQ_IM_ACCT_NOTIFY_LOG）。保留：永久';
+COMMENT ON TABLE IM_ACCT_NOTIFY_LOG IS '通知紀錄。每位收件人每封信一筆；排程類通知（J01 轉逾期與到期前 7 天、J02 每週彙總、J03 緊急存取逾期、J04 定期審查待複審）只看 EVENT_CODE＋REF_ID 已有任何一筆就算已寄過，不看收件人。資料來源：通知寄送。主鍵：NOTIFY_ID（序列 SEQ_IM_ACCT_NOTIFY_LOG）。保留：永久';
 COMMENT ON TABLE IM_ACCT_PERM IS '權限碼。SA 4.3 的 26 個加上本案新增 ACC_EXPIRY_ALL、SYS_JOB_RUN，共 28 個一次建齊；程式以 can(身分, 權限碼) 判斷。資料來源：初始資料。主鍵：PERM_ID。保留：永久';
 COMMENT ON TABLE IM_ACCT_REQ IS '帳號申請單。存申請的內容與簽核進度，在途期間不動主表；停用、刪除申請由主表複製當下內容（快照）。同一帳號同時只能有一筆在途申請（IND_IM_ACCT_REQ_04）。資料來源：申請表單、各關卡動作。主鍵：REQ_ID。保留：永久';
 COMMENT ON TABLE IM_ACCT_REVIEW IS '定期審查簽核紀錄。每個帳號每一輪審查一筆：Infra 主管與資訊治理主管各簽核一次、順序不限，兩位都簽完為 DONE（同一交易把 IM_ACCT 的上次審查日改為完成日、下次應審查日＝完成日＋180 天）；任一位駁回為 REJECTED（帳號標審查異常旗標，來源 REVIEW）；審查中帳號被申請單關卡 6 覆蓋（修改、停用、重新啟用、刪除生效）為 CANCELED。本輪紀錄在第一次簽核或駁回時才建立，待複審通知不建紀錄（防重寄看 IM_ACCT_NOTIFY_LOG）。審查狀態（正常／待複審／逾期未審／審查異常）不存欄位，由 IM_ACCT 的審查日期與旗標即時計算。資料來源：定期審查畫面、申請單關卡 6。主鍵：REVIEW_ID（序列 SEQ_IM_ACCT_REVIEW）。保留：永久';
@@ -728,7 +728,7 @@ COMMENT ON COLUMN IM_ACCT_JOB_RUN.BASE_DATE IS '本次執行採用的「今天�
 COMMENT ON COLUMN IM_ACCT_JOB_RUN.START_DATE IS '開始時間';
 COMMENT ON COLUMN IM_ACCT_JOB_RUN.END_DATE IS '結束時間';
 COMMENT ON COLUMN IM_ACCT_JOB_RUN.RESULT_CODE IS '執行結果：RUNNING＝執行中、SUCCESS＝成功、PARTIAL＝部分失敗、FAIL＝失敗';
-COMMENT ON COLUMN IM_ACCT_JOB_RUN.AFFECTED_CNT IS '處理筆數（J01＝轉逾期筆數＋寄出轉逾期信的帳號數＋寄出到期前 7 天信的帳號數；J02＝彙總列出的帳號數（已逾期帳號＋逾期未審帳號），本週已寄過則為 0；J03＝本次寫入逾期通知紀錄的緊急存取單數，每張算 1 不論收件人幾位；J04＝本次寄出待複審信的帳號數，每個帳號算 1 不論收件人幾位）。default 0';
+COMMENT ON COLUMN IM_ACCT_JOB_RUN.AFFECTED_CNT IS '處理筆數（J01＝轉逾期筆數＋本次寫入轉逾期通知紀錄的帳號數＋本次寫入到期前 7 天通知紀錄的帳號數；J02＝彙總列出的帳號數（已逾期帳號＋逾期未審帳號），本週已寄過則為 0；J03＝本次寫入逾期通知紀錄的緊急存取單數；J04＝本次寫入待複審通知紀錄的帳號數。寫入通知紀錄＝每個帳號或單算 1 不論收件人幾位，收件人略過或寄失敗也算）。default 0';
 COMMENT ON COLUMN IM_ACCT_JOB_RUN.ERR_MSG IS '錯誤摘要（失敗筆的帳號或單號與例外類別）';
 COMMENT ON COLUMN IM_ACCT_JOB_RUN.STATUS IS '資料狀態：固定 1。default 1';
 COMMENT ON COLUMN IM_ACCT_JOB_RUN.CREATE_DATE IS '建立日期（含時分秒）。default SYSDATE';
