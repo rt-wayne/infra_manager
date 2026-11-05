@@ -58,7 +58,7 @@
 
     <div v-if="rejected" class="note-box warn rejected-box">
       <b>已駁回（{{ REVIEW_HALF_LABEL[rejected.half] }}）</b>：{{ rejected.reason }}<br />
-      此帳號已標記審查異常，並通知原申請人與資訊治理主管；請確認後提出修改或停用申請，複驗通過後異常會自動清除。
+      此帳號已標記審查異常，並通知原申請人與資訊治理；請確認後提出修改或停用申請，複驗通過後異常會自動清除。
     </div>
 
     <template #actions>
@@ -110,7 +110,7 @@ import { REVIEW_HALF_LABEL, REVIEW_SIGNABLE_STATES, REVIEW_STATE_LABEL, accountO
 import { charLen } from '../utils/text'
 
 const REASON_MAX = 500
-const MSG_REJECT_SUB = '駁回後整輪結束、帳號標記審查異常，並通知原申請人與資訊治理主管；另一位主管已完成的簽核不帶到下一輪。'
+const MSG_REJECT_SUB = '駁回後整輪結束、帳號標記審查異常，並通知原申請人與資訊治理；另一位主管已完成的簽核不帶到下一輪。'
 const MSG_REASON = '請填寫駁回原因'
 const MSG_REASON_LEN = `駁回原因不可超過 ${REASON_MAX} 字`
 
